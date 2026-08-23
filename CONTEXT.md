@@ -150,10 +150,12 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
-**New findings from session 4** (both reproduced against the running API):
+**New findings from session 4** (all reproduced against the running API):
 
 | # | Finding |
 |---|---|
+| **F29** | **🔴 Cross-tenant data leak.** A **consumer** token on `GET /styles` returns **200 and every style row**. 19 call sites pass `req.merchantId!`; a consumer has no `merchantId`, so `undefined` reaches `findMany({ where: { merchantId } })` and **Prisma drops an `undefined` filter**, returning the whole table. The seed has one merchant, which is why it looked plausible. There is **exactly one role check in the entire codebase** and it picks a branch rather than denying. → **T29** |
+| **F30** | **🔴 The subscription paywall is inert.** `RequireActiveSubscriptionMiddleware` is registered for `styles/(.*)`, `visits/(.*)`, `reward-rules/(.*)` and matches **none** of the real paths. With the merchant forced to **`SUSPENDED`**, `GET /styles` still returned 200 and `POST /styles` still returned **201 and created the row** — a revenue control that does nothing. Same class as [F3]. Its own `if (!req.merchantId)` guard **would have caught F29** had it ever run. → **T29** |
 | **F27** | **`POST /auth/signup` returns 500 *after* creating the account.** The user row is committed, then `sendVerificationEmail` throws — Resend answers `403 "You can only send testing emails to your own email address"` [R6]. So the client sees a failure, cannot retry (409 on the second attempt), and never gets a verification email. **Pre-existing, not caused by T16.** The email send must not be able to fail the signup. Blocks clean testing of **T19/T21**; **T60** removes the underlying cause. |
 | **F28** | **Signup's duplicate check is a check-then-create race.** Four concurrent signups on one fresh email: 1 succeeded, **3 raised Prisma `P2002`** — bare 500s before T16, correct 409s after. The filter makes it degrade safely; the real fix (drop the pre-check, rely on the unique constraint) belongs to **T31**. |
 
