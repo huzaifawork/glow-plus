@@ -1,3 +1,5 @@
+import BillingManager from './BillingManager.jsx';
+
 const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span></div>
 );
@@ -56,16 +58,13 @@ export default function BillingResult() {
     );
   }
 
-  // Neither flag set — the original left the card's class untouched here.
-  return (
-    <div className="card" id="card">
-      <Brand />
-      <div className="icon">⚠️</div>
-      <h1>Nothing to show here</h1>
-      <p>
-        This page is meant to be reached via a Stripe Checkout redirect, not
-        visited directly.
-      </p>
-    </div>
-  );
+  // Reached directly, with no Stripe redirect flags.
+  //
+  // The original page dead-ended here with "Nothing to show here" — correct
+  // when it was ONLY a Stripe return page, but this URL is the natural home
+  // for billing, so T17 makes the direct visit useful instead: sign in and
+  // manage the subscription. The two redirect branches above are untouched,
+  // so the Stripe return behaviour T41 verified still renders exactly as it
+  // did.
+  return <BillingManager />;
 }

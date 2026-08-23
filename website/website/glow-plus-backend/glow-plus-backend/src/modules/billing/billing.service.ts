@@ -13,6 +13,50 @@ const FOUNDING_MEMBER_BONUS_DAYS = 30; // "first 50 salons & spas get their firs
 
 const APP_URL = process.env.APP_URL ?? 'http://localhost:3000';
 
+/**
+ * Read the current billing period off a Stripe subscription  (T17)
+ *
+ * Stripe moved `current_period_start` / `current_period_end` OFF the
+ * Subscription object and onto its line items. Which shape arrives depends
+ * on the API version of the particular response, and this codebase sees both:
+ *
+ *   - the module `stripe` client is pinned to `2025-03-31.basil`, which
+ *     returns the fields ONLY on the items — verified live;
+ *   - webhook payloads arrive in the ACCOUNT's version (`2026-07-29.dahlia`
+ *     at time of writing), which also returns them only on the items.
+ *     `constructEvent` does not reshape the body to the SDK's pinned version.
+ *
+ * Reading only the top-level fields therefore yielded `undefined`, and
+ * `new Date(undefined * 1000)` is `Invalid Date`, which Prisma rejects. That
+ * failed the whole webhook with a 400 and — because the handler catches its
+ * own errors — did so silently. Two consequences, both confirmed:
+ * `customer.subscription.updated` never synced, and `checkout.session.completed`
+ * could never have written a Subscription row at all.
+ *
+ * Reading items first with a top-level fallback works on every version, so
+ * this does not become a bug again the next time the account version moves.
+ */
+export function readPeriod(sub: Stripe.Subscription): { start: Date; end: Date } {
+  const item = sub.items?.data?.[0] as unknown as
+    | { current_period_start?: number; current_period_end?: number }
+    | undefined;
+  const legacy = sub as unknown as { current_period_start?: number; current_period_end?: number };
+
+  const start = item?.current_period_start ?? legacy.current_period_start;
+  const end = item?.current_period_end ?? legacy.current_period_end;
+
+  if (typeof start !== 'number' || typeof end !== 'number') {
+    // Fail loudly rather than writing an Invalid Date the DB will reject with
+    // a message that points nowhere near the real cause.
+    throw new Error(
+      `Stripe subscription ${sub.id} has no billing period on either the subscription or its items ` +
+        `(API shape changed again?) — start=${String(start)} end=${String(end)}`,
+    );
+  }
+
+  return { start: new Date(start * 1000), end: new Date(end * 1000) };
+}
+
 @Injectable()
 export class BillingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -120,6 +164,7 @@ export class BillingService {
 
     const stripeSub = await stripe.subscriptions.retrieve(session.subscription as string);
     const priceCents = plan === 'ANNUAL' ? 47999 : 4999;
+    const period = readPeriod(stripeSub);
 
     await this.prisma.subscription.upsert({
       where: { merchantId },
@@ -131,16 +176,16 @@ export class BillingService {
         status: stripeSub.status === 'trialing' ? 'TRIALING' : 'ACTIVE',
         trialStart: stripeSub.trial_start ? new Date(stripeSub.trial_start * 1000) : null,
         trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
-        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
       },
       update: {
         stripeSubscriptionId: stripeSub.id,
         plan,
         priceCents,
         status: stripeSub.status === 'trialing' ? 'TRIALING' : 'ACTIVE',
-        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
       },
     });
 
@@ -151,12 +196,14 @@ export class BillingService {
     const existing = await this.prisma.subscription.findUnique({ where: { stripeSubscriptionId: sub.id } });
     if (!existing) return;
 
+    const period = readPeriod(sub);
+
     await this.prisma.subscription.update({
       where: { id: existing.id },
       data: {
         status: this.mapStripeStatus(sub.status),
-        currentPeriodStart: new Date(sub.current_period_start * 1000),
-        currentPeriodEnd: new Date(sub.current_period_end * 1000),
+        currentPeriodStart: period.start,
+        currentPeriodEnd: period.end,
         cancelAtPeriodEnd: sub.cancel_at_period_end,
       },
     });

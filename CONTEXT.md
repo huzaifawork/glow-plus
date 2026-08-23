@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **28 passing** (`npm test`) — 3 suites: jwt.util, health controller, exception filter |
+| Tests | ✅ Jest configured, **40 passing** (`npm test`) — 5 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -147,7 +147,16 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 
 ✅ **T60 + T6 — done 2026-08-24, out of phase order** (agreed: they blocked half of Phase 2). `mail.glowplusmember.com` verified in Resend; full loop proven — signup → email **delivered** → link from the delivered email → `/auth/verify-email` → DB updated → replay refused. **F27 resolved.**
 
-➡️ **NEXT: Phase 2 — T17 (subscription cancel/resume), T18 (booking end-to-end), T19 (trial-ending email), T20 (`invoice.payment_failed`)**, the client's stated priority #1. **T19/T20 are now testable against real recipients.**
+✅ **T17 — done 2026-08-24, both backend and frontend.** Three real bugs found and fixed, not just "cancel/resume works":
+1. Consumer token on `/billing/cancel` was a bare **500** — fixed with `RequireMerchantGuard` (`src/common/guards/require-merchant.guard.ts`), now 403. Same root cause as F29.
+2. Stripe moved `current_period_start`/`_end` off the Subscription object onto its line items in both the pinned SDK version and live webhook payloads — the webhook silently 400'd and never synced. Fixed with `readPeriod()` in `billing.service.ts`. Proved by changing the subscription **directly in Stripe** and watching the DB sync via webhook in ~2s.
+3. **`GET /merchants/me` leaked the merchant's bcrypt `passwordHash`**, and `GET /admin/merchants/pending` (no guard — F7) leaked it to **any logged-in consumer**. Fixed with an explicit field allow-list, `MERCHANT_PUBLIC_SELECT`. See **F31**.
+
+Frontend: `glow-plus-web/src/pages/billing-result/BillingManager.jsx` + new `src/lib/api.js` (the real API client — token-only auth, reusable foundation for T35–T38). Mounted at `/business/billing`; the two existing Stripe-redirect states are untouched. Tested end-to-end in a real driven Chrome instance (`puppeteer-core`, installed to the session scratchpad only — not added to the repo, no test framework exists in-repo per T12's deliberate skip): **15/15 checks passed**.
+
+Suite now **40 passing** (was 28). DB and Stripe test data cleaned up after; DB back at exact seed state.
+
+➡️ **NEXT: Phase 2 continues — T18 (booking end-to-end against real Postgres, unblocked by T13/T14), T19 (trial-ending email — now testable against real recipients thanks to T60), T20 (`invoice.payment_failed` via Stripe CLI)**.
 ⚠️ **The email blocker is gone** — F27 is fixed and R6 lifted, so T19/T20 can be verified against any recipient address, not just the account owner's.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
