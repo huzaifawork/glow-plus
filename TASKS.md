@@ -111,7 +111,7 @@ Rules:
   **Why it stayed hidden:** `email.provider.ts:18` falls back to `'Glow+ <onboarding@resend.dev>'` — the identical value — so locally nothing looked broken. The real damage is in production: any deployed `EMAIL_FROM` (e.g. a verified custom domain after T60) would be **silently ignored** and every email would ship from the default sender. Worth re-checking at T53/T60.
   **Evidence:** `node -e "require('dotenv').config()"` → `EMAIL_FROM = "Glow+ <onboarding@resend.dev>"`, and no stray quote-prefixed key present. `.env` is gitignored, so the fix is local-only; `.env.example` already carried the correct form.
   **Also hardened `.gitignore` while here:** the pattern was `.env` + `.env.local` + `.env.*.local`, which does **not** match `.env.bak`, `.env.save` or `.env.production`. A backup of the live `.env` made during this fix was therefore committable. Now `.env.*` with `!.env.example`; all variants verified ignored, `.env.example` verified still tracked.
-- [ ] **T6 — Resend sends for real.** Set `EMAIL_PROVIDER=resend`, send one test email. ⚠️ Until a domain is verified, `onboarding@resend.dev` delivers **only to the Resend account owner's address** — so email tests are self-addressed until T60.
+- [~] **T6 — Resend sends for real.** ⏸️ **DEFERRED by agreement 2026-08-23** — to be done when the email tasks (T19/T20) come up, together with domain verification (T60). Account access is now in hand. Verified read-only: key is live (`GET /api-keys` → 200) but **no domain is verified** (`GET /domains` → `[]`), so sending is still capped at `onboarding@resend.dev` → account owner's address only [R6].
 - [ ] **T7 — Stripe CLI forwarding works** (`stripe.exe` is in the repo); webhook secret matches `.env`.
 - [ ] **T8 — Seed script** — merchant, consumer, styles, reward rules on demand. Without this, per-task testing is too slow to sustain.
 - [ ] **T9 — Jest configured + 1 passing test.** Jest is a dep with no config and no tests. Set up now so tests accumulate per task.
@@ -123,7 +123,19 @@ Rules:
 
 > **T13/T14 are now the true first coding tasks** — the project doesn't compile without them [F14].
 
-- [ ] **T13 — Merge the two Prisma schemas + relocate the nested delivery.** Move `src/modules/booking/src/modules/{bookings,business-hours}` up to `src/modules/`, fix their broken relative imports, delete the duplicate `reward-rules` copy [F16], merge `src/modules/booking/prisma/schema.prisma` `src/modules/booking/prisma/schema.prisma` (has `Booking`, `BusinessHours`) is orphaned from `prisma/schema.prisma` (has `Subscription`, `MerchantStaff`, `Redemption`). Merge into one, generate a migration, delete the orphan. **This is why booking "was never run against real Postgres" — the tables don't exist.** [F2]
+- [x] **T13 — Merge the two Prisma schemas + relocate the nested delivery.** ✅ **DONE & VERIFIED 2026-08-23.**
+  **What was done:** `git mv`'d `src/modules/booking/src/modules/{bookings,business-hours}` up to `src/modules/`; deleted the nested `reward-rules` copy [F16]; merged the orphan schema into `prisma/schema.prisma`; deleted the orphan and the now-empty `src/modules/booking/` tree.
+  **Correction to this task's own description:** the relative imports were **never broken**. They were written for `src/modules/bookings/` all along (`../../prisma/prisma.service` → `src/prisma/prisma.service` ✓, `../notifications/email.provider` ✓, `../reward-rules/...` ✓) — they simply weren't *at* that path. So T13 was a pure move; **no import rewriting was needed or done.**
+  **Duplicate check before deleting:** nested vs top-level `reward-rules.module.ts` and `reward-rules.service.ts` were **byte-identical** (`diff` clean), so nothing was lost.
+  **Schema merge — `prisma/schema.prisma` was treated as authoritative** (it owns the applied migration and is the richer of the two). Added from the orphan only what the booking code actually needs:
+    · `model Booking` + `enum BookingStatus` · `model BusinessHours` with `@@unique([merchantId, dayOfWeek])` (required — `availability.service.ts:38` looks up by the compound key `merchantId_dayOfWeek`)
+    · `Style.durationMinutes Int @default(30)` (required — `availability.service.ts:44`, `bookings.service.ts:27`)
+    · `Visit.bookingId String? @unique` + relation (required — `bookings.service.ts` `complete()`)
+    · back-relations on `User`, `Merchant`, `Style`
+  **Deliberately NOT carried over from the orphan:** `Merchant.foundingBadge` (real code uses `foundingMember`, 5 refs in `billing.service.ts` + `onboarding.service.ts`) and `User.phoneFingerprint` (zero code references; belongs to the T31b phone-encryption decision, not here).
+  **Evidence:** `prisma validate` → valid · migration `20260823143506_add_booking_and_business_hours` generated via `migrate diff` and applied with `migrate deploy` · **real Postgres now has 11 tables incl. `Booking` + `BusinessHours`** (was 9), plus `Style.durationMinutes` and `Visit.bookingId` — confirmed by querying `information_schema.columns` · **`tsc --noEmit` → 0 errors**, so [F14]'s 7 × TS2307 are resolved and the backend compiles for the first time.
+  ⚠️ `migrate dev` cannot run here (non-interactive shell); use `migrate diff` → write `migration.sql` → `migrate deploy` for all future migrations.
+  **Not yet routable** — the modules still aren't imported anywhere. That's T14.
 - [ ] **T14 — Wire `BookingsModule` + `BusinessHoursModule`** into `app.module.ts`. They're fully written but never imported. [F1]
 - [ ] **T15 — Add `GET /health`.** Needed for deploy checks. [F13]
 - [ ] **T16 — Global exception filter** → stable `{ statusCode, message, error }` envelope (the RN client already reads `body.message`).

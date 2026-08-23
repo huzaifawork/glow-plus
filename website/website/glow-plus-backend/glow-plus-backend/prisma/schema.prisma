@@ -25,6 +25,7 @@ model User {
 
   visits            Visit[]
   redemptions       Redemption[]
+  bookings          Booking[]
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,8 @@ model Merchant {
   rewardRules       RewardRule[]
   visits            Visit[]
   staff             MerchantStaff[]
+  businessHours     BusinessHours[]
+  bookings          Booking[]
 }
 
 enum MerchantStatus {
@@ -111,11 +114,13 @@ model Style {
   type           StyleType
   name           String     // "Balayage", "French Tip Gel", "Deep Tissue Massage"
   pointsPerVisit Int
+  durationMinutes Int       @default(30) // used to calculate booking time slots
   active         Boolean    @default(true)
   createdAt      DateTime   @default(now())
 
   visits         Visit[]
   rewardRules    RewardRule[]
+  bookings       Booking[]
 }
 
 enum StyleType {
@@ -140,6 +145,8 @@ model Visit {
   pointsEarned Int        // snapshot of style.pointsPerVisit at time of visit
   loggedBy     String     // staff user id
   visitDate    DateTime  @default(now())
+  bookingId    String?   @unique // set when the visit came from a completed booking
+  booking      Booking?  @relation(fields: [bookingId], references: [id])
 }
 
 // ---------------------------------------------------------------------------
@@ -204,4 +211,56 @@ enum AccountType {
   CONSUMER
   MERCHANT
   ADMIN
+}
+
+// ---------------------------------------------------------------------------
+// Business hours — one row per weekday per merchant. dayOfWeek 0 = Sunday.
+// The @@unique is required: availability.service.ts looks rows up by the
+// compound key `merchantId_dayOfWeek`.
+// ---------------------------------------------------------------------------
+
+model BusinessHours {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+  dayOfWeek  Int      // 0 (Sunday) .. 6 (Saturday)
+  openTime   String   // "09:00", 24h format
+  closeTime  String   // "17:00"
+  closed     Boolean  @default(false)
+
+  @@unique([merchantId, dayOfWeek])
+}
+
+// ---------------------------------------------------------------------------
+// Bookings — appointment slots. Deliberately single-resource per merchant
+// for v1 (see availability.service.ts): no staff/room concurrency yet, so a
+// merchant can only have one booking at a time regardless of how many
+// stylists they have. Fine for a single-chair salon; a multi-stylist salon
+// would under-report availability.
+// ---------------------------------------------------------------------------
+
+model Booking {
+  id         String        @id @default(cuid())
+  merchantId String
+  merchant   Merchant      @relation(fields: [merchantId], references: [id])
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  styleId    String
+  style      Style         @relation(fields: [styleId], references: [id])
+  startTime  DateTime
+  endTime    DateTime
+  status     BookingStatus @default(PENDING)
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  visit      Visit?
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
 }
