@@ -35,7 +35,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
-| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 11 tables + `_prisma_migrations`** (was 0 applied) |
+| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 12 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
@@ -176,7 +176,17 @@ Suite now **46 passing** (was 40).
 
   **No bug found** — same as T19, the handler was correct, just never exercised. Test data (merchant status/stripeCustomerId/email, 3 orphaned Stripe test customers from the dead-end attempts) fully cleaned up; suite still **49 passing** (no code changed, so no new tests, consistent with T19).
 
-➡️ **NEXT: Phase 2 is now cleared** (T17, T18, T19, T20 all done) — **start Phase 3, T21 (password reset)**, per TASKS.md. `POST /auth/forgot-password` / `POST /auth/reset-password`, a token table, expiry + single-use, plus frontend forgot/reset pages. [F5]
+✅ **T21 — done 2026-08-24 (session 8).** Password reset, both backend and frontend. New `PasswordReset` table mirrors `EmailVerification` exactly (hashed single-use token, `expiresAt`, `usedAt`) — see `prisma/schema.prisma`. `POST /auth/forgot-password` (`src/modules/auth/password-reset.service.ts`) looks the email up in **both** `User` and `Merchant` tables — one generic endpoint serves consumer and merchant, since the RN app only ever knows an email, not which table it's in — and always returns `{ok:true}`, so it can't be used to enumerate accounts (confirmed identical response for a real vs. nonexistent email). `POST /auth/reset-password` validates hash + expiry + single-use inside a `$transaction`, same pattern as `EmailVerificationService.verifyEmail`. Token TTL is 1h, deliberately shorter than email verification's 24h since this resets a live credential.
+
+Tested against the real running API, Postgres, and Resend — not just response shapes: seeded consumer → `forgot-password` → pulled the real token out of the **delivered** Resend email (same technique as T19/T20 — `GET /emails` then `GET /emails/:id` for the HTML) → `reset-password` → **logged in with the new password (201)** → old password now 401 → **reusing the same token 400 (single-use)** → manually expired a second token's row directly in Postgres → rejected with a distinct "Token expired" message, not the generic invalid-token one. Consumer's password restored to the seed baseline (`Consumer123!`) afterward — verified by a final successful login.
+
+Frontend: new standalone pages `glow-plus-web/forgot-password.html` → `/forgot-password` and `reset-password.html` → `/reset-password` (same pattern as T17's billing page and T18's booking page — not part of the SPA, since T35's real auth UI doesn't exist yet). `vite.config.js`'s route-rewrite plugin and Rollup `input` both extended. Driven in real Chrome (`puppeteer-core`, scratchpad-only): **12/12 functional checks passed** — form renders; identical success state for a real vs. unknown email (no UI-level enumeration leak either); missing-token error state; client-side mismatched-password validation; real submit → success; login with the new password succeeds; a reused token shows an error; no horizontal overflow at 390px.
+
+No bug found in pre-existing code this time (unlike T17/T18) — this was new functionality, not a "was it ever exercised" check like T19/T20.
+
+Suite still **49 passing** (no new unit tests — consistent with T17–T20, which test this class of flow end-to-end against the real API rather than in Jest).
+
+➡️ **NEXT: T22 — Admin authentication + guard on every `/admin/*` route.** [F7] `/admin/*` currently has **no guard at all** — confirmed exploitable in T17 (F31: a logged-in *consumer* token could read `GET /admin/merchants/pending`, which is how the `passwordHash` leak was found). Needs real admin auth (there's no `Admin` model/login yet — check whether one exists in the schema before designing it) plus a guard applied to the whole `/admin` prefix, then a guarded admin panel on the frontend.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 

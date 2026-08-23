@@ -207,6 +207,21 @@ model EmailVerification {
   createdAt   DateTime     @default(now())
 }
 
+// ---------------------------------------------------------------------------
+// Password reset (consumer, merchant) — T21 [F5]
+// ---------------------------------------------------------------------------
+
+model PasswordReset {
+  id          String       @id @default(cuid())
+  accountId   String       // userId or merchantId
+  accountType AccountType
+  email       String
+  token       String       @unique // random, single-use, hashed at rest
+  expiresAt   DateTime     // 1h — shorter than email verification, it's a live credential reset
+  usedAt      DateTime?
+  createdAt   DateTime     @default(now())
+}
+
 enum AccountType {
   CONSUMER
   MERCHANT

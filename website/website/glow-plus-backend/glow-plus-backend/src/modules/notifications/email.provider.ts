@@ -19,7 +19,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Glow+ <onboarding@resend.dev>';
 
 export interface SendEmailInput {
   to: string;
-  template: 'confirm-email' | 'trial-ending-soon' | 'payment-failed' | 'reward-unlocked';
+  template: 'confirm-email' | 'reset-password' | 'trial-ending-soon' | 'payment-failed' | 'reward-unlocked';
   data: Record<string, unknown>;
 }
 
@@ -73,6 +73,13 @@ function renderTemplate(template: SendEmailInput['template'], data: Record<strin
         html: `<p>Welcome to Glow+! Click the link below to confirm your email address:</p>
                <p><a href="${data.verifyUrl}">${data.verifyUrl}</a></p>
                <p>If you didn't request this, you can ignore this email.</p>`,
+      };
+    case 'reset-password':
+      return {
+        subject: 'Reset your Glow+ password',
+        html: `<p>We received a request to reset your Glow+ password. Click the link below to choose a new one:</p>
+               <p><a href="${data.resetUrl}">${data.resetUrl}</a></p>
+               <p>This link expires in 1 hour. If you didn't request this, you can ignore this email — your password won't change.</p>`,
       };
     case 'trial-ending-soon':
       return {

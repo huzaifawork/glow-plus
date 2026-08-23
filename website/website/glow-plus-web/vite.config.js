@@ -20,6 +20,10 @@ function legacyRouteRewrites() {
     // Not backend-baked like the two above — chosen to sit next to where
     // T36's future consumer portal will live (T18).
     '/consumer/booking': '/booking.html',
+    // T21 — the reset link the backend emails (APP_URL + /reset-password?token=…)
+    // is baked in the same way verify-email's is, so this path can't change either.
+    '/forgot-password': '/forgot-password.html',
+    '/reset-password': '/reset-password.html',
   };
   return {
     name: 'glow-plus-legacy-route-rewrites',
@@ -71,6 +75,8 @@ export default defineConfig({
         verifyEmail: resolve(__dirname, 'verify-email.html'),
         billingResult: resolve(__dirname, 'billing-result.html'),
         booking: resolve(__dirname, 'booking.html'),
+        forgotPassword: resolve(__dirname, 'forgot-password.html'),
+        resetPassword: resolve(__dirname, 'reset-password.html'),
       },
     },
   },

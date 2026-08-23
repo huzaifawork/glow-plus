@@ -326,8 +326,11 @@ Rules:
 
 # PHASE 3 — Structural gaps _(client priority #2)_
 
-- [ ] **T21 — Password reset.** Schema (token table), `POST /auth/forgot-password`, `POST /auth/reset-password`, email template, expiry + single-use. API-driven so the RN app reuses it. [F5]
-  - [ ] Frontend: forgot-password + reset-password pages.
+- [x] **T21 — Password reset.** ✅ **DONE & VERIFIED 2026-08-24 (session 8).** New `PasswordReset` table (mirrors `EmailVerification`: hashed single-use token, expiry, `usedAt`). `POST /auth/forgot-password` looks the email up in **both** `User` and `Merchant` tables (one endpoint serves consumer and merchant, matching how the RN app only knows an email, not an account type) and always returns `{ok:true}` — no account-enumeration leak, confirmed identical response/UI for a real vs. a nonexistent email. `POST /auth/reset-password` validates token hash + expiry + single-use in a transaction, updates the right table's `passwordHash`. 1h token TTL (shorter than email verification's 24h — this resets a live credential). [F5]
+
+  Tested against the real running API, real Postgres, and real Resend delivery — not just response shapes: seeded consumer → forgot-password → pulled the actual token out of the delivered Resend email (same technique as T19/T20) → reset-password → **logged in with the new password (201)** → old password now rejected (401) → **reusing the same token rejected (400, single-use)** → manually expired a second token's row in Postgres → rejected with a distinct "Token expired" message. Password restored to the seed baseline (`Consumer123!`) after.
+
+  - [x] Frontend: `forgot-password.html` / `reset-password.html` — new standalone pages (same pattern as T17/T18: not in the SPA yet, since T35's real auth UI doesn't exist). Driven in real Chrome (`puppeteer-core`, scratchpad-only): 12/12 functional checks passed — form renders, success state identical for a real vs. unknown email, missing-token error state, mismatched-password client-side validation, real submit → success, login with new password succeeds, reused token shows an error, no horizontal overflow at 390px.
 - [ ] **T22 — Admin authentication + guard on every `/admin/*` route.** [F7]
   - [ ] Frontend: admin login + guarded admin panel.
 - [ ] **T23 — Reward redemption tracking.** Writhe to the existing `Redemption` table; endpoint to redeem; prevent double-redemption. [F4]
