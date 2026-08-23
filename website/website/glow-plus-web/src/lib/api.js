@@ -26,6 +26,10 @@ const TOKEN_KEY = 'glowplus:token';
 // (T17) and this page's consumer login can both be open in the same browser —
 // one shared key would mean logging in on one silently logs the other out.
 const CONSUMER_TOKEN_KEY = 'glowplus:token:consumer';
+// Separate again for admin sessions (T22) — same reasoning: an admin should
+// be able to be logged in alongside a merchant/consumer session in the same
+// browser without either clobbering the other.
+const ADMIN_TOKEN_KEY = 'glowplus:token:admin';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -73,6 +77,10 @@ export const clearToken = () => removeToken(TOKEN_KEY);
 export const getConsumerToken = () => readToken(CONSUMER_TOKEN_KEY);
 export const setConsumerToken = (token) => writeToken(CONSUMER_TOKEN_KEY, token);
 export const clearConsumerToken = () => removeToken(CONSUMER_TOKEN_KEY);
+
+export const getAdminToken = () => readToken(ADMIN_TOKEN_KEY);
+export const setAdminToken = (token) => writeToken(ADMIN_TOKEN_KEY, token);
+export const clearAdminToken = () => removeToken(ADMIN_TOKEN_KEY);
 
 /* --------------------------------------------------------------------------
    Request
@@ -190,4 +198,43 @@ export function cancelBooking(id) {
     method: 'PATCH',
     tokenKey: CONSUMER_TOKEN_KEY,
   });
+}
+
+/* --------------------------------------------------------------------------
+   Endpoints used by the admin panel (T22)
+   -------------------------------------------------------------------------- */
+export async function adminLogin(email, password) {
+  const data = await apiRequest('/admin/login', { method: 'POST', auth: false, body: { email, password } });
+  if (data?.token) setAdminToken(data.token);
+  return data;
+}
+
+export function listPendingMerchants() {
+  return apiRequest('/admin/merchants/pending', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+export function approveMerchant(id) {
+  return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/approve`, {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+  });
+}
+
+export function suspendMerchant(id) {
+  return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/suspend`, {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+  });
+}
+
+export function getMrr() {
+  return apiRequest('/admin/metrics/mrr', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+export function getChurn() {
+  return apiRequest('/admin/metrics/churn', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+export function getPlatformStats() {
+  return apiRequest('/admin/metrics/platform', { tokenKey: ADMIN_TOKEN_KEY });
 }

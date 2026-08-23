@@ -22,6 +22,7 @@ const SALT_ROUNDS = 12;
 export const SEED = {
   merchant: { email: 'merchant@glowplus.test', password: 'Merchant123!' },
   consumer: { email: 'consumer@glowplus.test', password: 'Consumer123!' },
+  admin: { email: 'admin@glowplus.test', password: 'Admin123!' },
 };
 
 /** Refuse to seed anything that isn't obviously a local dev database. */
@@ -40,9 +41,10 @@ function assertLocalDatabase() {
 async function main() {
   assertLocalDatabase();
 
-  const [merchantHash, consumerHash] = await Promise.all([
+  const [merchantHash, consumerHash, adminHash] = await Promise.all([
     bcrypt.hash(SEED.merchant.password, SALT_ROUNDS),
     bcrypt.hash(SEED.consumer.password, SALT_ROUNDS),
+    bcrypt.hash(SEED.admin.password, SALT_ROUNDS),
   ]);
 
   // --- Merchant: ACTIVE + verified, so it passes RequireActiveSubscription ---
@@ -118,6 +120,13 @@ async function main() {
     }
   }
 
+  // --- Admin (T22) ---
+  await prisma.admin.upsert({
+    where: { email: SEED.admin.email },
+    update: {},
+    create: { email: SEED.admin.email, passwordHash: adminHash },
+  });
+
   // --- Business hours: Mon-Sat 09:00-17:00, closed Sunday (dayOfWeek 0) ---
   for (let dayOfWeek = 0; dayOfWeek <= 6; dayOfWeek++) {
     const closed = dayOfWeek === 0;
@@ -131,6 +140,7 @@ async function main() {
   const counts = {
     merchants: await prisma.merchant.count(),
     users: await prisma.user.count(),
+    admins: await prisma.admin.count(),
     styles: await prisma.style.count({ where: { merchantId: merchant.id } }),
     rewardRules: await prisma.rewardRule.count({ where: { merchantId: merchant.id } }),
     businessHours: await prisma.businessHours.count({ where: { merchantId: merchant.id } }),
@@ -139,6 +149,7 @@ async function main() {
   console.log('Seed complete.\n');
   console.log('  merchant :', SEED.merchant.email, '/', SEED.merchant.password, `(id ${merchant.id})`);
   console.log('  consumer :', SEED.consumer.email, '/', SEED.consumer.password, `(id ${user.id})`);
+  console.log('  admin    :', SEED.admin.email, '/', SEED.admin.password);
   console.log('  styleId  :', styles[0].id, `(${styles[0].name}, ${styles[0].durationMinutes}min)`);
   console.log('\n  row counts:', JSON.stringify(counts));
 }

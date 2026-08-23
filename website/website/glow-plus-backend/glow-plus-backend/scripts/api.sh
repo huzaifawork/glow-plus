@@ -20,6 +20,7 @@ mkdir -p "$CACHE_DIR"
 
 MERCHANT_EMAIL="merchant@glowplus.test"; MERCHANT_PASSWORD="Merchant123!"
 CONSUMER_EMAIL="consumer@glowplus.test"; CONSUMER_PASSWORD="Consumer123!"
+ADMIN_EMAIL="admin@glowplus.test"; ADMIN_PASSWORD="Admin123!"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -27,16 +28,20 @@ die() { echo "error: $*" >&2; exit 1; }
 get_token() {
   local role="$1"
   local cache="$CACHE_DIR/$role.jwt"
-  local path email password
+  local path email password check_path
+  # Admin tokens fail the /bookings/me liveness check by design (RequireConsumerGuard
+  # rejects them with 403), so validate against an admin-only route instead.
+  check_path="/bookings/me"; [[ "$role" == "admin" ]] && check_path="/admin/metrics/platform"
   if [[ -s "$cache" ]] && curl -sf -o /dev/null \
-      -H "Authorization: Bearer $(cat "$cache")" "$API_BASE/bookings/me" 2>/dev/null; then
+      -H "Authorization: Bearer $(cat "$cache")" "$API_BASE$check_path" 2>/dev/null; then
     cat "$cache"; return
   fi
 
   case "$role" in
     merchant) path=/merchants/login; email=$MERCHANT_EMAIL; password=$MERCHANT_PASSWORD ;;
     consumer) path=/auth/login;      email=$CONSUMER_EMAIL; password=$CONSUMER_PASSWORD ;;
-    *) die "unknown role '$role' (use merchant|consumer|public)" ;;
+    admin)    path=/admin/login;     email=$ADMIN_EMAIL;    password=$ADMIN_PASSWORD ;;
+    *) die "unknown role '$role' (use merchant|consumer|admin|public)" ;;
   esac
 
   local body token

@@ -331,8 +331,30 @@ Rules:
   Tested against the real running API, real Postgres, and real Resend delivery — not just response shapes: seeded consumer → forgot-password → pulled the actual token out of the delivered Resend email (same technique as T19/T20) → reset-password → **logged in with the new password (201)** → old password now rejected (401) → **reusing the same token rejected (400, single-use)** → manually expired a second token's row in Postgres → rejected with a distinct "Token expired" message. Password restored to the seed baseline (`Consumer123!`) after.
 
   - [x] Frontend: `forgot-password.html` / `reset-password.html` — new standalone pages (same pattern as T17/T18: not in the SPA yet, since T35's real auth UI doesn't exist). Driven in real Chrome (`puppeteer-core`, scratchpad-only): 12/12 functional checks passed — form renders, success state identical for a real vs. unknown email, missing-token error state, mismatched-password client-side validation, real submit → success, login with new password succeeds, reused token shows an error, no horizontal overflow at 390px.
-- [ ] **T22 — Admin authentication + guard on every `/admin/*` route.** [F7]
-  - [ ] Frontend: admin login + guarded admin panel.
+- [x] **T22 — Admin authentication + guard on every `/admin/*` route.** ✅ **DONE & VERIFIED 2026-08-24 (session 9).** [F7]
+
+  **New `Admin` model** (`prisma/schema.prisma`): `id, email, passwordHash, createdAt`. Deliberately **no signup route** — admin accounts are created directly (seed/CLI), since a self-service admin signup would defeat the guard entirely. Migration `20260824090000_admin`, applied via the same `migrate diff` → write → `migrate deploy` pattern as T13/T21 (no interactive shell here). Seeded one: `admin@glowplus.test` / `Admin123!` (`npm run seed`).
+
+  **`RequireAdminGuard`** (`src/common/guards/require-admin.guard.ts`) — same shape as T17/T18's `RequireMerchantGuard`/`RequireConsumerGuard`: fail closed on `req.accountRole !== 'admin'` before the handler runs. Applied via `@UseGuards` to every route in `admin.controller.ts` **except** `POST /admin/login`, which is also excluded from `AuthMiddleware` in `app.module.ts` (same pattern as `merchants/login`) so it stays reachable with no bearer token. `AdminAuthService` (`admin-auth.service.ts`) mirrors `MerchantAuthService` — bcrypt compare, `sign({ sub, role: 'admin' })` (the JWT util already had an `'admin'` role in its union, just nothing ever issued one).
+
+  **Reproduced the exact leak this closes, then re-tested after the fix, against the real running API and Postgres:**
+  | Caller | Route | Before [F7]/[F31] | After |
+  |---|---|---|---|
+  | No token | `GET /admin/merchants/pending` | 401 (AuthMiddleware only) | 401 (unchanged) |
+  | **Consumer token** | `GET /admin/merchants/pending` | **200 — this is the exact F31 leak vector** (a consumer token pulled a pending merchant's bcrypt hash off this unguarded route) | **403** "This action requires an admin account" |
+  | Merchant token | `PATCH /admin/merchants/:id/approve` | would have worked — no guard at all | **403** |
+  | Admin login, wrong password | `POST /admin/login` | — | **401** "Invalid email or password" |
+  | Admin login, correct | `POST /admin/login` | — | **200** + token |
+  | Admin token | `GET /admin/merchants/pending` / `/metrics/mrr` / `/metrics/churn` / `/metrics/platform` | — | all **200** |
+
+  **Full approve/suspend cycle against real Postgres, not just response shapes:** signed up a fresh merchant (`T22 Test Salon`, status `PENDING`) → showed up in `GET /admin/merchants/pending` under the admin token → `PATCH .../approve` → **200, `status: ACTIVE`**, and the pending list immediately emptied → `PATCH .../suspend` on the same merchant → **200, `status: SUSPENDED`** — confirmed independently via a direct Prisma query, not just the API response. Test merchant deleted after; DB back at exact seed baseline (`{merchants:1, admins:1}`, confirmed by count).
+
+  **Frontend** (`glow-plus-web/admin.html` → `/admin/panel`, same standalone-page pattern as T17/T18/T21 — not in the SPA yet): admin sign-in (real password field) → platform metrics tiles (MRR, active subs, churn rate, active merchants, visits, points issued) → pending-merchants list with Approve/Suspend buttons, live-refreshing after each action. `lib/api.js` gained a **third, separate token key** (`glowplus:token:admin`), same reasoning as T18's consumer/merchant key split — an admin session shouldn't clobber a merchant or consumer session open in the same browser. Driven in real Chrome (`puppeteer-core`, scratchpad-only, same as prior tasks): **11/11 functional checks passed** — wrong password shows the real API error text, successful login shows both Platform metrics and Pending merchants sections, no bcrypt hash reaches the page, session persists across a reload, token lands under its own storage key, logout returns to the sign-in form, no horizontal overflow at 390px, zero unexpected console errors (the only two entries are the same benign noise as every prior page: the deliberate wrong-password 401 and a `/favicon.ico` 404). Production build (`npm run build`) compiles clean with the new entry point.
+
+  **Also found and cleaned up while testing (not a T22 bug, noted for later):** the merchant signup used to create the test fixture returned a bare `500` even though the row committed successfully — same *"account created, response still fails"* shape as [F27], just on `POST /merchants/signup` instead of `/auth/signup`. Not investigated further here (out of scope for this task); worth a look if T22-style testing of merchant onboarding comes up again.
+
+  **Tests:** `require-admin.guard.spec.ts` — 6 specs, incl. one explicitly named for the F31 scenario (a consumer token refused). Suite now **55 passing** (was 49). `tsc --noEmit` clean.
+  **Verify independently:** open `http://localhost:3000/admin/panel`, sign in as `admin@glowplus.test` / `Admin123!`; separately, confirm a merchant or consumer login at `/business/billing` or `/consumer/booking` still works in the same browser without the admin session clobbering it.
 - [ ] **T23 — Reward redemption tracking.** Writhe to the existing `Redemption` table; endpoint to redeem; prevent double-redemption. [F4]
   - [ ] Frontend: redeem button + redemption history.
 - [ ] **T24 — Merchant staff accounts + roles.** `MerchantStaff` model already exists — build auth, invite, and role-scoped permissions on it. [F6]

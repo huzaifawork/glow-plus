@@ -35,11 +35,11 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
-| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 12 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21) |
+| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 13 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **49 passing** (`npm test`) — 7 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, trialEndingReminder job |
+| Tests | ✅ Jest configured, **55 passing** (`npm test`) — 8 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, trialEndingReminder job |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -186,7 +186,11 @@ No bug found in pre-existing code this time (unlike T17/T18) — this was new fu
 
 Suite still **49 passing** (no new unit tests — consistent with T17–T20, which test this class of flow end-to-end against the real API rather than in Jest).
 
-➡️ **NEXT: T22 — Admin authentication + guard on every `/admin/*` route.** [F7] `/admin/*` currently has **no guard at all** — confirmed exploitable in T17 (F31: a logged-in *consumer* token could read `GET /admin/merchants/pending`, which is how the `passwordHash` leak was found). Needs real admin auth (there's no `Admin` model/login yet — check whether one exists in the schema before designing it) plus a guard applied to the whole `/admin` prefix, then a guarded admin panel on the frontend.
+✅ **T22 — done 2026-08-24 (session 9).** Admin authentication + `RequireAdminGuard` on every `/admin/*` route except `POST /admin/login`. [F7] closed, and re-verified that the exact **F31** leak vector (a consumer token reading `GET /admin/merchants/pending`) now returns 403 instead of 200. New `Admin` model (migration `20260824090000_admin`), seeded `admin@glowplus.test / Admin123!`. Full approve/suspend cycle tested against real Postgres (fresh signup → PENDING → approve → ACTIVE → suspend → SUSPENDED, confirmed via direct Prisma query, test data cleaned up). Frontend: new standalone page `glow-plus-web/admin.html` → `/admin/panel` (same pattern as T17/T18/T21) — admin login, platform metrics tiles, pending-merchants approve/suspend list. `lib/api.js` gained a third token key, `glowplus:token:admin`. Driven in real Chrome (`puppeteer-core`, scratchpad-only): 11/11 checks passed. Suite now **55 passing** (was 49).
+
+Noted in passing, not fixed (out of scope for T22): `POST /merchants/signup` returns a bare 500 even though the row commits — same shape as the already-resolved [F27], just on the merchant path instead of consumer. Worth a look next time merchant onboarding is touched.
+
+➡️ **NEXT: T23 — Reward redemption tracking.** [F4] Nothing writes to the `Redemption` table today. Needs an endpoint to redeem a reward, a guard against double-redemption, and a frontend redeem button + redemption history.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 

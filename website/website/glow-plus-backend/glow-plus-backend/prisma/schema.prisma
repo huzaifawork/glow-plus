@@ -193,6 +193,18 @@ model Redemption {
 }
 
 // ---------------------------------------------------------------------------
+// Admin accounts — T22 [F7]. Not self-service: created directly (seed/CLI),
+// since anyone who could sign up as admin would defeat the guard entirely.
+// ---------------------------------------------------------------------------
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
 // Email verification (consumer, merchant, admin)
 // ---------------------------------------------------------------------------
 

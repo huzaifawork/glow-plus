@@ -24,6 +24,8 @@ function legacyRouteRewrites() {
     // is baked in the same way verify-email's is, so this path can't change either.
     '/forgot-password': '/forgot-password.html',
     '/reset-password': '/reset-password.html',
+    // T22 — admin panel, same standalone-page pattern as booking/billing.
+    '/admin/panel': '/admin.html',
   };
   return {
     name: 'glow-plus-legacy-route-rewrites',
@@ -77,6 +79,7 @@ export default defineConfig({
         booking: resolve(__dirname, 'booking.html'),
         forgotPassword: resolve(__dirname, 'forgot-password.html'),
         resetPassword: resolve(__dirname, 'reset-password.html'),
+        admin: resolve(__dirname, 'admin.html'),
       },
     },
   },

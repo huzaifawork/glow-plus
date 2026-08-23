@@ -47,6 +47,7 @@ export class AppModule implements NestModule {
         { path: 'auth/(.*)', method: RequestMethod.ALL },
         { path: 'merchants/signup', method: RequestMethod.POST },
         { path: 'merchants/login', method: RequestMethod.POST },
+        { path: 'admin/login', method: RequestMethod.POST },
         { path: 'billing/webhook', method: RequestMethod.POST },
         // Public by design — a consumer browses times and opening hours
         // before creating an account. Both controllers document these as
