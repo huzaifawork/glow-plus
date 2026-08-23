@@ -103,7 +103,8 @@ Rules:
   **Cosmetic — breaks nothing. Optional, and safe to skip.** The only real argument for doing it is timing: doing it *before* the first commit is free, whereas moving files later makes git history noisy. If skipping, do so deliberately.
   ⚠️ **Do not confuse this with T13**, which relocates `src/modules/booking/src/modules/…` and **is mandatory** — that one is the cause of the 7 compile errors.
 - [x] **T3 — Postgres up.** ✅ **DONE 2026-08-23.** Docker Desktop 29.7.2 installed; container `docker-postgres-1` running Postgres 16.15 on port 5433, database `glowplus`, `pg_isready` confirms accepting connections. No tables yet — migrations not run. Restart with `docker compose -f docker/docker-compose.yml up -d postgres` (⚠️ `docker` is on **no** PATH here — not Git Bash's, not PowerShell's. Docker Desktop is installed to a non-standard location; call the binary by full path:
-  `& "$env:LOCALAPPDATA\Programs\DockerDesktopesourcesin\docker.exe" ps`)
+  `& "$env:LOCALAPPDATA\Programs\DockerDesktop
+  `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe" ps`)
 - [ ] **T4 — Backend boots** on :4000. **Blocked by T13/T14** — the source doesn't compile [F14], so this cannot be done first. Order is: T13 → T14 → `prisma generate` → `prisma migrate dev` → `start:dev`.
 - [x] **T5 — Fix malformed `EMAIL_FROM` in `.env`.** ✅ **DONE & VERIFIED 2026-08-23.**
   **Root cause:** line 16 was `"EMAIL_FROM="Glow+ <onboarding@resend.dev>"` — a **stray leading double-quote**, so dotenv parsed the key as `"EMAIL_FROM` (quote included) and `process.env.EMAIL_FROM` was **undefined**.
