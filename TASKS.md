@@ -92,13 +92,13 @@ Rules:
 
 # PHASE 0 — Make the project testable *(do first)*
 
-- [~] **T1 — `.gitignore`, `git init`, first commit.** ⚠️ **PARTIALLY DONE — see `CONTEXT.md` §8.**
+- [x] **T1 — `.gitignore`, `git init`, first commit.** ✅ **DONE & PUSHED 2026-08-23.** Repo: <https://github.com/huzaifawork/glow-plus> (private).
   - [x] `.gitignore` created at project root
   - [x] `.env.example` sanitized — **it contained real Stripe + Resend secrets**, now placeholders (real values remain in the gitignored `.env`)
-  - [ ] `git init`
-  - [ ] `git add -A`, then review `git status` to confirm no `.env` / `node_modules` / `*.zip` / `stripe.exe` staged
-  - [ ] First commit
-  - [ ] Create GitHub repo and push
+  - [x] `git init` — repo initialised on branch `main`
+  - [x] `git add -A` + audit: **90 files staged, verified clean.** No `.env`, `node_modules/`, `*.zip`, `stripe.exe`, `*.pem`, `*.key` or `dist/` staged. `git check-ignore` confirms each is excluded *by rule*, not by absence. Staged **content** also scanned for live `sk_live_`/`sk_test_`/`whsec_`/`re_`/`vcp_`/AWS/private-key patterns — no matches.
+  - [x] First commit — `9d42151`, 90 files, 30,235 insertions, tree clean. Author `huzaifawork <mhuzaifatariq7@gmail.com>`; no AI co-author trailer (applies to all future commits).
+  - [x] Create GitHub repo and push — pushed to `origin/main` at `https://github.com/huzaifawork/glow-plus.git`. Verified: remote `main` SHA `9d42151` matches local exactly; branch tracking set.
 - [ ] **T2 — Flatten the folder nesting.** `[MINE — not requested by the client]` `website/website/glow-plus-backend/glow-plus-backend/` is 4 levels of duplication from how the zip extracted. Also delete the stray `{prisma,src` folder (a broken brace-expansion artifact).
   **Cosmetic — breaks nothing. Optional, and safe to skip.** The only real argument for doing it is timing: doing it *before* the first commit is free, whereas moving files later makes git history noisy. If skipping, do so deliberately.
   ⚠️ **Do not confuse this with T13**, which relocates `src/modules/booking/src/modules/…` and **is mandatory** — that one is the cause of the 7 compile errors.
