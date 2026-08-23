@@ -125,12 +125,15 @@ Rules:
   **Verified through the real endpoints, not just the DB:** `POST /merchants/login` and `POST /auth/login` both return a JWT for the seeded credentials; a wrong password returns 401. Passwords are bcrypt at `SALT_ROUNDS = 12`, matching `auth.service.ts` / `onboarding.service.ts`.
   Credentials: `merchant@glowplus.test / Merchant123!` · `consumer@glowplus.test / Consumer123!`
   Added `ts-node` as a devDependency (it wasn't installed).
-- [ ] **T9 — Jest configured + 1 passing test.** Jest is a dep with no config and no tests. Set up now so tests accumulate per task.
+- [x] **T9 — Jest configured + passing tests.** ✅ **DONE 2026-08-23.** Jest was a dependency with **no config and no specs**; added `jest` config to `package.json` (ts-jest transform, `*.spec.ts`), installed the missing `ts-jest` + `@types/jest`, and added scripts `test`, `test:watch`, `test:cov`.
+  First suite: `src/middleware/jwt.util.spec.ts` — **8 tests, all passing.** Covers sign/verify round-trip, `merchantId` preservation, the 7-day default expiry (documents current behaviour so T47's refresh-token change is visible), expired-token rejection, **tampered-payload rejection**, and malformed tokens. Chosen because every authenticated route depends on it and it's pure — no DB, no network, so it can't flake.
 - [x] **T10 — Auth'd request helper.** ✅ **DONE & VERIFIED 2026-08-23.** `scripts/api.sh` — logs in as a seeded account, **caches the JWT** to `$TMPDIR/glow-tokens/<role>.jwt`, re-validates it before reuse and silently re-logs-in if it's expired or rejected.
   `./scripts/api.sh merchant GET /bookings` · `./scripts/api.sh consumer GET /bookings/me` · `./scripts/api.sh public GET '/business-hours/<id>'` · `./scripts/api.sh token merchant` · `./scripts/api.sh reset`
   Prints the response plus `--- HTTP <code> ---`, so the unauthorized case is visible in the same output. **Verified:** both roles authenticate and return `200 []`, tokens land in the cache, and `public` sends no `Authorization` header.
-- [ ] **T11 — Website served over HTTP** against the backend (not `file://` — CORS/fetch misbehave). Confirm CORS from that origin.
-- [ ] **T12 — Playwright + 1 browser smoke test.** (The docx claims Playwright was used; no config or specs were delivered.)
+- [x] **T11 — Website served over HTTP against the backend.** ✅ **DONE & VERIFIED 2026-08-23.** Frontend running on :3000 (`npm start`). Pages: `/` 200, `/verify-email` 200, `/business/billing` 200 (serves `billing-result.html` — the route is `/business/billing`, not `/billing-result`), `/config.js` 200 serving `window.GLOW_API_BASE_URL = "http://localhost:4000"`.
+  **CORS verified from the real browser origin:** `Origin: http://localhost:3000` → `Access-Control-Allow-Origin: http://localhost:3000` + `Allow-Credentials: true`; preflight `OPTIONS` → 204 with correct `Allow-Methods`/`Allow-Headers`; and **`Origin: http://evil.example.com` is NOT echoed back** (0 matches), so the allowlist genuinely restricts.
+- [-] **T12 — Playwright + 1 browser smoke test.** ⏭️ **SKIPPED DELIBERATELY 2026-08-23** (agreed with the user). `[MINE — test tooling, not client-requested]`
+  **Why:** the only pages that currently exist are `verify-email` and `billing-result`. The real UI is Phase 5 (T33–T41) and doesn't exist yet, so a browser smoke test today would assert almost nothing while adding a browser-download step to every CI run. **Revisit at the start of Phase 5**, where it has real surface to test. Jest (T9) is in place, so tests can still accumulate per task in the meantime.
 
 # PHASE 1 — Repair the foundation
 
@@ -181,7 +184,12 @@ Rules:
 # PHASE 4 — Security *(client priority #3)*
 
 - [ ] **T26 — API-wide rate limiting.** Currently applied to **nothing** — signup, login, visits, everything is open. [F3]
-- [ ] **T27 — Secrets out of plaintext `.env`** into Vercel env vars. **Rotate the Stripe + Resend keys** — they've travelled through a zip and a chat.
+- [~] **T27 — Secrets out of plaintext `.env`.** ⚠️ **One part done early 2026-08-23 because it was live-exploitable.**
+  **🔓 `JWT_SECRET` in `.env` was the literal placeholder `change-me-to-a-long-random-string`** — the exact string published in `.env.example` (and now on GitHub). Anyone reading it could **mint a valid token for any account and any role**, including `admin`, which has no guard at all [F7]. **Proven, not theorised:** a hand-forged `{sub:'attacker', role:'admin'}` token signed with that placeholder was accepted by the running API (HTTP 200).
+  **Fixed:** replaced with 48 random bytes (base64) in the gitignored `.env`. Re-verified after a full restart — the forged placeholder token now returns **401**, and seeded logins still return 200.
+  ⚠️ **`nest start --watch` does NOT reload `.env`** — it recompiles TS but keeps the original process env, and stopping the npm wrapper can leave an orphaned node process holding :4000 (`EADDRINUSE`). After any `.env` change, kill the listener on :4000 and restart, then re-verify.
+  **Still to do:** move all secrets to Vercel env vars, and **rotate the Resend key** (highest severity — see CONTEXT.md R4). Original task text follows —
+- [ ] **T27 (remaining) — Secrets out of plaintext `.env`** into Vercel env vars. **Rotate the Stripe + Resend keys** — they've travelled through a zip and a chat.
 - [ ] **T28 — Add `helmet`, tighten CORS** to real origins.
 - [ ] **T29 — Authorization audit.** Verify every merchant-scoped route checks ownership (no IDOR: merchant A reading merchant B's data).
 - [ ] **T30 — Consider `jsonwebtoken`** over the hand-rolled HS256 implementation. [F12]

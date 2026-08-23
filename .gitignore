@@ -16,6 +16,9 @@ node_modules/
 .pnp.js
 
 # ---- Build output --------------------------------------------------------
+# prisma/seed.ts sits outside tsconfig's rootDir (./src), so a watch build
+# emits prisma/seed.js in place instead of into dist/. It's compiled output.
+prisma/*.js
 dist/
 build/
 out/

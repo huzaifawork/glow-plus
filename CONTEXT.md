@@ -30,25 +30,49 @@ Per task: **implement → test by actually running it → record evidence → ti
 
 Why strict: the exact problem we were hired to fix is *"functionality that exists vs. functionality that's been validated."*
 
-## 4. Environment — CURRENT STATE
+## 4. Environment — CURRENT STATE (updated 2026-08-23, end of session 2)
 
 | Thing | Status |
 |---|---|
-| Docker Desktop | ✅ Installed and running (v29.7.2) |
-| Postgres | ✅ **Running now** — container `docker-postgres-1`, Postgres 16.15 on **port 5433**, database `glowplus`, **no tables yet** (migrations not run) |
-| Node / npm | ✅ v24.11.1 / 11.6.2 (note: newer than NestJS 10 / Prisma 5 typically target) |
-| Git | ✅ v2.53 installed — **but the project is NOT yet a git repo** |
-| Stripe CLI | ✅ Already vendored at `website/website/stripe.exe` (v1.45.2) |
-| npm dependencies | ✅ Already installed in both backend and frontend |
-| Backend server | ❌ Not running — **source does not compile** (see F14 below) |
-| Website helper | ❌ Not running (verified working earlier on :3000) |
+| Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktopesourcesin\docker.exe"` |
+| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 11 tables + `_prisma_migrations`** (was 0 applied) |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
+| Website | ✅ Runs on :3000 (`glow-plus-frontend`, `npm start`) |
+| Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
+| Tests | ✅ Jest configured, **8 passing** (`npm test`) |
+| Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
+| Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
+| Node / npm | v24.11.1 / 11.6.2 |
 
-**Restart Postgres if needed:**
+**Restart everything:**
 ```
-cd website/website/glow-plus-backend/glow-plus-backend
-docker compose -f docker/docker-compose.yml up -d postgres
+# Postgres (if down)
+& "$env:LOCALAPPDATA\Programs\DockerDesktopesourcesin\docker.exe" compose -f docker/docker-compose.yml up -d postgres
+# Backend  (from website/website/glow-plus-backend/glow-plus-backend)
+npm run start:dev
+# Website  (from website/website/glow-plus-frontend)
+npm start
+# Stripe   (from website/website)
+./stripe.exe listen --api-key <STRIPE_SECRET_KEY from .env> --forward-to localhost:4000/billing/webhook
 ```
-⚠️ `docker` is NOT on Git Bash's PATH in this environment — **use the PowerShell tool** for docker commands.
+
+**Test credentials** (`npm run seed`): `merchant@glowplus.test / Merchant123!` · `consumer@glowplus.test / Consumer123!`
+**Helper:** `./scripts/api.sh merchant GET /bookings` · `./scripts/api.sh consumer GET /bookings/me` · `./scripts/api.sh reset`
+
+⚠️ **`nest start --watch` does not reload `.env`.** After changing it, kill whatever holds :4000 and restart — stopping the npm wrapper can orphan the node child (`EADDRINUSE`):
+```
+Get-NetTCPConnection -LocalPort 4000 -State Listen | %{ Stop-Process -Id $_.OwningProcess -Force }
+```
+
+## 3b. Client account access — NEW
+
+**The client has given access to Stripe, Resend and Hostinger.** Testing that previously needed the client no longer does.
+
+- **Stripe** — key in `.env` is **`sk_test_` (test mode)**, so experiments cannot move real money. Webhook forwarding works end to end.
+- **Resend** — key is live and valid, but **no domain is verified** (`GET /domains` → `[]`), so `onboarding@resend.dev` still delivers **only to the Resend account owner's address**. T6 was deferred by agreement to whenever T19/T20 (the email tasks) are done.
+- **Hostinger** — a domain is available. Verifying it in Resend (T60) is mostly DNS records and would lift the "self-addressed only" ceiling for **every** email task. Worth pulling forward when email work starts.
+
+⚠️ **Never paste keys into chat.** Put them straight into the gitignored `.env`; they can be read from disk.
 
 ## 5. Where the code lives
 
@@ -95,23 +119,31 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume
+## 8. EXACTLY where to resume — **START PHASE 1 AT T15**
 
-**T1 was started and is PARTIALLY done.** Two files were written; nothing was committed and git was NOT initialised.
+**Session 2 (2026-08-23) finished Phase 0 and the first half of Phase 1.**
 
-✅ **Already done:**
-1. Created `.gitignore` at the project root (ignores `.env`, `node_modules/`, `dist/`, `stripe.exe`, `*.zip`, etc.)
-2. Sanitized `website/website/glow-plus-backend/glow-plus-backend/.env.example` — it had **real Stripe and Resend secrets** in it, now replaced with placeholders. (The real values remain in `.env`, which is gitignored.)
+✅ **Done, tested and pushed:** T1, T3, T4, T5, T7, T8, T9, T10, T11, **T13, T14**
+⏭️ **Deliberately skipped:** T2 (cosmetic nesting), T12 (Playwright — no UI to test until Phase 5)
+⏸️ **Deferred by agreement:** T6 (Resend send — do it with T19/T20)
+🟡 **Partly done early:** T27 (JWT secret rotated because it was live-exploitable)
 
-⬜ **Still to do to finish T1:**
-3. `git init` at `c:\Users\GCA\Documents\joziilunga-attachments`
-4. `git add -A`, then **carefully review `git status`** to confirm no `.env`, no `node_modules`, no `.zip`, no `stripe.exe` is staged
-5. First commit
-6. Create the GitHub repo and push
+➡️ **NEXT: T15 — `GET /health`**, then **T16 — global exception filter**. That completes Phase 1.
+Then Phase 2 (T17–T20), which is the client's stated priority #1.
 
-**Then:** T2 (optional — see below) → **T13/T14** (merge schemas, relocate the nested booking delivery, fix imports, wire the modules) — these are required before the backend can compile or boot at all.
+**Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
-⚠️ **Not every task in `TASKS.md` was requested by the client.** See the "Where each task comes from" section at the top of that file. In particular **T2 is mine, cosmetic, and optional** — flattening `website/website/glow-plus-backend/glow-plus-backend/`. Do not confuse it with **T13**, which relocates `src/modules/booking/src/modules/…` and is **mandatory** because it causes the 7 compile errors.
+**New findings from session 2** (all verified by running the code, not by reading it):
+
+| # | Finding |
+|---|---|
+| **F19** | **No Stripe webhook had ever been processed successfully.** `billing.controller.ts` reads `req.rawBody`, but Nest's global JSON parser consumed the stream before `billing.module.ts`'s `express.raw()` ran, so `req.rawBody` was always `undefined` and **every** event failed signature verification with 400. Fixed with `rawBody: true` on `NestFactory.create()`. Verified 4×400 → 4×200. Affects T17, T20; T57 must re-verify under Vercel. |
+| **F20** | **`JWT_SECRET` in `.env` was the literal placeholder from `.env.example`** — a published string. A hand-forged `role:'admin'` token was **accepted (200)** by the running API. Rotated to 48 random bytes; forged token now 401. |
+| **F21** | **T13's own description was wrong**: the booking modules' relative imports were never broken. They were always written for `src/modules/bookings/` — they simply weren't at that path. T13 was a pure move, no import rewriting. |
+| **F22** | `src/modules/points/` and `src/modules/redemptions/` are **empty placeholder directories** (0 files) — corroborates [F4]. The `{prisma,src` folder is a failed `mkdir -p` brace expansion, also all empty, untracked by git. |
+| **F23** | `prisma/seed.ts` sits outside tsconfig's `rootDir` (`./src`), so watch builds emitted `prisma/seed.js` in place. Added `exclude: [..., "prisma"]` and gitignored `prisma/*.js`. |
+
+**Note on merchant booking routes:** they are deliberately **not** behind `RequireActiveSubscription` — it's path-based and `bookings/*` mixes consumer and merchant routes, so a blanket rule would break consumer booking. Flagged for T29's authorization audit.
 
 ## 9. RISK REGISTER — things that could cause trouble
 

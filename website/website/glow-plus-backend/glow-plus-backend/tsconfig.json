@@ -19,4 +19,5 @@
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true
   }
+  ,"exclude": ["node_modules", "dist", "prisma"]
 }
