@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **40 passing** (`npm test`) — 5 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard |
+| Tests | ✅ Jest configured, **46 passing** (`npm test`) — 6 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -156,7 +156,17 @@ Frontend: `glow-plus-web/src/pages/billing-result/BillingManager.jsx` + new `src
 
 Suite now **40 passing** (was 28). DB and Stripe test data cleaned up after; DB back at exact seed state.
 
-➡️ **NEXT: Phase 2 continues — T18 (booking end-to-end against real Postgres, unblocked by T13/T14), T19 (trial-ending email — now testable against real recipients thanks to T60), T20 (`invoice.payment_failed` via Stripe CLI)**.
+✅ **T18 — done 2026-08-24 (session 5), both backend and frontend.** Booking flow end-to-end against real Postgres: `bookings/availability` → `POST /bookings` → `GET /bookings/me` → `PATCH /:id/cancel`, plus the merchant side (`confirm` → `complete`, which auto-creates a `Visit` row and checks reward triggers). All verified against the live API and a real Prisma query, not just response bodies.
+
+Found the same [F29]-class bug in a second place before building on top of it: `bookings.controller.ts` had 6 more call sites reading `req.merchantId!` / `req.accountId!` with no role check ahead of them — `GET /bookings`, `PATCH /:id/{confirm,no-show,complete}` (merchant-only) and `POST /bookings`, `GET /bookings/me` (consumer-only). A consumer token on `GET /bookings` would have returned every merchant's bookings, reproducing F29 in a new controller. Fixed by reusing T17's `RequireMerchantGuard` on the four merchant-only routes and adding a new mirror `RequireConsumerGuard` (`src/common/guards/require-consumer.guard.ts`) on the two consumer-only ones.
+
+Also added two small **public** endpoints, pulled forward out of Phase 6 because the booking flow has no other way to let a consumer name a merchant/style without hardcoding a database id into the frontend: `GET /merchants/public` (id + businessName, ACTIVE only) and `GET /styles/public/:merchantId` (active styles at an ACTIVE merchant). Both are deliberately minimal — **T43/T44 are still open**, these are stopgaps sized for T18, not their final shape (no pagination/search).
+
+Frontend: new standalone page `glow-plus-web/booking.html` → `/consumer/booking` (same pattern as T17's billing page — not integrated into the SPA, since T35's real auth UI doesn't exist yet). Consumer sign-in → salon/style dropdowns from the two new public endpoints → date → real availability slots → book → "Your bookings" list with cancel. `lib/api.js` gained a **second, separate token key** (`glowplus:token:consumer`, distinct from the merchant billing page's `glowplus:token`) so the two standalone pages can hold independent sessions in the same browser — a real collision T36 would otherwise have hit later. Driven in real Chrome (`puppeteer-core`, scratchpad-only): 14/14 checks passed.
+
+Suite now **46 passing** (was 40).
+
+➡️ **NEXT: Phase 2 continues — T19 (trial-ending email — testable against real recipients thanks to T60), T20 (`invoice.payment_failed` via Stripe CLI)**.
 ⚠️ **The email blocker is gone** — F27 is fixed and R6 lifted, so T19/T20 can be verified against any recipient address, not just the account owner's.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
@@ -326,7 +336,12 @@ returns break.
 - ✅ **T41** (keep verify-email + billing-result working) — verified in every state
 - ⬜ **T35–T38** (auth UI, consumer, merchant, admin against the **real API**) — still open
 - ⬜ **T39** (mobile-friendly) — still open; see F25
-- ⚠️ **Blocked on missing endpoints** — the views cannot be wired until these exist:
-  `GET /merchants` public directory (**T43**), `GET /me/rewards` (**T42**),
-  `GET /visits/me` (**T45**), `GET /styles/public/:merchantId` (**T44**), and a
+- ⚠️ **Blocked on missing endpoints** — the SPA views still cannot be wired until
+  these exist: `GET /me/rewards` (**T42**), `GET /visits/me` (**T45**), and a
   **reward-rules controller — that module has no HTTP routes at all.**
+  `GET /merchants` public directory (**T43**) and `GET /styles/public/:merchantId`
+  (**T44**) now partially exist — **T18** (2026-08-24) added minimal versions
+  (`/merchants/public`, `/styles/public/:merchantId`) to unblock the standalone
+  booking page. They're stopgaps, not the final shape (no pagination/search) —
+  T43/T44 are still open, but the SPA's future salon-directory view can likely
+  reuse them as-is.
