@@ -1,0 +1,51 @@
+# ---- Secrets -------------------------------------------------------------
+# .env holds live Stripe + Resend credentials. Never commit it.
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# .env.example IS committed — it must contain placeholders only.
+
+# ---- Dependencies --------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# ---- Build output --------------------------------------------------------
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ---- Binaries & archives -------------------------------------------------
+# stripe.exe is a 37MB vendored CLI; developers install their own.
+stripe.exe
+*.zip
+
+# ---- Test / coverage -----------------------------------------------------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# ---- Logs ----------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Editor & OS ---------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- Misc ----------------------------------------------------------------
+.cache/
+tmp/
+temp/

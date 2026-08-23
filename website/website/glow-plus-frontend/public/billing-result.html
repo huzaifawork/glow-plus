@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Billing — Glow+</title>
+<script src="/config.js"></script>
+<style>
+  :root{
+    --white:#ffffff; --ink:#1d1d1f; --ink-soft:#86868b; --surface:#f5f5f7;
+    --accent:#0071e3; --sage:#0d8a5f; --rose:#e0116f;
+    --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--surface);font-family:var(--font);color:var(--ink);padding:20px;
+  }
+  .card{
+    background:var(--white);border-radius:20px;padding:40px;max-width:440px;width:100%;
+    text-align:center;box-shadow:0 20px 60px -30px rgba(0,0,0,0.25);
+  }
+  .brand{font-size:20px;font-weight:800;margin-bottom:24px;}
+  .brand .plus{color:var(--accent);}
+  .icon{font-size:48px;margin-bottom:16px;}
+  h1{font-size:22px;margin:0 0 10px;font-weight:700;}
+  p{color:var(--ink-soft);font-size:14.5px;line-height:1.55;margin:0 0 8px;}
+  .session-id{
+    font-family:ui-monospace,monospace;font-size:11.5px;color:var(--ink-soft);
+    background:var(--surface);border-radius:8px;padding:8px 10px;margin-top:16px;
+    word-break:break-all;text-align:left;
+  }
+  .status-success h1{color:var(--sage);}
+  .status-cancel h1{color:var(--rose);}
+  .note{
+    margin-top:20px;padding-top:16px;border-top:1px solid var(--surface);
+    font-size:12.5px;color:var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="brand">Glow<span class="plus">+</span></div>
+    <div class="icon">⏳</div>
+    <h1>One moment…</h1>
+    <p>Loading your billing result.</p>
+  </div>
+
+  <script>
+    function render() {
+      const card = document.getElementById('card');
+      const params = new URLSearchParams(window.location.search);
+      const success = params.get('success') === 'true';
+      const canceled = params.get('canceled') === 'true';
+      const sessionId = params.get('session_id');
+
+      if (success) {
+        card.className = 'card status-success';
+        card.innerHTML =
+          '<div class="brand">Glow<span class="plus">+</span></div>' +
+          '<div class="icon">✅</div>' +
+          '<h1>You\u2019re all set!</h1>' +
+          '<p>Your Glow+ subscription checkout completed. It can take a few seconds for the payment confirmation to reach our system in the background \u2014 switch back to your Glow+ tab and log in again to see your updated status.</p>' +
+          (sessionId ? '<div class="session-id">Checkout session: ' + sessionId + '</div>' : '') +
+          '<div class="note">If your status still shows as pending after a minute, check that your backend\u2019s <code>stripe listen</code> (in local dev) or webhook endpoint (in production) is running \u2014 that\u2019s what actually activates your account.</div>';
+      } else if (canceled) {
+        card.className = 'card status-cancel';
+        card.innerHTML =
+          '<div class="brand">Glow<span class="plus">+</span></div>' +
+          '<div class="icon">↩️</div>' +
+          '<h1>Checkout canceled</h1>' +
+          '<p>No charge was made. Head back to your Glow+ business portal whenever you\u2019re ready to try again.</p>';
+      } else {
+        card.innerHTML =
+          '<div class="brand">Glow<span class="plus">+</span></div>' +
+          '<div class="icon">⚠️</div>' +
+          '<h1>Nothing to show here</h1>' +
+          '<p>This page is meant to be reached via a Stripe Checkout redirect, not visited directly.</p>';
+      }
+    }
+    render();
+  </script>
+</body>
+</html>

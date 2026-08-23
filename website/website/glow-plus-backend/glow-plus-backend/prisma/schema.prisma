@@ -1,0 +1,207 @@
+// Glow+ — Prisma schema
+// Matches the data model in the Glow+ Platform Spec (sections 5, 7.6, 10)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Consumers
+// ---------------------------------------------------------------------------
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  phone             String?   @unique
+  name              String
+  passwordHash      String
+  emailVerifiedAt   DateTime?
+  createdAt         DateTime  @default(now())
+
+  visits            Visit[]
+  redemptions       Redemption[]
+}
+
+// ---------------------------------------------------------------------------
+// Merchants & subscription billing
+// ---------------------------------------------------------------------------
+
+model Merchant {
+  id                String            @id @default(cuid())
+  businessName      String
+  email             String            @unique
+  passwordHash      String
+  status            MerchantStatus    @default(PENDING)
+  emailVerifiedAt   DateTime?
+  stripeCustomerId  String?           @unique
+  foundingMember    Boolean           @default(false) // true for the first 50 signups — gets an extra free month
+  createdAt         DateTime          @default(now())
+
+  subscription      Subscription?
+  styles            Style[]
+  rewardRules       RewardRule[]
+  visits            Visit[]
+  staff             MerchantStaff[]
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+model MerchantStaff {
+  id          String    @id @default(cuid())
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id])
+  email       String    @unique
+  passwordHash String
+  role        StaffRole @default(STAFF)
+  createdAt   DateTime  @default(now())
+}
+
+enum StaffRole {
+  OWNER
+  STAFF
+}
+
+model Subscription {
+  id                    String     @id @default(cuid())
+  merchantId            String     @unique
+  merchant              Merchant   @relation(fields: [merchantId], references: [id])
+  stripeSubscriptionId  String     @unique
+  plan                  Plan       @default(MONTHLY)
+  priceCents            Int        // 4999 ($49.99/mo) or 47999 ($479.99/yr)
+  status                SubStatus
+  trialStart            DateTime?
+  trialEnd              DateTime?
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean    @default(false)
+  createdAt             DateTime   @default(now())
+}
+
+enum SubStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum Plan {
+  MONTHLY  // $49.99/mo
+  ANNUAL   // $479.99/yr (~20% off monthly)
+}
+
+// ---------------------------------------------------------------------------
+// Style catalog (salon-owned)
+// ---------------------------------------------------------------------------
+
+model Style {
+  id             String     @id @default(cuid())
+  merchantId     String
+  merchant       Merchant   @relation(fields: [merchantId], references: [id])
+  type           StyleType
+  name           String     // "Balayage", "French Tip Gel", "Deep Tissue Massage"
+  pointsPerVisit Int
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+
+  visits         Visit[]
+  rewardRules    RewardRule[]
+}
+
+enum StyleType {
+  HAIR
+  NAIL
+  SPA
+  OTHER
+}
+
+// ---------------------------------------------------------------------------
+// Visits — one earn event per completed style
+// ---------------------------------------------------------------------------
+
+model Visit {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  merchantId   String
+  merchant     Merchant  @relation(fields: [merchantId], references: [id])
+  styleId      String
+  style        Style     @relation(fields: [styleId], references: [id])
+  pointsEarned Int        // snapshot of style.pointsPerVisit at time of visit
+  loggedBy     String     // staff user id
+  visitDate    DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Reward rules — salon-defined discount triggers
+// ---------------------------------------------------------------------------
+
+model RewardRule {
+  id            String       @id @default(cuid())
+  merchantId    String
+  merchant      Merchant     @relation(fields: [merchantId], references: [id])
+  name          String       // "Loyal Client Discount", "Free Gel Mani"
+  triggerType   TriggerType
+  triggerValue  Int          // e.g. 5 (visits) or 200 (points)
+  styleScopeId  String?      // optional: restrict to one style/type
+  styleScope    Style?       @relation(fields: [styleScopeId], references: [id])
+  rewardType    RewardType
+  rewardValue   Int          // 15 (%) or 2000 (cents) — or a styleId for FREE_SERVICE, stored in freeServiceStyleId
+  freeServiceStyleId String?
+  oneTime       Boolean      @default(false)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+
+  redemptions   Redemption[]
+}
+
+enum TriggerType {
+  VISIT_COUNT
+  POINTS_THRESHOLD
+}
+
+enum RewardType {
+  PERCENT_OFF
+  FLAT_DISCOUNT
+  FREE_SERVICE
+}
+
+model Redemption {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  rewardRuleId String
+  rewardRule   RewardRule @relation(fields: [rewardRuleId], references: [id])
+  redeemedAt   DateTime   @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Email verification (consumer, merchant, admin)
+// ---------------------------------------------------------------------------
+
+model EmailVerification {
+  id          String       @id @default(cuid())
+  accountId   String       // userId, merchantId, or adminId
+  accountType AccountType
+  email       String
+  token       String       @unique // random, single-use, hashed at rest
+  expiresAt   DateTime     // typically now + 24h
+  verifiedAt  DateTime?
+  createdAt   DateTime     @default(now())
+}
+
+enum AccountType {
+  CONSUMER
+  MERCHANT
+  ADMIN
+}

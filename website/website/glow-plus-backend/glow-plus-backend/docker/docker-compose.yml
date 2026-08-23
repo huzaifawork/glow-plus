@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: glowplus
+      POSTGRES_PASSWORD: glowplus
+      POSTGRES_DB: glowplus
+    ports:
+      - "5433:5432"
+    volumes:
+      - glowplus_pg_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      DATABASE_URL: "postgresql://glowplus:glowplus@postgres:5432/glowplus?schema=public"
+    ports:
+      - "4000:4000"
+
+volumes:
+  glowplus_pg_data:

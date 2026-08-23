@@ -1,0 +1,1932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Glow+</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --white:#ffffff;
+    --black:#000000;
+    --ink:#1d1d1f;
+    --ink-soft:#86868b;
+    --ink-faint:#d2d2d7;
+    --surface:#f5f5f7;
+    --surface-2:#fbfbfd;
+    --accent:#0071e3;
+    --accent-hover:#0077ed;
+    --rose:#e0116f;
+    --gold:#a9813f;
+    --sage:#0d8a5f;
+    --line:rgba(0,0,0,0.08);
+    --radius:20px;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--white);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;font-size:17px;line-height:1.47059;letter-spacing:-0.022em;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  /* ---------- shell ---------- */
+  .promo-bar{
+    background:var(--ink);color:var(--white);text-align:center;
+    font-size:12.5px;font-weight:600;padding:9px 16px;letter-spacing:0.01em;
+  }
+  .promo-bar b{color:#7fd4ff;}
+  .topbar{
+    position:sticky;top:0;z-index:40;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;height:52px;background:rgba(255,255,255,0.8);backdrop-filter:saturate(180%) blur(20px);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{font-weight:700;font-size:19px;letter-spacing:-0.01em;display:flex;align-items:center;gap:1px;}
+  .brand .plus{color:var(--accent);}
+  .topnav{display:flex;align-items:center;gap:2px;}
+  .navbtn{padding:9px 16px;border-radius:980px;border:1px solid transparent;background:transparent;font-weight:500;font-size:12.5px;color:var(--ink);}
+  .navbtn:hover{color:var(--ink-soft);}
+  .navbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:8px 16px;}
+  .navbtn.primary:hover{background:var(--accent-hover);}
+  .navbtn.ghost{border-color:var(--ink-faint);}
+
+  main{max-width:1180px;margin:0 auto;padding:0 22px;}
+  .full{max-width:none;padding:0;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---------- hero (Apple-style: giant centered type) ---------- */
+  .hero{padding:88px 22px 56px;text-align:center;max-width:900px;margin:0 auto;}
+  .eyebrow{font-size:19px;font-weight:600;color:var(--accent);margin-bottom:6px;}
+  h1.headline{font-weight:700;font-size:clamp(40px,6.4vw,80px);line-height:1.05;letter-spacing:-0.015em;margin:0 0 10px;color:var(--ink);}
+  h1.headline em{font-style:normal;background:linear-gradient(90deg,var(--rose),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:21px;line-height:1.38;color:var(--ink-soft);max-width:640px;margin:0 auto 30px;font-weight:400;}
+  .cta-row{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center;}
+  .btn{padding:12.5px 22px;border-radius:980px;font-weight:500;font-size:17px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-hover);}
+  .btn-outline{background:transparent;color:var(--accent);padding:12.5px 4px;}
+  .btn-outline:hover{text-decoration:underline;}
+  .btn-outline::after{content:"›";margin-left:2px;}
+
+  /* hero visual: the punch card, scaled up, framed like a product shot */
+  .hero-visual{max-width:640px;margin:56px auto 0;}
+  .hero-card{
+    background:var(--surface);border-radius:32px;padding:48px;
+    position:relative;overflow:hidden;text-align:left;
+  }
+  .card-label{font-size:12.5px;font-weight:600;letter-spacing:0.03em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;}
+  .card-style-name{font-size:32px;font-weight:700;margin:0 0 26px;letter-spacing:-0.01em;}
+  .punch{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .dot{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--ink-faint);background:var(--white);transition:background .5s ease, border-color .5s ease, transform .35s ease;}
+  .dot.filled{background:var(--accent);border-color:var(--accent);transform:scale(1.05);}
+  .dot.small{width:16px;height:16px;border-width:2px;}
+  .punch-note{font-size:16px;color:var(--ink-soft);}
+  .punch-note b{color:var(--ink);font-weight:600;}
+  .hero-stats{display:flex;gap:0;margin-top:32px;padding-top:28px;border-top:1px solid var(--line);}
+  .stat{flex:1;}
+  .stat .num{font-size:28px;font-weight:700;letter-spacing:-0.01em;}
+  .stat .lbl{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- category pills ---------- */
+  .categories{display:flex;gap:10px;padding:36px 0 0;flex-wrap:wrap;justify-content:center;}
+  .pill{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:980px;font-weight:500;font-size:13.5px;border:1px solid var(--line);background:var(--surface-2);}
+  .pill .dotsw{width:8px;height:8px;border-radius:50%;}
+  .pill.hair .dotsw{background:var(--rose);}
+  .pill.nail .dotsw{background:var(--gold);}
+  .pill.spa .dotsw{background:var(--sage);}
+
+  /* ---------- full-bleed alternating sections ---------- */
+  section.block{padding:100px 22px;border-top:1px solid var(--line);}
+  section.block.dark{background:var(--ink);color:var(--white);border-top:none;}
+  section.block.dark .ink-soft-on-dark{color:#a1a1a6;}
+  section.block.surface{background:var(--surface);border-top:none;}
+  .block-inner{max-width:1180px;margin:0 auto;}
+  .block-head{text-align:center;max-width:680px;margin:0 auto 54px;}
+  h2.block-title{font-size:clamp(32px,4.4vw,52px);font-weight:700;margin:0 0 14px;letter-spacing:-0.015em;line-height:1.07;}
+  .block-desc{color:var(--ink-soft);font-size:19px;line-height:1.42;}
+  .block.dark .block-desc{color:#a1a1a6;}
+
+  /* how it works — Apple-style numbered stack */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:var(--radius);overflow:hidden;}
+  .step{background:var(--white);padding:44px 34px;}
+  .step .idx{font-size:15px;font-weight:600;color:var(--accent);margin-bottom:18px;}
+  .step h3{font-size:24px;margin:0 0 10px;font-weight:700;letter-spacing:-0.01em;}
+  .step p{margin:0;color:var(--ink-soft);font-size:15.5px;line-height:1.5;}
+
+  /* find a salon */
+  .salon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:var(--line);border-radius:var(--radius);overflow:hidden;}
+  .salon-card{background:var(--white);padding:26px;transition:background .2s ease;}
+  .salon-card:hover{background:var(--surface-2);}
+  .salon-card h4{font-size:19px;margin:0 0 8px;font-weight:700;letter-spacing:-0.01em;}
+  .salon-card .meta{font-size:13px;color:var(--ink-soft);}
+  .empty{padding:44px;text-align:center;border:1.5px dashed var(--ink-faint);border-radius:var(--radius);color:var(--ink-soft);background:var(--surface-2);}
+  .empty b{color:var(--ink);}
+
+  /* pricing */
+  .pricing-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:820px;margin:0 auto;}
+  .price-card{background:var(--white);border:1px solid var(--line);border-radius:24px;padding:36px;text-align:left;position:relative;color:var(--ink);}
+  .price-card.featured{border:2px solid var(--accent);}
+  .price-badge{position:absolute;top:-13px;right:28px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:980px;letter-spacing:0.02em;}
+  .price-card h3{font-size:15px;font-weight:600;color:var(--ink-soft);margin:0 0 14px;text-transform:uppercase;letter-spacing:0.03em;}
+  .price-amt{font-size:44px;font-weight:700;letter-spacing:-0.02em;margin-bottom:2px;}
+  .price-amt span{font-size:17px;font-weight:500;color:var(--ink-soft);}
+  .price-note{font-size:13.5px;color:var(--ink-soft);margin-bottom:22px;}
+  .price-feat{list-style:none;padding:0;margin:0 0 26px;font-size:14.5px;color:var(--ink);}
+  .price-feat li{padding:8px 0;border-top:1px solid var(--line);display:flex;gap:8px;}
+  .price-feat li:first-child{border-top:none;}
+  .price-feat li::before{content:"✓";color:var(--accent);font-weight:700;}
+  .founding-banner{
+    max-width:820px;margin:0 auto 28px;background:linear-gradient(90deg,#0071e3,#e0116f);
+    border-radius:18px;padding:18px 26px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  }
+  .founding-banner .ftitle{font-weight:700;font-size:16px;}
+  .founding-banner .fsub{font-size:13px;opacity:0.9;}
+
+  /* CTA split */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1180px;margin:0 auto;}
+  .split-card{border-radius:24px;padding:44px;position:relative;overflow:hidden;background:var(--surface);}
+  .split-card h3{font-size:28px;margin:0 0 10px;font-weight:700;letter-spacing:-0.01em;}
+  .split-card p{color:var(--ink-soft);font-size:15.5px;line-height:1.5;margin:0 0 22px;max-width:36ch;}
+
+  footer{padding:32px 22px 56px;color:var(--ink-soft);font-size:12.5px;display:flex;justify-content:space-between;border-top:1px solid var(--line);max-width:1180px;margin:0 auto;flex-wrap:wrap;gap:10px;}
+
+  /* ---------- auth views ---------- */
+  .auth-shell{max-width:420px;margin:80px auto;background:var(--white);border:1px solid var(--line);border-radius:24px;padding:40px;}
+  .auth-shell h2{font-size:28px;margin:0 0 8px;font-weight:700;letter-spacing:-0.01em;}
+  .auth-shell .sub{font-size:15px;margin-bottom:26px;max-width:none;text-align:left;}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin:16px 0 6px;}
+  input[type=text], input[type=tel], input[type=number], select, textarea{
+    width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--ink-faint);font-family:var(--font);font-size:15px;background:var(--surface-2);color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{border-color:var(--accent);outline:none;}
+  .auth-submit{width:100%;margin-top:24px;justify-content:center;}
+  .switch-role{margin-top:18px;text-align:center;font-size:13.5px;color:var(--ink-soft);}
+  .switch-role a{color:var(--accent);font-weight:600;}
+  .quickpick{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .quickpick button{padding:7px 14px;border-radius:980px;border:1px solid var(--line);background:var(--surface-2);font-size:12.5px;font-weight:500;}
+  .quickpick button:hover{background:var(--ink-faint);}
+
+  /* ---------- consumer dashboard ---------- */
+  .dash-header{display:flex;justify-content:space-between;align-items:center;padding:30px 0 10px;flex-wrap:wrap;gap:14px;}
+  .id-card{
+    background:linear-gradient(135deg,#000 0%, #2c2c2e 100%);color:#fff;
+    border-radius:24px;padding:28px 30px;display:flex;justify-content:space-between;align-items:center;
+    margin:18px 0 40px;
+  }
+  .id-left{display:flex;align-items:center;gap:16px;}
+  .avatar{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;}
+  .id-name{font-size:19px;font-weight:700;}
+  .id-phone{font-size:12.5px;opacity:0.6;}
+  .id-right{text-align:right;}
+  .id-right .num{font-size:26px;font-weight:700;}
+  .id-right .lbl{font-size:11px;opacity:0.65;letter-spacing:0.04em;text-transform:uppercase;}
+
+  .merchant-card{background:var(--white);border:1px solid var(--line);border-radius:20px;padding:26px;margin-bottom:16px;}
+  .merchant-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .merchant-card-head h3{font-size:20px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .merchant-points{font-size:13px;color:var(--accent);font-weight:700;}
+  .reward-row{padding:14px 0;border-top:1px solid var(--line);}
+  .reward-row:first-child{border-top:none;}
+  .reward-row .rname{font-weight:700;font-size:14.5px;margin-bottom:8px;}
+  .visit-list{margin-top:10px;font-size:13.5px;}
+  .visit-item{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);color:var(--ink-soft);}
+  .visit-item:first-child{border-top:none;}
+  .visit-item .vstyle{color:var(--ink);font-weight:600;}
+  .visit-item .vpts{color:var(--accent);font-weight:600;}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:980px;text-transform:uppercase;letter-spacing:0.03em;}
+  .tag.HAIR{background:rgba(224,17,111,0.1);color:var(--rose);}
+  .tag.NAIL{background:rgba(169,129,63,0.12);color:var(--gold);}
+  .tag.SPA{background:rgba(13,138,95,0.1);color:var(--sage);}
+
+  /* ---------- business portal ---------- */
+  .portal-head{display:flex;justify-content:space-between;align-items:center;padding:28px 0 6px;flex-wrap:wrap;gap:14px;}
+  .portal-head h2{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .pending-banner{background:#fff8e6;border:1px solid #f0d98c;color:#8a6d00;padding:14px 18px;border-radius:14px;font-size:14px;margin:18px 0;}
+  .portal-tabs{display:flex;gap:6px;margin:20px 0 30px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .ptab{padding:12px 4px;margin-right:22px;font-weight:600;font-size:14px;color:var(--ink-soft);border-bottom:2px solid transparent;background:none;border-radius:0;}
+  .ptab.active{color:var(--ink);border-bottom-color:var(--accent);}
+  .ptab-panel{display:none;}
+  .ptab-panel.active{display:block;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border-radius:16px;overflow:hidden;margin-bottom:34px;}
+  .stat-box{background:var(--white);padding:20px;}
+  .stat-box .num{font-size:24px;font-weight:700;color:var(--accent);}
+  .stat-box .lbl{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+
+  .panel-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;}
+  .panel-form{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;padding:24px;}
+  .panel-form h4{font-size:18px;margin:0 0 4px;font-weight:700;}
+  .panel-form .hint{font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  .list-card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:14px;}
+  .list-card .lc-name{font-weight:700;font-size:14.5px;}
+  .list-card .lc-meta{font-size:12.5px;color:var(--ink-soft);}
+  .toggle{padding:7px 13px;border-radius:980px;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);}
+  .toggle.active{background:rgba(13,138,95,0.1);color:var(--sage);border-color:transparent;}
+  .toggle.inactive{background:rgba(224,17,111,0.08);color:var(--rose);border-color:transparent;}
+
+  table.ledger{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.ledger th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.ledger td{padding:10px 10px;border-bottom:1px solid var(--line);}
+  table.ledger td.pts{color:var(--accent);font-weight:700;}
+
+  .toast{
+    position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--ink);color:var(--white);padding:15px 24px;border-radius:14px;font-size:14.5px;font-weight:500;
+    z-index:90;transition:opacity .35s ease, transform .35s ease;pointer-events:none;max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:860px){
+    .split{grid-template-columns:1fr;}
+    .steps{grid-template-columns:1fr;}
+    .panel-grid{grid-template-columns:1fr;}
+    .stat-row{grid-template-columns:repeat(2,1fr);}
+    .pricing-grid{grid-template-columns:1fr;}
+    .topbar{padding:0 14px;}
+    main{padding:0 16px;}
+    section.block{padding:64px 16px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="promo-bar" data-i18n="promo_bar">🎉 <b>First 50 salons &amp; spas</b> get a Founding Member badge — plus every new salon gets their first month free.</div>
+<div class="topbar">
+  <a href="#" class="brand" onclick="goHome();return false;">Glow<span class="plus">+</span></a>
+  <div class="topnav">
+    <select id="langSwitcher" class="navbtn ghost" style="padding:8px 10px;" onchange="setLanguage(this.value)"></select>
+    <button class="navbtn ghost" onclick="goHome()" data-i18n="nav_home">Home</button>
+    <button class="navbtn" id="navConsumer" onclick="enterConsumerFlow()" data-i18n="nav_rewards">My rewards</button>
+    <button class="navbtn ghost" id="navAdmin" onclick="enterAdmin()" data-i18n="nav_admin">Admin</button>
+    <button class="navbtn primary" id="navBusiness" onclick="enterBusinessFlow()" data-i18n="nav_business">For salons</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- ================= MARKETING VIEW ================= -->
+  <section class="view active" id="view-marketing">
+
+    <div class="hero">
+      <div class="eyebrow" data-i18n="hero_eyebrow">Loyalty, digitized.</div>
+      <h1 class="headline" data-i18n="hero_headline">Every visit gets you<br><em>closer</em> to something.</h1>
+      <p class="sub" data-i18n="hero_sub">Glow+ turns your favorite hair, nail, and spa visits into a real punch card — digitized. No spreadsheets, no stamps to lose. Just progress, visit by visit.</p>
+      <div class="cta-row">
+        <button class="btn btn-primary" onclick="enterConsumerFlow()" data-i18n="hero_cta_consumer">Start earning rewards</button>
+        <button class="btn btn-outline" onclick="enterBusinessFlow()" data-i18n="hero_cta_business">I run a salon</button>
+      </div>
+
+      <div class="hero-visual">
+        <div class="hero-card">
+          <div class="card-label" data-i18n="hero_card_label">Progress at Bloom Hair Studio</div>
+          <div class="card-style-name">Silk Press</div>
+          <div class="punch" id="heroPunch"></div>
+          <div class="punch-note" data-i18n="hero_card_note"><b>1 more visit</b> unlocks 20% off your next style.</div>
+          <div class="hero-stats">
+            <div class="stat"><div class="num">340</div><div class="lbl" data-i18n="hero_stat_points">Total points</div></div>
+            <div class="stat"><div class="num">3/6</div><div class="lbl" data-i18n="hero_stat_manicures">Gel manicures</div></div>
+            <div class="stat"><div class="num">7</div><div class="lbl" data-i18n="hero_stat_salons">Salons visited</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="categories">
+        <div class="pill hair"><span class="dotsw"></span><span data-i18n="cat_hair">Hair</span></div>
+        <div class="pill nail"><span class="dotsw"></span><span data-i18n="cat_nail">Nails</span></div>
+        <div class="pill spa"><span class="dotsw"></span><span data-i18n="cat_spa">Spa</span></div>
+      </div>
+    </div>
+
+    <section class="block">
+      <div class="block-inner">
+        <div class="block-head">
+          <h2 class="block-title" data-i18n="how_title">How it works</h2>
+          <div class="block-desc" data-i18n="how_desc">The same psychology as a punch card on your fridge — just one that never gets lost, and updates itself.</div>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <div class="idx" data-i18n="how_step1_idx">01 — Visit</div>
+            <h3 data-i18n="how_step1_title">Visit</h3>
+            <p data-i18n="how_step1_body">Get the style, service, or treatment you always get — at any salon on Glow+. Each one builds its own menu, so what you see is exactly what they offer.</p>
+          </div>
+          <div class="step">
+            <div class="idx" data-i18n="how_step2_idx">02 — Earn</div>
+            <h3 data-i18n="how_step2_title">Earn</h3>
+            <p data-i18n="how_step2_body">Your stylist logs the visit and your points land instantly. Every style is worth a set number of points, no receipt-scanning required.</p>
+          </div>
+          <div class="step">
+            <div class="idx" data-i18n="how_step3_idx">03 — Redeem</div>
+            <h3 data-i18n="how_step3_title">Redeem</h3>
+            <p data-i18n="how_step3_body">Watch your punch card fill in real time. When you hit the salon's threshold, your discount or free service unlocks automatically.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block surface">
+      <div class="block-inner">
+        <div class="block-head">
+          <h2 class="block-title" data-i18n="find_title">Find a salon</h2>
+          <div class="block-desc" data-i18n="find_desc">Every business on Glow+ builds and prices its own rewards — here's who's currently live.</div>
+        </div>
+        <div class="salon-grid" id="salonGrid"></div>
+      </div>
+    </section>
+
+    <section class="block dark" id="pricingSection">
+      <div class="block-inner">
+        <div class="block-head">
+          <h2 class="block-title" data-i18n="pricing_title">Simple pricing for salons</h2>
+          <div class="block-desc ink-soft-on-dark" data-i18n="pricing_desc">One flat rate. No per-transaction fees, no per-seat pricing.</div>
+        </div>
+
+        <div class="founding-banner">
+          <div>
+            <div class="ftitle" data-i18n="founding_title">Founding 50</div>
+            <div class="fsub" data-i18n="founding_sub">Every new salon gets their first month free. The first 50 to sign up also get a permanent "Founding Member" badge.</div>
+          </div>
+          <div class="fsub" id="foundingSpotsLeft" data-i18n="founding_checking">Checking spots left…</div>
+        </div>
+
+        <div class="pricing-grid">
+          <div class="price-card">
+            <h3 data-i18n="price_monthly_label">Monthly</h3>
+            <div class="price-amt">$49.99<span data-i18n="price_per_mo">/mo</span></div>
+            <div class="price-note" data-i18n="price_monthly_note">Billed monthly, cancel any time</div>
+            <ul class="price-feat">
+              <li data-i18n="price_feat_styles">Unlimited styles &amp; reward rules</li>
+              <li data-i18n="price_feat_visits">Unlimited visits &amp; clients</li>
+              <li data-i18n="price_feat_trial">7-day free trial</li>
+            </ul>
+            <button class="btn btn-primary auth-submit" onclick="enterBusinessFlow()" data-i18n="price_cta">Start free trial</button>
+          </div>
+          <div class="price-card featured">
+            <div class="price-badge" data-i18n="price_save_badge">SAVE 20%</div>
+            <h3 data-i18n="price_annual_label">Annual</h3>
+            <div class="price-amt">$479.99<span data-i18n="price_per_yr">/yr</span></div>
+            <div class="price-note" data-i18n="price_annual_note">~$40/mo, billed once a year</div>
+            <ul class="price-feat">
+              <li data-i18n="price_feat_everything">Everything in Monthly</li>
+              <li data-i18n="price_feat_free_months">2+ months free vs. paying monthly</li>
+              <li data-i18n="price_feat_trial">7-day free trial</li>
+            </ul>
+            <button class="btn btn-primary auth-submit" onclick="enterBusinessFlow()" data-i18n="price_cta">Start free trial</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-inner">
+        <div class="split">
+          <div class="split-card">
+            <h3 data-i18n="split_consumer_title">For salon-goers</h3>
+            <p data-i18n="split_consumer_body">Track every visit across every salon you love, in one place. No app-per-business, no forgotten cards.</p>
+            <button class="btn btn-outline" onclick="enterConsumerFlow()" data-i18n="split_consumer_cta">Create your account</button>
+          </div>
+          <div class="split-card">
+            <h3 data-i18n="split_owner_title">For salon owners</h3>
+            <p data-i18n="split_owner_body">Build your own style menu, set your own reward rules, and log visits in seconds. $49.99/mo or $479.99/yr.</p>
+            <button class="btn btn-outline" onclick="enterBusinessFlow()" data-i18n="split_owner_cta">Set up your salon</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div data-i18n="footer_copy">&copy; Glow+ — a loyalty platform for hair, nail, and spa businesses.</div>
+      <div data-i18n="footer_note">Working prototype · data is shared &amp; persisted live for everyone previewing this page</div>
+    </footer>
+  </section>
+
+  <!-- ================= CONSUMER AUTH ================= -->
+  <section class="view" id="view-consumer-auth">
+    <div class="auth-shell">
+      <h2 data-i18n="consumer_auth_title">Track your rewards</h2>
+      <div class="sub" data-i18n="consumer_auth_sub">Enter your phone number to pull up your points, or start a new card.</div>
+      <form id="consumerForm" onsubmit="return submitConsumerAuth(event)">
+        <label for="cName" data-i18n="label_your_name">Your name</label>
+        <input type="text" id="cName" placeholder="Joseph Ilunga" required />
+        <label for="cPhone" data-i18n="label_phone">Phone number</label>
+        <input type="tel" id="cPhone" placeholder="431 338 3939" required />
+        <button class="btn btn-primary auth-submit" type="submit" data-i18n="consumer_auth_submit">View my rewards</button>
+      </form>
+      <div id="consumerQuickWrap" style="display:none;">
+        <div class="switch-role" style="margin-top:22px;" data-i18n="quickpick_existing_card">Or pick an existing card:</div>
+        <div class="quickpick" id="consumerQuick"></div>
+      </div>
+      <div class="switch-role" data-i18n="consumer_auth_switch">Run a salon instead? <a href="#" onclick="enterBusinessFlow();return false;" data-i18n-inline="business_login_link">Go to business login</a></div>
+    </div>
+  </section>
+
+  <!-- ================= CONSUMER DASHBOARD ================= -->
+  <section class="view" id="view-consumer-dashboard">
+    <div class="dash-header">
+      <h2 class="block-title" style="margin:0;" data-i18n="dash_title">Your rewards</h2>
+      <button class="navbtn ghost" onclick="logoutConsumer()" data-i18n="switch_account">Switch account</button>
+    </div>
+    <div class="id-card">
+      <div class="id-left">
+        <div class="avatar" id="dashAvatar">JI</div>
+        <div>
+          <div class="id-name" id="dashName">&nbsp;</div>
+          <div class="id-phone" id="dashPhone">&nbsp;</div>
+        </div>
+      </div>
+      <div class="id-right">
+        <div class="num" id="dashTotalPoints">0</div>
+        <div class="lbl" data-i18n="hero_stat_points">Total points</div>
+      </div>
+    </div>
+    <div id="dashMerchants"></div>
+  </section>
+
+  <!-- ================= BUSINESS AUTH ================= -->
+  <section class="view" id="view-business-auth">
+    <div class="auth-shell">
+      <h2 data-i18n="business_auth_title">Salon portal</h2>
+      <div class="sub" data-i18n="business_auth_sub">Enter your salon name to open your dashboard, or set up a new one.</div>
+      <form id="businessForm" onsubmit="return submitBusinessAuth(event)">
+        <label for="bName" data-i18n="label_business_name">Salon / business name</label>
+        <input type="text" id="bName" placeholder="Bloom Hair Studio" required />
+        <button class="btn btn-primary auth-submit" type="submit" data-i18n="business_auth_submit">Enter portal</button>
+      </form>
+      <div id="businessQuickWrap" style="display:none;">
+        <div class="switch-role" style="margin-top:22px;" data-i18n="quickpick_existing_salon">Or pick an existing salon:</div>
+        <div class="quickpick" id="businessQuick"></div>
+      </div>
+      <div class="switch-role" data-i18n="business_auth_switch">Here to earn rewards? <a href="#" onclick="enterConsumerFlow();return false;">Go to customer login</a></div>
+    </div>
+  </section>
+
+  <!-- ================= BUSINESS PORTAL ================= -->
+  <section class="view" id="view-business-portal">
+    <div class="portal-head">
+      <h2 id="portalBizName">&nbsp;</h2>
+      <button class="navbtn ghost" onclick="logoutBusiness()" data-i18n="switch_salon">Switch salon</button>
+    </div>
+
+
+    <div class="stat-row" id="portalStats"></div>
+
+    <div class="portal-tabs">
+      <button class="ptab active" data-tab="logvisit" onclick="switchPTab('logvisit')" data-i18n="tab_logvisit">Log a visit</button>
+      <button class="ptab" data-tab="styles" onclick="switchPTab('styles')" data-i18n="tab_styles">Styles</button>
+      <button class="ptab" data-tab="rules" onclick="switchPTab('rules')" data-i18n="tab_rules">Reward rules</button>
+      <button class="ptab" data-tab="ledger" onclick="switchPTab('ledger')" data-i18n="tab_ledger">Visit ledger</button>
+    </div>
+
+    <!-- LOG VISIT -->
+    <div class="ptab-panel active" id="ptab-logvisit">
+      <div class="panel-grid">
+        <div class="panel-form">
+          <h4 data-i18n="logvisit_title">Log a visit</h4>
+          <div class="hint" data-i18n="logvisit_hint">Awards points instantly and checks for unlocked rewards.</div>
+          <form id="visitForm" onsubmit="return submitVisit(event)">
+            <label for="vPhone" data-i18n="label_client_phone">Client phone</label>
+            <input type="tel" id="vPhone" placeholder="431 338 3939" required />
+            <label for="vName" data-i18n="label_client_name">Client name</label>
+            <input type="text" id="vName" placeholder="New client? Enter their name" data-i18n-placeholder="ph_new_client_name" required />
+            <label for="vStyle" data-i18n="label_style_service">Style / service</label>
+            <select id="vStyle" required></select>
+            <button class="btn btn-primary auth-submit" type="submit" data-i18n="logvisit_submit">Log visit &amp; award points</button>
+          </form>
+        </div>
+        <div>
+          <div class="hint" style="margin-bottom:10px;" data-i18n="logvisit_add_style_first">Add a style first if this list is empty &mdash; head to the Styles tab.</div>
+          <div id="recentVisitsPreview"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STYLES -->
+    <div class="ptab-panel" id="ptab-styles">
+      <div class="panel-grid">
+        <div class="panel-form">
+          <h4 data-i18n="styles_form_title">Add a style</h4>
+          <div class="hint" data-i18n="styles_form_hint">Your own menu &mdash; no global catalog.</div>
+          <form id="styleForm" onsubmit="return submitStyle(event)">
+            <label for="sName" data-i18n="label_style_name">Style name</label>
+            <input type="text" id="sName" placeholder="Balayage" required />
+            <div class="row2">
+              <div>
+                <label for="sType" data-i18n="label_type">Type</label>
+                <select id="sType">
+                  <option value="HAIR" data-i18n="cat_hair">Hair</option>
+                  <option value="NAIL" data-i18n="cat_nail_opt">Nail</option>
+                  <option value="SPA" data-i18n="cat_spa">Spa</option>
+                </select>
+              </div>
+              <div>
+                <label for="sPoints" data-i18n="label_points_per_visit">Points / visit</label>
+                <input type="number" id="sPoints" min="1" value="40" required />
+              </div>
+            </div>
+            <button class="btn btn-primary auth-submit" type="submit" data-i18n="styles_submit">Add style</button>
+          </form>
+        </div>
+        <div id="stylesList"></div>
+      </div>
+    </div>
+
+    <!-- RULES -->
+    <div class="ptab-panel" id="ptab-rules">
+      <div class="panel-grid">
+        <div class="panel-form">
+          <h4 data-i18n="rules_form_title">Add a reward rule</h4>
+          <div class="hint" data-i18n="rules_form_hint">You decide the trigger and the reward — any percentage, dollar amount, or free service. Repeats every time the threshold is hit again.</div>
+          <form id="ruleForm" onsubmit="return submitRule(event)">
+            <label for="rName" data-i18n="label_rule_name">Rule name</label>
+            <input type="text" id="rName" placeholder="Loyal Client Discount" required />
+            <div class="row2">
+              <div>
+                <label for="rTrigger" data-i18n="label_trigger">Trigger</label>
+                <select id="rTrigger">
+                  <option value="VISIT_COUNT" data-i18n="opt_every_n_visits">Every N visits</option>
+                  <option value="POINTS_THRESHOLD" data-i18n="opt_every_n_points">Every N points</option>
+                </select>
+              </div>
+              <div>
+                <label for="rValue">N</label>
+                <input type="number" id="rValue" min="1" value="5" required />
+              </div>
+            </div>
+            <label for="rScope" data-i18n="label_applies_to">Applies to</label>
+            <select id="rScope">
+              <option value="" data-i18n="opt_any_style">Any style</option>
+              <option value="HAIR" data-i18n="opt_hair_only">Hair only</option>
+              <option value="NAIL" data-i18n="opt_nail_only">Nail only</option>
+              <option value="SPA" data-i18n="opt_spa_only">Spa only</option>
+            </select>
+            <div class="row2">
+              <div>
+                <label for="rRewardType" data-i18n="label_reward">Reward</label>
+                <select id="rRewardType">
+                  <option value="PERCENT_OFF" data-i18n="opt_percent_off">% off</option>
+                  <option value="FLAT_DISCOUNT" data-i18n="opt_flat_off">$ off</option>
+                  <option value="FREE_SERVICE" data-i18n="opt_free_service">Free service</option>
+                </select>
+              </div>
+              <div>
+                <label for="rRewardValue" data-i18n="label_value">Value</label>
+                <input type="text" id="rRewardValue" placeholder="20" required />
+              </div>
+            </div>
+            <button class="btn btn-primary auth-submit" type="submit" data-i18n="rules_submit">Add rule</button>
+          </form>
+        </div>
+        <div id="rulesList"></div>
+      </div>
+    </div>
+
+    <!-- LEDGER -->
+    <div class="ptab-panel" id="ptab-ledger">
+      <table class="ledger">
+        <thead><tr><th data-i18n="th_date">Date</th><th data-i18n="th_client">Client</th><th data-i18n="th_style">Style</th><th data-i18n="th_points">Points</th></tr></thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+      <div id="ledgerEmpty" class="empty" style="display:none;margin-top:16px;" data-i18n="ledger_empty">No visits logged yet.</div>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN ================= -->
+  <section class="view" id="view-admin">
+    <div class="portal-head">
+      <h2 data-i18n="admin_title">Platform admin</h2>
+    </div>
+    <div class="stat-row" id="adminStats"></div>
+
+    <div class="block-head" style="text-align:left;margin-bottom:16px;">
+      <h2 class="block-title" style="font-size:22px;" data-i18n="admin_pending_title">Pending approval</h2>
+    </div>
+    <div id="adminPending"></div>
+
+
+    <div class="block-head" style="text-align:left;margin:36px 0 16px;">
+      <h2 class="block-title" style="font-size:22px;" data-i18n="admin_all_title">All salons</h2>
+    </div>
+    <div id="adminAll"></div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   I18N — lightweight translation layer
+   ============================================================ */
+const LANG_NAMES = {en:'English',es:'Español',fr:'Français',de:'Deutsch',pt:'Português',zh:'中文',ja:'日本語',ar:'العربية'};
+let currentLang = 'en';
+
+const I18N = {
+en: {
+  promo_bar: '🎉 <b>First 50 salons &amp; spas</b> get a Founding Member badge — plus every new salon gets their first month free.',
+  nav_home:'Home', nav_rewards:'My rewards', nav_admin:'Admin', nav_business:'For salons',
+  hero_eyebrow:'Loyalty, digitized.',
+  hero_headline:'Every visit gets you<br><em>closer</em> to something.',
+  hero_sub:'Glow+ turns your favorite hair, nail, and spa visits into a real punch card — digitized. No spreadsheets, no stamps to lose. Just progress, visit by visit.',
+  hero_cta_consumer:'Start earning rewards', hero_cta_business:'I run a salon',
+  hero_card_label:'Progress at Bloom Hair Studio',
+  hero_card_note:'<b>1 more visit</b> unlocks 20% off your next style.',
+  hero_stat_points:'Total points', hero_stat_manicures:'Gel manicures', hero_stat_salons:'Salons visited',
+  cat_hair:'Hair', cat_nail:'Nails', cat_nail_opt:'Nail', cat_spa:'Spa',
+  how_title:'How it works',
+  how_desc:'The same psychology as a punch card on your fridge — just one that never gets lost, and updates itself.',
+  how_step1_idx:'01 — Visit', how_step1_title:'Visit',
+  how_step1_body:'Get the style, service, or treatment you always get — at any salon on Glow+. Each one builds its own menu, so what you see is exactly what they offer.',
+  how_step2_idx:'02 — Earn', how_step2_title:'Earn',
+  how_step2_body:'Your stylist logs the visit and your points land instantly. Every style is worth a set number of points, no receipt-scanning required.',
+  how_step3_idx:'03 — Redeem', how_step3_title:'Redeem',
+  how_step3_body:'Watch your punch card fill in real time. When you hit the salon\u2019s threshold, your discount or free service unlocks automatically.',
+  find_title:'Find a salon',
+  find_desc:'Every business on Glow+ builds and prices its own rewards — here\u2019s who\u2019s currently live.',
+  pricing_title:'Simple pricing for salons',
+  pricing_desc:'One flat rate. No per-transaction fees, no per-seat pricing.',
+  founding_title:'Founding 50',
+  founding_sub:'Every new salon gets their first month free. The first 50 to sign up also get a permanent "Founding Member" badge.',
+  founding_checking:'Checking spots left…',
+  founding_spots_left_suffix:'of {cap} founding badges left',
+  founding_spots_claimed:'All founding badges claimed',
+  price_monthly_label:'Monthly', price_monthly_note:'Billed monthly, cancel any time', price_per_mo:'/mo', price_per_yr:'/yr',
+  price_feat_styles:'Unlimited styles & reward rules', price_feat_visits:'Unlimited visits & clients', price_feat_trial:'7-day free trial',
+  price_cta:'Start free trial',
+  price_save_badge:'SAVE 20%', price_annual_label:'Annual', price_annual_note:'~$40/mo, billed once a year',
+  price_feat_everything:'Everything in Monthly', price_feat_free_months:'2+ months free vs. paying monthly',
+  split_consumer_title:'For salon-goers',
+  split_consumer_body:'Track every visit across every salon you love, in one place. No app-per-business, no forgotten cards.',
+  split_consumer_cta:'Create your account',
+  split_owner_title:'For salon owners',
+  split_owner_body:'Build your own style menu, set your own reward rules, and log visits in seconds. $49.99/mo or $479.99/yr.',
+  split_owner_cta:'Set up your salon',
+  footer_copy:'© Glow+ — a loyalty platform for hair, nail, and spa businesses.',
+  footer_note:'Working prototype · data is shared & persisted live for everyone previewing this page',
+  consumer_auth_title:'Track your rewards',
+  consumer_auth_sub:'Enter your phone number to pull up your points, or start a new card.',
+  label_your_name:'Your name', label_phone:'Phone number', consumer_auth_submit:'View my rewards',
+  quickpick_existing_card:'Or pick an existing card:',
+  consumer_auth_switch:'Run a salon instead? ', business_login_link:'Go to business login',
+  dash_title:'Your rewards', switch_account:'Switch account',
+  business_auth_title:'Salon portal',
+  business_auth_sub:'Enter your salon name to open your dashboard, or set up a new one.',
+  label_business_name:'Salon / business name', business_auth_submit:'Enter portal',
+  quickpick_existing_salon:'Or pick an existing salon:',
+  business_auth_switch:'Here to earn rewards? Go to customer login',
+  switch_salon:'Switch salon',
+  tab_logvisit:'Log a visit', tab_styles:'Styles', tab_rules:'Reward rules', tab_ledger:'Visit ledger',
+  logvisit_title:'Log a visit', logvisit_hint:'Awards points instantly and checks for unlocked rewards.',
+  label_client_phone:'Client phone', label_client_name:'Client name', label_style_service:'Style / service',
+  logvisit_submit:'Log visit & award points',
+  logvisit_add_style_first:'Add a style first if this list is empty — head to the Styles tab.',
+  styles_form_title:'Add a style', styles_form_hint:'Your own menu — no global catalog.',
+  label_style_name:'Style name', label_type:'Type', label_points_per_visit:'Points / visit', styles_submit:'Add style',
+  rules_form_title:'Add a reward rule',
+  rules_form_hint:'You decide the trigger and the reward — any percentage, dollar amount, or free service. Repeats every time the threshold is hit again.',
+  label_rule_name:'Rule name', label_trigger:'Trigger', opt_every_n_visits:'Every N visits', opt_every_n_points:'Every N points',
+  label_applies_to:'Applies to', opt_any_style:'Any style', opt_hair_only:'Hair only', opt_nail_only:'Nail only', opt_spa_only:'Spa only',
+  label_reward:'Reward', opt_percent_off:'% off', opt_flat_off:'$ off', opt_free_service:'Free service',
+  label_value:'Value', rules_submit:'Add rule',
+  th_date:'Date', th_client:'Client', th_style:'Style', th_points:'Points', ledger_empty:'No visits logged yet.',
+  admin_title:'Platform admin', admin_pending_title:'Pending approval', admin_all_title:'All salons',
+  pending_banner_base:'Your salon is pending admin approval. You can still set up styles and reward rules now — you\u2019ll appear in "Find a salon" once approved.',
+  pending_banner_founding:'As a Founding 50 member, your first month is free once approved.',
+  pending_banner_standard:'Your first month is free once approved.',
+  suspended_banner:'Your account is currently suspended. Contact support to reactivate.',
+  toast_founding_welcome:'\uD83C\uDF89 Welcome! You\u2019re one of our founding 50 salons — your first month is free once approved.',
+  toast_standard_welcome:'Welcome! Your first month is free once approved.',
+  toast_approved_prefix:'Approved ', toast_suspended_prefix:'Suspended ',
+  toast_style_added_prefix:'Style added: ', toast_rule_added_prefix:'Reward rule added: ',
+  toast_add_style_first:'Add a style before logging a visit.',
+  toast_visit_logged_prefix:'Visit logged — +', toast_visit_logged_suffix:' pts for ',
+  toast_visit_logged_unlocked_prefix:'Visit logged (+', toast_visit_logged_unlocked_mid:' pts) — \uD83C\uDF89 unlocked: ',
+  ph_new_client_name:'New client? Enter their name',
+  stat_visits_logged:'Visits logged', stat_points_issued:'Points issued', stat_unique_clients:'Unique clients', stat_active_rules:'Active rules',
+  stat_active_salons:'Active salons', stat_suspended:'Suspended', stat_est_mrr:'Est. MRR',
+  badge_founding_50:'Founding 50', meta_applied:'applied', meta_first_month_free:'first month free',
+  btn_approve:'Approve', btn_suspend:'Suspend', btn_reactivate:'Reactivate',
+  admin_nothing_pending:'Nothing pending — all caught up.', admin_no_salons:'No salons yet.',
+  status_active:'active', status_pending:'pending', status_suspended:'suspended',
+  badge_founding_50_member:'Founding 50 member', badge_standard:'Standard',
+  opt_add_style_first:'Add a style first',
+  last_logged:'Last logged',
+},
+es: {
+  promo_bar:'🎉 <b>Los primeros 50 salones y spas</b> reciben una insignia de Miembro Fundador — además, todo salón nuevo obtiene su primer mes gratis.',
+  nav_home:'Inicio', nav_rewards:'Mis recompensas', nav_admin:'Administración', nav_business:'Para salones',
+  hero_eyebrow:'Fidelidad, digitalizada.',
+  hero_headline:'Cada visita te acerca<br><em>más</em> a algo.',
+  hero_sub:'Glow+ convierte tus visitas favoritas de peluquería, uñas y spa en una tarjeta de sellos real — digitalizada. Sin hojas de cálculo, sin sellos que perder. Solo progreso, visita a visita.',
+  hero_cta_consumer:'Empieza a ganar recompensas', hero_cta_business:'Tengo un salón',
+  hero_card_label:'Progreso en Bloom Hair Studio',
+  hero_card_note:'<b>1 visita más</b> desbloquea 20% de descuento en tu próximo estilo.',
+  hero_stat_points:'Puntos totales', hero_stat_manicures:'Manicuras de gel', hero_stat_salons:'Salones visitados',
+  cat_hair:'Cabello', cat_nail:'Uñas', cat_nail_opt:'Uñas', cat_spa:'Spa',
+  how_title:'Cómo funciona',
+  how_desc:'La misma psicología de una tarjeta de sellos en tu refrigerador — solo que esta nunca se pierde y se actualiza sola.',
+  how_step1_idx:'01 — Visita', how_step1_title:'Visita',
+  how_step1_body:'Recibe el estilo, servicio o tratamiento que siempre pides — en cualquier salón de Glow+. Cada uno crea su propio menú, así que lo que ves es exactamente lo que ofrecen.',
+  how_step2_idx:'02 — Gana', how_step2_title:'Gana',
+  how_step2_body:'Tu estilista registra la visita y tus puntos se acreditan al instante. Cada estilo vale una cantidad fija de puntos, sin necesidad de escanear recibos.',
+  how_step3_idx:'03 — Canjea', how_step3_title:'Canjea',
+  how_step3_body:'Observa cómo se llena tu tarjeta de sellos en tiempo real. Al alcanzar el umbral del salón, tu descuento o servicio gratuito se desbloquea automáticamente.',
+  find_title:'Encuentra un salón',
+  find_desc:'Cada negocio en Glow+ crea y define el precio de sus propias recompensas — estos son los que están activos actualmente.',
+  pricing_title:'Precios simples para salones',
+  pricing_desc:'Una tarifa plana. Sin comisiones por transacción, sin cobro por puesto.',
+  founding_title:'Fundadores 50',
+  founding_sub:'Todo salón nuevo recibe su primer mes gratis. Los primeros 50 en registrarse también reciben una insignia permanente de "Miembro Fundador".',
+  founding_checking:'Consultando cupos disponibles…',
+  founding_spots_left_suffix:'de {cap} insignias fundadoras disponibles',
+  founding_spots_claimed:'Todas las insignias fundadoras fueron reclamadas',
+  price_monthly_label:'Mensual', price_monthly_note:'Facturado mensualmente, cancela cuando quieras', price_per_mo:'/mes', price_per_yr:'/año',
+  price_feat_styles:'Estilos y reglas de recompensa ilimitados', price_feat_visits:'Visitas y clientes ilimitados', price_feat_trial:'7 días de prueba gratis',
+  price_cta:'Iniciar prueba gratis',
+  price_save_badge:'AHORRA 20%', price_annual_label:'Anual', price_annual_note:'~$40/mes, facturado una vez al año',
+  price_feat_everything:'Todo lo del plan Mensual', price_feat_free_months:'2+ meses gratis frente al plan mensual',
+  split_consumer_title:'Para clientes de salones',
+  split_consumer_body:'Sigue cada visita en todos los salones que amas, en un solo lugar. Sin una app por negocio, sin tarjetas perdidas.',
+  split_consumer_cta:'Crea tu cuenta',
+  split_owner_title:'Para dueños de salones',
+  split_owner_body:'Crea tu propio menú de estilos, define tus propias reglas de recompensa y registra visitas en segundos. $49.99/mes o $479.99/año.',
+  split_owner_cta:'Configura tu salón',
+  footer_copy:'© Glow+ — una plataforma de fidelidad para negocios de cabello, uñas y spa.',
+  footer_note:'Prototipo funcional · los datos se comparten y se guardan en vivo para todos los que ven esta página',
+  consumer_auth_title:'Sigue tus recompensas',
+  consumer_auth_sub:'Ingresa tu número de teléfono para ver tus puntos, o crea una nueva tarjeta.',
+  label_your_name:'Tu nombre', label_phone:'Número de teléfono', consumer_auth_submit:'Ver mis recompensas',
+  quickpick_existing_card:'O elige una tarjeta existente:',
+  consumer_auth_switch:'¿Tienes un salón? ', business_login_link:'Ir al acceso de negocios',
+  dash_title:'Tus recompensas', switch_account:'Cambiar de cuenta',
+  business_auth_title:'Portal del salón',
+  business_auth_sub:'Ingresa el nombre de tu salón para abrir tu panel, o crea uno nuevo.',
+  label_business_name:'Nombre del salón / negocio', business_auth_submit:'Entrar al portal',
+  quickpick_existing_salon:'O elige un salón existente:',
+  business_auth_switch:'¿Vienes a ganar recompensas? Ir al acceso de clientes',
+  switch_salon:'Cambiar de salón',
+  tab_logvisit:'Registrar visita', tab_styles:'Estilos', tab_rules:'Reglas de recompensa', tab_ledger:'Historial de visitas',
+  logvisit_title:'Registrar una visita', logvisit_hint:'Otorga puntos al instante y revisa si se desbloquean recompensas.',
+  label_client_phone:'Teléfono del cliente', label_client_name:'Nombre del cliente', label_style_service:'Estilo / servicio',
+  logvisit_submit:'Registrar visita y otorgar puntos',
+  logvisit_add_style_first:'Agrega un estilo primero si esta lista está vacía — ve a la pestaña Estilos.',
+  styles_form_title:'Agregar un estilo', styles_form_hint:'Tu propio menú — sin catálogo global.',
+  label_style_name:'Nombre del estilo', label_type:'Tipo', label_points_per_visit:'Puntos / visita', styles_submit:'Agregar estilo',
+  rules_form_title:'Agregar una regla de recompensa',
+  rules_form_hint:'Tú decides el disparador y la recompensa — cualquier porcentaje, monto o servicio gratuito. Se repite cada vez que se alcanza el umbral.',
+  label_rule_name:'Nombre de la regla', label_trigger:'Disparador', opt_every_n_visits:'Cada N visitas', opt_every_n_points:'Cada N puntos',
+  label_applies_to:'Aplica a', opt_any_style:'Cualquier estilo', opt_hair_only:'Solo cabello', opt_nail_only:'Solo uñas', opt_spa_only:'Solo spa',
+  label_reward:'Recompensa', opt_percent_off:'% de descuento', opt_flat_off:'$ de descuento', opt_free_service:'Servicio gratuito',
+  label_value:'Valor', rules_submit:'Agregar regla',
+  th_date:'Fecha', th_client:'Cliente', th_style:'Estilo', th_points:'Puntos', ledger_empty:'Aún no hay visitas registradas.',
+  admin_title:'Administración de la plataforma', admin_pending_title:'Pendientes de aprobación', admin_all_title:'Todos los salones',
+  pending_banner_base:'Tu salón está pendiente de aprobación. Aún puedes configurar estilos y reglas de recompensa — aparecerás en "Encontrar un salón" una vez aprobado.',
+  pending_banner_founding:'Como miembro Fundador 50, tu primer mes es gratis una vez aprobado.',
+  pending_banner_standard:'Tu primer mes es gratis una vez aprobado.',
+  suspended_banner:'Tu cuenta está actualmente suspendida. Contacta a soporte para reactivarla.',
+  toast_founding_welcome:'\uD83C\uDF89 ¡Bienvenido! Eres uno de nuestros 50 salones fundadores — tu primer mes es gratis una vez aprobado.',
+  toast_standard_welcome:'¡Bienvenido! Tu primer mes es gratis una vez aprobado.',
+  toast_approved_prefix:'Aprobado: ', toast_suspended_prefix:'Suspendido: ',
+  toast_style_added_prefix:'Estilo agregado: ', toast_rule_added_prefix:'Regla de recompensa agregada: ',
+  toast_add_style_first:'Agrega un estilo antes de registrar una visita.',
+  toast_visit_logged_prefix:'Visita registrada — +', toast_visit_logged_suffix:' pts para ',
+  toast_visit_logged_unlocked_prefix:'Visita registrada (+', toast_visit_logged_unlocked_mid:' pts) — \uD83C\uDF89 desbloqueado: ',
+  ph_new_client_name:'¿Cliente nuevo? Escribe su nombre',
+  stat_visits_logged:'Visitas registradas', stat_points_issued:'Puntos otorgados', stat_unique_clients:'Clientes únicos', stat_active_rules:'Reglas activas',
+  stat_active_salons:'Salones activos', stat_suspended:'Suspendidos', stat_est_mrr:'IMR estimado',
+  badge_founding_50:'Fundadores 50', meta_applied:'solicitó el', meta_first_month_free:'primer mes gratis',
+  btn_approve:'Aprobar', btn_suspend:'Suspender', btn_reactivate:'Reactivar',
+  admin_nothing_pending:'Nada pendiente — todo al día.', admin_no_salons:'Aún no hay salones.',
+  status_active:'activo', status_pending:'pendiente', status_suspended:'suspendido',
+  badge_founding_50_member:'Miembro Fundador 50', badge_standard:'Estándar',
+  opt_add_style_first:'Agrega un estilo primero',
+  last_logged:'Última registrada',
+},
+fr: {
+  promo_bar:'🎉 <b>Les 50 premiers salons et spas</b> reçoivent un badge Membre Fondateur — et chaque nouveau salon obtient son premier mois gratuit.',
+  nav_home:'Accueil', nav_rewards:'Mes récompenses', nav_admin:'Administration', nav_business:'Pour les salons',
+  hero_eyebrow:'La fidélité, numérisée.',
+  hero_headline:'Chaque visite vous<br>rapproche <em>un peu plus</em>.',
+  hero_sub:'Glow+ transforme vos visites préférées en coiffure, ongles et spa en une véritable carte de fidélité — numérisée. Plus de tableurs, plus de cartes perdues. Juste votre progression, visite après visite.',
+  hero_cta_consumer:'Commencer à gagner', hero_cta_business:'Je gère un salon',
+  hero_card_label:'Progression chez Bloom Hair Studio',
+  hero_card_note:'<b>1 visite de plus</b> débloque 20% de réduction sur votre prochaine prestation.',
+  hero_stat_points:'Points totaux', hero_stat_manicures:'Manucures gel', hero_stat_salons:'Salons visités',
+  cat_hair:'Coiffure', cat_nail:'Ongles', cat_nail_opt:'Ongles', cat_spa:'Spa',
+  how_title:'Comment ça marche',
+  how_desc:'La même psychologie qu\u2019une carte de fidélité sur votre frigo — sauf qu\u2019elle ne se perd jamais et se met à jour toute seule.',
+  how_step1_idx:'01 — Visite', how_step1_title:'Visite',
+  how_step1_body:'Profitez de la prestation que vous prenez toujours — dans n\u2019importe quel salon Glow+. Chacun crée son propre menu, donc ce que vous voyez est exactement ce qu\u2019il propose.',
+  how_step2_idx:'02 — Gagnez', how_step2_title:'Gagnez',
+  how_step2_body:'Votre coiffeur enregistre la visite et vos points arrivent instantanément. Chaque prestation vaut un nombre de points fixe, sans scan de reçu.',
+  how_step3_idx:'03 — Échangez', how_step3_title:'Échangez',
+  how_step3_body:'Regardez votre carte se remplir en temps réel. Une fois le seuil du salon atteint, votre réduction ou prestation gratuite se débloque automatiquement.',
+  find_title:'Trouver un salon',
+  find_desc:'Chaque entreprise sur Glow+ crée et tarife ses propres récompenses — voici celles qui sont actives en ce moment.',
+  pricing_title:'Des tarifs simples pour les salons',
+  pricing_desc:'Un tarif unique. Aucune commission par transaction, aucun coût par poste.',
+  founding_title:'Les 50 Fondateurs',
+  founding_sub:'Chaque nouveau salon obtient son premier mois gratuit. Les 50 premiers inscrits reçoivent aussi un badge permanent "Membre Fondateur".',
+  founding_checking:'Vérification des places restantes…',
+  founding_spots_left_suffix:'badges fondateurs restants sur {cap}',
+  founding_spots_claimed:'Tous les badges fondateurs ont été attribués',
+  price_monthly_label:'Mensuel', price_monthly_note:'Facturé mensuellement, annulable à tout moment', price_per_mo:'/mois', price_per_yr:'/an',
+  price_feat_styles:'Prestations et règles de récompense illimitées', price_feat_visits:'Visites et clients illimités', price_feat_trial:'Essai gratuit de 7 jours',
+  price_cta:'Démarrer l\u2019essai gratuit',
+  price_save_badge:'ÉCONOMISEZ 20%', price_annual_label:'Annuel', price_annual_note:'~40$/mois, facturé une fois par an',
+  price_feat_everything:'Tout ce qui est inclus dans le forfait Mensuel', price_feat_free_months:'2+ mois gratuits par rapport au mensuel',
+  split_consumer_title:'Pour les client(e)s',
+  split_consumer_body:'Suivez chaque visite dans tous vos salons préférés, au même endroit. Pas d\u2019appli par commerce, pas de carte oubliée.',
+  split_consumer_cta:'Créer votre compte',
+  split_owner_title:'Pour les propriétaires de salons',
+  split_owner_body:'Créez votre propre menu, définissez vos propres règles de récompense et enregistrez les visites en quelques secondes. 49,99$/mois ou 479,99$/an.',
+  split_owner_cta:'Configurer votre salon',
+  footer_copy:'© Glow+ — une plateforme de fidélité pour les salons de coiffure, d\u2019ongles et de spa.',
+  footer_note:'Prototype fonctionnel · les données sont partagées et enregistrées en direct pour tous ceux qui consultent cette page',
+  consumer_auth_title:'Suivez vos récompenses',
+  consumer_auth_sub:'Entrez votre numéro de téléphone pour retrouver vos points, ou créez une nouvelle carte.',
+  label_your_name:'Votre nom', label_phone:'Numéro de téléphone', consumer_auth_submit:'Voir mes récompenses',
+  quickpick_existing_card:'Ou choisissez une carte existante :',
+  consumer_auth_switch:'Vous gérez un salon ? ', business_login_link:'Accéder à l\u2019espace professionnel',
+  dash_title:'Vos récompenses', switch_account:'Changer de compte',
+  business_auth_title:'Portail du salon',
+  business_auth_sub:'Entrez le nom de votre salon pour ouvrir votre tableau de bord, ou créez-en un nouveau.',
+  label_business_name:'Nom du salon / de l\u2019entreprise', business_auth_submit:'Accéder au portail',
+  quickpick_existing_salon:'Ou choisissez un salon existant :',
+  business_auth_switch:'Vous venez gagner des récompenses ? Accéder à l\u2019espace client',
+  switch_salon:'Changer de salon',
+  tab_logvisit:'Enregistrer une visite', tab_styles:'Prestations', tab_rules:'Règles de récompense', tab_ledger:'Historique des visites',
+  logvisit_title:'Enregistrer une visite', logvisit_hint:'Attribue les points instantanément et vérifie les récompenses débloquées.',
+  label_client_phone:'Téléphone du client', label_client_name:'Nom du client', label_style_service:'Prestation / service',
+  logvisit_submit:'Enregistrer et attribuer les points',
+  logvisit_add_style_first:'Ajoutez d\u2019abord une prestation si cette liste est vide — allez dans l\u2019onglet Prestations.',
+  styles_form_title:'Ajouter une prestation', styles_form_hint:'Votre propre menu — aucun catalogue global.',
+  label_style_name:'Nom de la prestation', label_type:'Type', label_points_per_visit:'Points / visite', styles_submit:'Ajouter la prestation',
+  rules_form_title:'Ajouter une règle de récompense',
+  rules_form_hint:'Vous décidez du déclencheur et de la récompense — n\u2019importe quel pourcentage, montant ou service gratuit. Se répète à chaque seuil atteint.',
+  label_rule_name:'Nom de la règle', label_trigger:'Déclencheur', opt_every_n_visits:'Toutes les N visites', opt_every_n_points:'Tous les N points',
+  label_applies_to:'S\u2019applique à', opt_any_style:'Toute prestation', opt_hair_only:'Coiffure uniquement', opt_nail_only:'Ongles uniquement', opt_spa_only:'Spa uniquement',
+  label_reward:'Récompense', opt_percent_off:'% de réduction', opt_flat_off:'$ de réduction', opt_free_service:'Service gratuit',
+  label_value:'Valeur', rules_submit:'Ajouter la règle',
+  th_date:'Date', th_client:'Client', th_style:'Prestation', th_points:'Points', ledger_empty:'Aucune visite enregistrée pour l\u2019instant.',
+  admin_title:'Administration de la plateforme', admin_pending_title:'En attente d\u2019approbation', admin_all_title:'Tous les salons',
+  pending_banner_base:'Votre salon est en attente d\u2019approbation. Vous pouvez déjà configurer vos prestations et règles de récompense — vous apparaîtrez dans "Trouver un salon" une fois approuvé.',
+  pending_banner_founding:'En tant que membre des 50 Fondateurs, votre premier mois est gratuit une fois approuvé.',
+  pending_banner_standard:'Votre premier mois est gratuit une fois approuvé.',
+  suspended_banner:'Votre compte est actuellement suspendu. Contactez le support pour le réactiver.',
+  toast_founding_welcome:'\uD83C\uDF89 Bienvenue ! Vous faites partie de nos 50 salons fondateurs — votre premier mois est gratuit une fois approuvé.',
+  toast_standard_welcome:'Bienvenue ! Votre premier mois est gratuit une fois approuvé.',
+  toast_approved_prefix:'Approuvé : ', toast_suspended_prefix:'Suspendu : ',
+  toast_style_added_prefix:'Prestation ajoutée : ', toast_rule_added_prefix:'Règle de récompense ajoutée : ',
+  toast_add_style_first:'Ajoutez une prestation avant d\u2019enregistrer une visite.',
+  toast_visit_logged_prefix:'Visite enregistrée — +', toast_visit_logged_suffix:' pts pour ',
+  toast_visit_logged_unlocked_prefix:'Visite enregistrée (+', toast_visit_logged_unlocked_mid:' pts) — \uD83C\uDF89 débloqué : ',
+  ph_new_client_name:'Nouveau client ? Entrez son nom',
+  stat_visits_logged:'Visites enregistrées', stat_points_issued:'Points attribués', stat_unique_clients:'Clients uniques', stat_active_rules:'Règles actives',
+  stat_active_salons:'Salons actifs', stat_suspended:'Suspendus', stat_est_mrr:'MRR estimé',
+  badge_founding_50:'Fondateurs 50', meta_applied:'inscrit le', meta_first_month_free:'premier mois gratuit',
+  btn_approve:'Approuver', btn_suspend:'Suspendre', btn_reactivate:'Réactiver',
+  admin_nothing_pending:'Rien en attente — tout est à jour.', admin_no_salons:'Aucun salon pour l\u2019instant.',
+  status_active:'actif', status_pending:'en attente', status_suspended:'suspendu',
+  badge_founding_50_member:'Membre des 50 Fondateurs', badge_standard:'Standard',
+  opt_add_style_first:'Ajoutez d\u2019abord une prestation',
+  last_logged:'Dernière enregistrée',
+},
+de: {
+  promo_bar:'🎉 <b>Die ersten 50 Salons &amp; Spas</b> erhalten ein Gründungsmitglied-Abzeichen — und jeder neue Salon bekommt den ersten Monat gratis.',
+  nav_home:'Start', nav_rewards:'Meine Prämien', nav_admin:'Verwaltung', nav_business:'Für Salons',
+  hero_eyebrow:'Treue, digitalisiert.',
+  hero_headline:'Jeder Besuch bringt dich<br><em>näher</em> an etwas heran.',
+  hero_sub:'Glow+ verwandelt deine liebsten Friseur-, Nagel- und Spa-Besuche in eine echte Stempelkarte — digitalisiert. Keine Tabellen, keine verlorenen Stempel. Nur Fortschritt, Besuch für Besuch.',
+  hero_cta_consumer:'Prämien sammeln', hero_cta_business:'Ich betreibe einen Salon',
+  hero_card_label:'Fortschritt bei Bloom Hair Studio',
+  hero_card_note:'<b>Noch 1 Besuch</b> schaltet 20% Rabatt auf deinen nächsten Termin frei.',
+  hero_stat_points:'Punkte gesamt', hero_stat_manicures:'Gel-Maniküren', hero_stat_salons:'Besuchte Salons',
+  cat_hair:'Haare', cat_nail:'Nägel', cat_nail_opt:'Nägel', cat_spa:'Spa',
+  how_title:'So funktioniert\u2019s',
+  how_desc:'Dieselbe Psychologie wie eine Stempelkarte am Kühlschrank — nur geht diese nie verloren und aktualisiert sich von selbst.',
+  how_step1_idx:'01 — Besuchen', how_step1_title:'Besuchen',
+  how_step1_body:'Erhalte die Behandlung, die du immer buchst — in jedem Salon auf Glow+. Jeder Salon erstellt sein eigenes Angebot, du siehst also genau das, was angeboten wird.',
+  how_step2_idx:'02 — Punkten', how_step2_title:'Punkten',
+  how_step2_body:'Dein Stylist erfasst den Besuch, und deine Punkte werden sofort gutgeschrieben. Jede Behandlung ist eine feste Punktzahl wert, kein Bon-Scan nötig.',
+  how_step3_idx:'03 — Einlösen', how_step3_title:'Einlösen',
+  how_step3_body:'Sieh zu, wie sich deine Stempelkarte in Echtzeit füllt. Sobald der Schwellenwert erreicht ist, wird dein Rabatt oder Gratis-Service automatisch freigeschaltet.',
+  find_title:'Salon finden',
+  find_desc:'Jedes Unternehmen auf Glow+ gestaltet und bepreist seine eigenen Prämien — hier sind die aktuell aktiven.',
+  pricing_title:'Einfache Preise für Salons',
+  pricing_desc:'Ein Pauschalpreis. Keine Transaktionsgebühren, keine Kosten pro Arbeitsplatz.',
+  founding_title:'Die Gründer-50',
+  founding_sub:'Jeder neue Salon erhält den ersten Monat gratis. Die ersten 50 Anmeldungen erhalten zusätzlich ein dauerhaftes "Gründungsmitglied"-Abzeichen.',
+  founding_checking:'Verfügbare Plätze werden geprüft…',
+  founding_spots_left_suffix:'von {cap} Gründungs-Abzeichen übrig',
+  founding_spots_claimed:'Alle Gründungs-Abzeichen sind vergeben',
+  price_monthly_label:'Monatlich', price_monthly_note:'Monatlich abgerechnet, jederzeit kündbar', price_per_mo:'/Monat', price_per_yr:'/Jahr',
+  price_feat_styles:'Unbegrenzte Behandlungen & Prämienregeln', price_feat_visits:'Unbegrenzte Besuche & Kunden', price_feat_trial:'7 Tage kostenlos testen',
+  price_cta:'Kostenlos testen',
+  price_save_badge:'20% SPAREN', price_annual_label:'Jährlich', price_annual_note:'~40$/Monat, einmal jährlich abgerechnet',
+  price_feat_everything:'Alles aus dem Monatsplan', price_feat_free_months:'2+ Monate gratis gegenüber monatlicher Zahlung',
+  split_consumer_title:'Für Salon-Kunden',
+  split_consumer_body:'Verfolge jeden Besuch bei allen deinen Lieblingssalons an einem Ort. Keine App pro Unternehmen, keine verlorenen Karten.',
+  split_consumer_cta:'Konto erstellen',
+  split_owner_title:'Für Salonbesitzer',
+  split_owner_body:'Erstelle dein eigenes Leistungsangebot, lege eigene Prämienregeln fest und erfasse Besuche in Sekunden. 49,99 $/Monat oder 479,99 $/Jahr.',
+  split_owner_cta:'Salon einrichten',
+  footer_copy:'© Glow+ — eine Treueplattform für Friseur-, Nagel- und Spa-Betriebe.',
+  footer_note:'Funktionierender Prototyp · Daten werden live geteilt & gespeichert für alle, die diese Seite ansehen',
+  consumer_auth_title:'Deine Prämien verfolgen',
+  consumer_auth_sub:'Gib deine Telefonnummer ein, um deine Punkte abzurufen, oder erstelle eine neue Karte.',
+  label_your_name:'Dein Name', label_phone:'Telefonnummer', consumer_auth_submit:'Meine Prämien ansehen',
+  quickpick_existing_card:'Oder wähle eine vorhandene Karte:',
+  consumer_auth_switch:'Betreibst du stattdessen einen Salon? ', business_login_link:'Zum Unternehmens-Login',
+  dash_title:'Deine Prämien', switch_account:'Konto wechseln',
+  business_auth_title:'Salon-Portal',
+  business_auth_sub:'Gib den Namen deines Salons ein, um dein Dashboard zu öffnen, oder erstelle ein neues.',
+  label_business_name:'Salon-/Firmenname', business_auth_submit:'Portal öffnen',
+  quickpick_existing_salon:'Oder wähle einen vorhandenen Salon:',
+  business_auth_switch:'Möchtest du Prämien sammeln? Zum Kunden-Login',
+  switch_salon:'Salon wechseln',
+  tab_logvisit:'Besuch erfassen', tab_styles:'Behandlungen', tab_rules:'Prämienregeln', tab_ledger:'Besuchsverlauf',
+  logvisit_title:'Besuch erfassen', logvisit_hint:'Vergibt sofort Punkte und prüft auf freigeschaltete Prämien.',
+  label_client_phone:'Telefon des Kunden', label_client_name:'Name des Kunden', label_style_service:'Behandlung / Service',
+  logvisit_submit:'Besuch erfassen & Punkte vergeben',
+  logvisit_add_style_first:'Füge zuerst eine Behandlung hinzu, wenn diese Liste leer ist — im Tab Behandlungen.',
+  styles_form_title:'Behandlung hinzufügen', styles_form_hint:'Dein eigenes Angebot — kein globaler Katalog.',
+  label_style_name:'Behandlungsname', label_type:'Typ', label_points_per_visit:'Punkte / Besuch', styles_submit:'Behandlung hinzufügen',
+  rules_form_title:'Prämienregel hinzufügen',
+  rules_form_hint:'Du entscheidest über Auslöser und Prämie — beliebiger Prozentsatz, Betrag oder Gratis-Service. Wiederholt sich bei jedem erreichten Schwellenwert.',
+  label_rule_name:'Regelname', label_trigger:'Auslöser', opt_every_n_visits:'Alle N Besuche', opt_every_n_points:'Alle N Punkte',
+  label_applies_to:'Gilt für', opt_any_style:'Jede Behandlung', opt_hair_only:'Nur Haare', opt_nail_only:'Nur Nägel', opt_spa_only:'Nur Spa',
+  label_reward:'Prämie', opt_percent_off:'% Rabatt', opt_flat_off:'$ Rabatt', opt_free_service:'Gratis-Service',
+  label_value:'Wert', rules_submit:'Regel hinzufügen',
+  th_date:'Datum', th_client:'Kunde', th_style:'Behandlung', th_points:'Punkte', ledger_empty:'Noch keine Besuche erfasst.',
+  admin_title:'Plattform-Verwaltung', admin_pending_title:'Ausstehende Genehmigung', admin_all_title:'Alle Salons',
+  pending_banner_base:'Dein Salon wartet auf die Genehmigung durch die Verwaltung. Du kannst jetzt schon Behandlungen und Prämienregeln einrichten — nach der Genehmigung erscheinst du unter "Salon finden".',
+  pending_banner_founding:'Als Mitglied der Gründer-50 ist dein erster Monat nach der Genehmigung kostenlos.',
+  pending_banner_standard:'Dein erster Monat ist nach der Genehmigung kostenlos.',
+  suspended_banner:'Dein Konto ist derzeit gesperrt. Kontaktiere den Support zur Reaktivierung.',
+  toast_founding_welcome:'\uD83C\uDF89 Willkommen! Du bist einer unserer 50 Gründungssalons — dein erster Monat ist nach der Genehmigung kostenlos.',
+  toast_standard_welcome:'Willkommen! Dein erster Monat ist nach der Genehmigung kostenlos.',
+  toast_approved_prefix:'Genehmigt: ', toast_suspended_prefix:'Gesperrt: ',
+  toast_style_added_prefix:'Behandlung hinzugefügt: ', toast_rule_added_prefix:'Prämienregel hinzugefügt: ',
+  toast_add_style_first:'Füge eine Behandlung hinzu, bevor du einen Besuch erfasst.',
+  toast_visit_logged_prefix:'Besuch erfasst — +', toast_visit_logged_suffix:' Punkte für ',
+  toast_visit_logged_unlocked_prefix:'Besuch erfasst (+', toast_visit_logged_unlocked_mid:' Punkte) — \uD83C\uDF89 freigeschaltet: ',
+  ph_new_client_name:'Neuer Kunde? Namen eingeben',
+  stat_visits_logged:'Erfasste Besuche', stat_points_issued:'Vergebene Punkte', stat_unique_clients:'Einzelne Kunden', stat_active_rules:'Aktive Regeln',
+  stat_active_salons:'Aktive Salons', stat_suspended:'Gesperrt', stat_est_mrr:'Gesch. MRR',
+  badge_founding_50:'Gründer-50', meta_applied:'beantragt am', meta_first_month_free:'erster Monat gratis',
+  btn_approve:'Genehmigen', btn_suspend:'Sperren', btn_reactivate:'Reaktivieren',
+  admin_nothing_pending:'Nichts ausstehend — alles erledigt.', admin_no_salons:'Noch keine Salons.',
+  status_active:'aktiv', status_pending:'ausstehend', status_suspended:'gesperrt',
+  badge_founding_50_member:'Gründer-50-Mitglied', badge_standard:'Standard',
+  opt_add_style_first:'Füge zuerst eine Behandlung hinzu',
+  last_logged:'Zuletzt erfasst',
+},
+pt: {
+  promo_bar:'🎉 <b>Os primeiros 50 salões e spas</b> ganham um selo de Membro Fundador — além disso, todo novo salão recebe o primeiro mês grátis.',
+  nav_home:'Início', nav_rewards:'Minhas recompensas', nav_admin:'Administração', nav_business:'Para salões',
+  hero_eyebrow:'Fidelidade, digitalizada.',
+  hero_headline:'Cada visita te deixa<br><em>mais perto</em> de algo.',
+  hero_sub:'O Glow+ transforma suas visitas favoritas de cabelo, unhas e spa em um cartão fidelidade real — digitalizado. Sem planilhas, sem carimbos perdidos. Apenas progresso, visita a visita.',
+  hero_cta_consumer:'Comece a ganhar recompensas', hero_cta_business:'Tenho um salão',
+  hero_card_label:'Progresso no Bloom Hair Studio',
+  hero_card_note:'<b>Mais 1 visita</b> desbloqueia 20% de desconto no próximo atendimento.',
+  hero_stat_points:'Pontos totais', hero_stat_manicures:'Manicures em gel', hero_stat_salons:'Salões visitados',
+  cat_hair:'Cabelo', cat_nail:'Unhas', cat_nail_opt:'Unhas', cat_spa:'Spa',
+  how_title:'Como funciona',
+  how_desc:'A mesma psicologia de um cartão fidelidade na geladeira — só que este nunca se perde e se atualiza sozinho.',
+  how_step1_idx:'01 — Visite', how_step1_title:'Visite',
+  how_step1_body:'Receba o atendimento que você sempre faz — em qualquer salão do Glow+. Cada um cria seu próprio menu, então o que você vê é exatamente o que oferecem.',
+  how_step2_idx:'02 — Ganhe', how_step2_title:'Ganhe',
+  how_step2_body:'Seu profissional registra a visita e seus pontos entram na hora. Cada atendimento vale uma quantidade fixa de pontos, sem escanear recibos.',
+  how_step3_idx:'03 — Resgate', how_step3_title:'Resgate',
+  how_step3_body:'Veja seu cartão se preencher em tempo real. Ao atingir o limite do salão, seu desconto ou serviço gratuito é desbloqueado automaticamente.',
+  find_title:'Encontrar um salão',
+  find_desc:'Cada negócio no Glow+ cria e define o preço das suas próprias recompensas — estes são os que estão ativos agora.',
+  pricing_title:'Preços simples para salões',
+  pricing_desc:'Uma taxa fixa. Sem taxas por transação, sem cobrança por posto.',
+  founding_title:'Fundadores 50',
+  founding_sub:'Todo novo salão recebe o primeiro mês grátis. Os primeiros 50 cadastrados também recebem um selo permanente de "Membro Fundador".',
+  founding_checking:'Verificando vagas restantes…',
+  founding_spots_left_suffix:'de {cap} selos de fundador restantes',
+  founding_spots_claimed:'Todos os selos de fundador foram reivindicados',
+  price_monthly_label:'Mensal', price_monthly_note:'Cobrado mensalmente, cancele quando quiser', price_per_mo:'/mês', price_per_yr:'/ano',
+  price_feat_styles:'Atendimentos e regras de recompensa ilimitados', price_feat_visits:'Visitas e clientes ilimitados', price_feat_trial:'7 dias de teste grátis',
+  price_cta:'Iniciar teste grátis',
+  price_save_badge:'ECONOMIZE 20%', price_annual_label:'Anual', price_annual_note:'~$40/mês, cobrado uma vez por ano',
+  price_feat_everything:'Tudo do plano Mensal', price_feat_free_months:'2+ meses grátis em comparação ao mensal',
+  split_consumer_title:'Para clientes de salões',
+  split_consumer_body:'Acompanhe cada visita em todos os salões que você ama, em um só lugar. Sem um app por negócio, sem cartões perdidos.',
+  split_consumer_cta:'Crie sua conta',
+  split_owner_title:'Para donos de salões',
+  split_owner_body:'Crie seu próprio menu de atendimentos, defina suas próprias regras de recompensa e registre visitas em segundos. $49,99/mês ou $479,99/ano.',
+  split_owner_cta:'Configure seu salão',
+  footer_copy:'© Glow+ — uma plataforma de fidelidade para negócios de cabelo, unhas e spa.',
+  footer_note:'Protótipo funcional · os dados são compartilhados e salvos ao vivo para todos que visualizam esta página',
+  consumer_auth_title:'Acompanhe suas recompensas',
+  consumer_auth_sub:'Digite seu número de telefone para ver seus pontos, ou crie um novo cartão.',
+  label_your_name:'Seu nome', label_phone:'Número de telefone', consumer_auth_submit:'Ver minhas recompensas',
+  quickpick_existing_card:'Ou escolha um cartão existente:',
+  consumer_auth_switch:'Tem um salão? ', business_login_link:'Ir para o acesso de negócios',
+  dash_title:'Suas recompensas', switch_account:'Trocar de conta',
+  business_auth_title:'Portal do salão',
+  business_auth_sub:'Digite o nome do seu salão para abrir seu painel, ou crie um novo.',
+  label_business_name:'Nome do salão / negócio', business_auth_submit:'Entrar no portal',
+  quickpick_existing_salon:'Ou escolha um salão existente:',
+  business_auth_switch:'Veio ganhar recompensas? Ir para o acesso de clientes',
+  switch_salon:'Trocar de salão',
+  tab_logvisit:'Registrar visita', tab_styles:'Atendimentos', tab_rules:'Regras de recompensa', tab_ledger:'Histórico de visitas',
+  logvisit_title:'Registrar uma visita', logvisit_hint:'Concede pontos instantaneamente e verifica recompensas desbloqueadas.',
+  label_client_phone:'Telefone do cliente', label_client_name:'Nome do cliente', label_style_service:'Atendimento / serviço',
+  logvisit_submit:'Registrar visita e conceder pontos',
+  logvisit_add_style_first:'Adicione um atendimento primeiro se esta lista estiver vazia — vá até a aba Atendimentos.',
+  styles_form_title:'Adicionar um atendimento', styles_form_hint:'Seu próprio menu — sem catálogo global.',
+  label_style_name:'Nome do atendimento', label_type:'Tipo', label_points_per_visit:'Pontos / visita', styles_submit:'Adicionar atendimento',
+  rules_form_title:'Adicionar uma regra de recompensa',
+  rules_form_hint:'Você decide o gatilho e a recompensa — qualquer porcentagem, valor ou serviço gratuito. Repete toda vez que o limite é atingido.',
+  label_rule_name:'Nome da regra', label_trigger:'Gatilho', opt_every_n_visits:'A cada N visitas', opt_every_n_points:'A cada N pontos',
+  label_applies_to:'Aplica-se a', opt_any_style:'Qualquer atendimento', opt_hair_only:'Somente cabelo', opt_nail_only:'Somente unhas', opt_spa_only:'Somente spa',
+  label_reward:'Recompensa', opt_percent_off:'% de desconto', opt_flat_off:'$ de desconto', opt_free_service:'Serviço gratuito',
+  label_value:'Valor', rules_submit:'Adicionar regra',
+  th_date:'Data', th_client:'Cliente', th_style:'Atendimento', th_points:'Pontos', ledger_empty:'Nenhuma visita registrada ainda.',
+  admin_title:'Administração da plataforma', admin_pending_title:'Pendentes de aprovação', admin_all_title:'Todos os salões',
+  pending_banner_base:'Seu salão está pendente de aprovação. Você já pode configurar atendimentos e regras de recompensa — aparecerá em "Encontrar um salão" assim que for aprovado.',
+  pending_banner_founding:'Como membro Fundador 50, seu primeiro mês é grátis assim que aprovado.',
+  pending_banner_standard:'Seu primeiro mês é grátis assim que aprovado.',
+  suspended_banner:'Sua conta está atualmente suspensa. Entre em contato com o suporte para reativar.',
+  toast_founding_welcome:'\uD83C\uDF89 Bem-vindo! Você é um dos nossos 50 salões fundadores — seu primeiro mês é grátis assim que aprovado.',
+  toast_standard_welcome:'Bem-vindo! Seu primeiro mês é grátis assim que aprovado.',
+  toast_approved_prefix:'Aprovado: ', toast_suspended_prefix:'Suspenso: ',
+  toast_style_added_prefix:'Atendimento adicionado: ', toast_rule_added_prefix:'Regra de recompensa adicionada: ',
+  toast_add_style_first:'Adicione um atendimento antes de registrar uma visita.',
+  toast_visit_logged_prefix:'Visita registrada — +', toast_visit_logged_suffix:' pts para ',
+  toast_visit_logged_unlocked_prefix:'Visita registrada (+', toast_visit_logged_unlocked_mid:' pts) — \uD83C\uDF89 desbloqueado: ',
+  ph_new_client_name:'Cliente novo? Digite o nome',
+  stat_visits_logged:'Visitas registradas', stat_points_issued:'Pontos concedidos', stat_unique_clients:'Clientes únicos', stat_active_rules:'Regras ativas',
+  stat_active_salons:'Salões ativos', stat_suspended:'Suspensos', stat_est_mrr:'MRR estimado',
+  badge_founding_50:'Fundadores 50', meta_applied:'solicitado em', meta_first_month_free:'primeiro mês grátis',
+  btn_approve:'Aprovar', btn_suspend:'Suspender', btn_reactivate:'Reativar',
+  admin_nothing_pending:'Nada pendente — tudo em dia.', admin_no_salons:'Ainda não há salões.',
+  status_active:'ativo', status_pending:'pendente', status_suspended:'suspenso',
+  badge_founding_50_member:'Membro Fundador 50', badge_standard:'Padrão',
+  opt_add_style_first:'Adicione um atendimento primeiro',
+  last_logged:'Última registrada',
+},
+zh: {
+  promo_bar:'🎉 <b>前50家沙龙和水疗中心</b>将获得创始会员徽章——而且每家新沙龙都将获得首月免费。',
+  nav_home:'首页', nav_rewards:'我的奖励', nav_admin:'管理后台', nav_business:'商家入口',
+  hero_eyebrow:'忠诚度，数字化。',
+  hero_headline:'每一次光顾都让你<br><em>更接近</em>心愿。',
+  hero_sub:'Glow+ 将你喜爱的美发、美甲和美容水疗体验变成真正的数字化集章卡。无需表格，不怕盖章丢失，只有清晰的进度，一次光顾接一次。',
+  hero_cta_consumer:'开始赚取奖励', hero_cta_business:'我经营沙龙',
+  hero_card_label:'在 Bloom Hair Studio 的进度',
+  hero_card_note:'<b>再消费1次</b>即可解锁下次造型9折优惠。',
+  hero_stat_points:'总积分', hero_stat_manicures:'凝胶美甲次数', hero_stat_salons:'光顾沙龙数',
+  cat_hair:'美发', cat_nail:'美甲', cat_nail_opt:'美甲', cat_spa:'水疗',
+  how_title:'使用方法',
+  how_desc:'和贴在冰箱上的集章卡一样的心理机制——只不过它永远不会丢失，还会自动更新。',
+  how_step1_idx:'01 — 光顾', how_step1_title:'光顾',
+  how_step1_body:'在 Glow+ 平台上的任意沙龙享受你一直喜欢的造型或服务。每家商户都有自己的服务菜单，所见即所得。',
+  how_step2_idx:'02 — 赚取', how_step2_title:'赚取',
+  how_step2_body:'造型师登记消费后，积分会立即到账。每项服务对应固定积分，无需扫描小票。',
+  how_step3_idx:'03 — 兑换', how_step3_title:'兑换',
+  how_step3_body:'实时查看集章卡的进度。一旦达到沙龙设定的门槛，折扣或免费服务将自动解锁。',
+  find_title:'寻找沙龙',
+  find_desc:'Glow+ 上的每家商户都自行设计并定价自己的奖励——以下是当前已上线的商户。',
+  pricing_title:'沙龙的简单定价',
+  pricing_desc:'统一定价，无交易手续费，无按坐席收费。',
+  founding_title:'创始50家',
+  founding_sub:'每家新沙龙都将获得首月免费。前50家注册的商户还将获得永久的"创始会员"徽章。',
+  founding_checking:'正在查询剩余名额…',
+  founding_spots_left_suffix:'个创始徽章名额剩余（共{cap}个）',
+  founding_spots_claimed:'创始徽章名额已全部领完',
+  price_monthly_label:'月付', price_monthly_note:'按月计费，随时可取消', price_per_mo:'/月', price_per_yr:'/年',
+  price_feat_styles:'无限服务项目与奖励规则', price_feat_visits:'无限消费记录与客户数', price_feat_trial:'7天免费试用',
+  price_cta:'开始免费试用',
+  price_save_badge:'节省20%', price_annual_label:'年付', price_annual_note:'约每月40美元，每年计费一次',
+  price_feat_everything:'包含月付方案的所有内容', price_feat_free_months:'相比月付节省2个月以上',
+  split_consumer_title:'致顾客',
+  split_consumer_body:'在一个地方追踪你喜爱的每家沙龙的每次消费。无需为每家商户单独下载App，也不用担心集章卡丢失。',
+  split_consumer_cta:'创建账户',
+  split_owner_title:'致沙龙经营者',
+  split_owner_body:'创建专属服务菜单，自定义奖励规则，几秒钟即可登记一次消费。每月49.99美元或每年479.99美元。',
+  split_owner_cta:'设置你的沙龙',
+  footer_copy:'© Glow+ — 面向美发、美甲及水疗商户的忠诚度平台。',
+  footer_note:'可运行原型 · 数据为所有查看此页面的用户实时共享与保存',
+  consumer_auth_title:'查看你的奖励',
+  consumer_auth_sub:'输入你的电话号码以查看积分，或创建新的会员卡。',
+  label_your_name:'你的姓名', label_phone:'电话号码', consumer_auth_submit:'查看我的奖励',
+  quickpick_existing_card:'或选择已有的会员卡：',
+  consumer_auth_switch:'你是沙龙经营者？', business_login_link:'前往商家登录',
+  dash_title:'你的奖励', switch_account:'切换账户',
+  business_auth_title:'商家门户',
+  business_auth_sub:'输入你的沙龙名称以打开管理面板，或创建新的商户。',
+  label_business_name:'沙龙/商户名称', business_auth_submit:'进入门户',
+  quickpick_existing_salon:'或选择已有的沙龙：',
+  business_auth_switch:'你是来赚取奖励的顾客？前往顾客登录',
+  switch_salon:'切换沙龙',
+  tab_logvisit:'登记消费', tab_styles:'服务项目', tab_rules:'奖励规则', tab_ledger:'消费记录',
+  logvisit_title:'登记一次消费', logvisit_hint:'立即发放积分，并检查是否解锁奖励。',
+  label_client_phone:'顾客电话', label_client_name:'顾客姓名', label_style_service:'服务项目',
+  logvisit_submit:'登记消费并发放积分',
+  logvisit_add_style_first:'如果此列表为空，请先在"服务项目"标签中添加一项服务。',
+  styles_form_title:'添加服务项目', styles_form_hint:'专属菜单——无统一平台目录。',
+  label_style_name:'服务名称', label_type:'类别', label_points_per_visit:'每次积分', styles_submit:'添加服务',
+  rules_form_title:'添加奖励规则',
+  rules_form_hint:'由你决定触发条件与奖励内容——任意百分比、金额或免费服务，每次达到门槛都会重复触发。',
+  label_rule_name:'规则名称', label_trigger:'触发条件', opt_every_n_visits:'每N次消费', opt_every_n_points:'每N积分',
+  label_applies_to:'适用范围', opt_any_style:'任意服务', opt_hair_only:'仅美发', opt_nail_only:'仅美甲', opt_spa_only:'仅水疗',
+  label_reward:'奖励', opt_percent_off:'百分比折扣', opt_flat_off:'固定金额折扣', opt_free_service:'免费服务',
+  label_value:'数值', rules_submit:'添加规则',
+  th_date:'日期', th_client:'顾客', th_style:'服务', th_points:'积分', ledger_empty:'暂无消费记录。',
+  admin_title:'平台管理', admin_pending_title:'待审核', admin_all_title:'全部沙龙',
+  pending_banner_base:'你的沙龙正在等待管理员审核。你现在仍可设置服务项目与奖励规则——审核通过后将出现在"寻找沙龙"中。',
+  pending_banner_founding:'作为创始50家成员，审核通过后你的首月将免费。',
+  pending_banner_standard:'审核通过后你的首月将免费。',
+  suspended_banner:'你的账户目前已被暂停，请联系支持团队以重新激活。',
+  toast_founding_welcome:'\uD83C\uDF89 欢迎！你是我们创始50家沙龙之一——审核通过后首月免费。',
+  toast_standard_welcome:'欢迎！审核通过后你的首月将免费。',
+  toast_approved_prefix:'已批准：', toast_suspended_prefix:'已暂停：',
+  toast_style_added_prefix:'已添加服务：', toast_rule_added_prefix:'已添加奖励规则：',
+  toast_add_style_first:'请先添加服务项目，再登记消费。',
+  toast_visit_logged_prefix:'消费已登记 — +', toast_visit_logged_suffix:' 积分，顾客：',
+  toast_visit_logged_unlocked_prefix:'消费已登记（+', toast_visit_logged_unlocked_mid:' 积分）— \uD83C\uDF89 已解锁：',
+  ph_new_client_name:'新顾客？请输入姓名',
+  stat_visits_logged:'已登记消费', stat_points_issued:'已发放积分', stat_unique_clients:'独立顾客数', stat_active_rules:'生效规则',
+  stat_active_salons:'活跃沙龙', stat_suspended:'已暂停', stat_est_mrr:'预估月经常性收入',
+  badge_founding_50:'创始50家', meta_applied:'申请于', meta_first_month_free:'首月免费',
+  btn_approve:'批准', btn_suspend:'暂停', btn_reactivate:'重新激活',
+  admin_nothing_pending:'没有待处理事项——一切就绪。', admin_no_salons:'暂无沙龙。',
+  status_active:'活跃', status_pending:'待审核', status_suspended:'已暂停',
+  badge_founding_50_member:'创始50家成员', badge_standard:'标准',
+  opt_add_style_first:'请先添加服务项目',
+  last_logged:'最近登记',
+},
+ja: {
+  promo_bar:'🎉 <b>先着50店舗のサロン&amp;スパ</b>に創業メンバーバッジを進呈——さらに新規登録のサロンは全店、初月無料。',
+  nav_home:'ホーム', nav_rewards:'マイリワード', nav_admin:'管理画面', nav_business:'サロン向け',
+  hero_eyebrow:'ロイヤルティを、デジタルに。',
+  hero_headline:'来店するたびに<br>目標に<em>もっと近づく</em>。',
+  hero_sub:'Glow+は、お気に入りのヘア・ネイル・スパでの来店を本物のスタンプカードにします——デジタルで。表計算も、紛失するスタンプもなし。ただ、来店するたびに進んでいく進捗だけ。',
+  hero_cta_consumer:'リワードを貯め始める', hero_cta_business:'サロンを経営しています',
+  hero_card_label:'Bloom Hair Studioでの進捗',
+  hero_card_note:'<b>あと1回の来店</b>で次回スタイルが20%オフに。',
+  hero_stat_points:'合計ポイント', hero_stat_manicures:'ジェルネイル回数', hero_stat_salons:'来店サロン数',
+  cat_hair:'ヘア', cat_nail:'ネイル', cat_nail_opt:'ネイル', cat_spa:'スパ',
+  how_title:'使い方',
+  how_desc:'冷蔵庫に貼るスタンプカードと同じ仕組み——ただし紛失することはなく、自動で更新されます。',
+  how_step1_idx:'01 — 来店', how_step1_title:'来店',
+  how_step1_body:'Glow+加盟のどのサロンでも、いつものスタイルやサービスを受けられます。各店舗が独自のメニューを作成するので、見たものがそのまま提供内容です。',
+  how_step2_idx:'02 — ポイント獲得', how_step2_title:'獲得',
+  how_step2_body:'スタイリストが来店を記録すると、ポイントが即座に反映されます。各サービスには決まったポイント数があり、レシートのスキャンは不要です。',
+  how_step3_idx:'03 — 交換', how_step3_title:'交換',
+  how_step3_body:'スタンプカードがリアルタイムで埋まっていく様子を確認できます。サロンの設定した基準に達すると、割引や無料サービスが自動的に解放されます。',
+  find_title:'サロンを探す',
+  find_desc:'Glow+の加盟店はそれぞれ独自のリワードを設計・設定しています——現在稼働中の店舗はこちらです。',
+  pricing_title:'サロン向けのシンプルな料金プラン',
+  pricing_desc:'定額料金制。取引手数料も、席数に応じた課金もありません。',
+  founding_title:'創業50店舗',
+  founding_sub:'新規登録のサロンは全店、初月無料。さらに先着50店舗には、永続的な「創業メンバー」バッジを進呈します。',
+  founding_checking:'残り枠を確認中…',
+  founding_spots_left_suffix:'枠が残っています（全{cap}枠中）',
+  founding_spots_claimed:'創業バッジの枠はすべて埋まりました',
+  price_monthly_label:'月払い', price_monthly_note:'毎月請求、いつでも解約可能', price_per_mo:'/月', price_per_yr:'/年',
+  price_feat_styles:'サービス項目・リワードルール無制限', price_feat_visits:'来店記録・顧客数無制限', price_feat_trial:'7日間無料トライアル',
+  price_cta:'無料トライアルを開始',
+  price_save_badge:'20%お得', price_annual_label:'年払い', price_annual_note:'月換算約$40、年1回請求',
+  price_feat_everything:'月払いプランの全機能を含む', price_feat_free_months:'月払いに比べ2か月以上お得',
+  split_consumer_title:'サロンを利用するお客様へ',
+  split_consumer_body:'お気に入りのすべてのサロンでの来店履歴を、ひとつの場所でまとめて管理。店舗ごとのアプリも、カードの紛失もありません。',
+  split_consumer_cta:'アカウントを作成',
+  split_owner_title:'サロンオーナー様へ',
+  split_owner_body:'独自のサービスメニューを作成し、独自のリワードルールを設定して、数秒で来店を記録できます。月額$49.99、または年額$479.99。',
+  split_owner_cta:'サロンを設定する',
+  footer_copy:'© Glow+ — ヘア・ネイル・スパ事業者向けロイヤルティプラットフォーム。',
+  footer_note:'稼働中のプロトタイプ · このページを閲覧するすべての人とリアルタイムでデータを共有・保存しています',
+  consumer_auth_title:'リワードを確認する',
+  consumer_auth_sub:'電話番号を入力してポイントを表示するか、新しいカードを作成してください。',
+  label_your_name:'お名前', label_phone:'電話番号', consumer_auth_submit:'リワードを見る',
+  quickpick_existing_card:'または既存のカードを選択：',
+  consumer_auth_switch:'サロンを経営されていますか？', business_login_link:'サロン向けログインへ',
+  dash_title:'あなたのリワード', switch_account:'アカウントを切り替え',
+  business_auth_title:'サロンポータル',
+  business_auth_sub:'サロン名を入力してダッシュボードを開くか、新しく設定してください。',
+  label_business_name:'サロン名 / 事業者名', business_auth_submit:'ポータルへ入る',
+  quickpick_existing_salon:'または既存のサロンを選択：',
+  business_auth_switch:'リワードを貯めに来られましたか？お客様向けログインへ',
+  switch_salon:'サロンを切り替え',
+  tab_logvisit:'来店を記録', tab_styles:'サービス項目', tab_rules:'リワードルール', tab_ledger:'来店履歴',
+  logvisit_title:'来店を記録する', logvisit_hint:'即座にポイントを付与し、解放されたリワードを確認します。',
+  label_client_phone:'お客様の電話番号', label_client_name:'お客様のお名前', label_style_service:'サービス項目',
+  logvisit_submit:'来店を記録してポイント付与',
+  logvisit_add_style_first:'リストが空の場合は、先に「サービス項目」タブでサービスを追加してください。',
+  styles_form_title:'サービス項目を追加', styles_form_hint:'独自のメニュー——共通カタログはありません。',
+  label_style_name:'サービス名', label_type:'種別', label_points_per_visit:'来店ごとのポイント', styles_submit:'サービスを追加',
+  rules_form_title:'リワードルールを追加',
+  rules_form_hint:'発動条件とリワード内容はご自由に設定いただけます——任意の割引率、金額、または無料サービス。基準に達するたびに繰り返し発動します。',
+  label_rule_name:'ルール名', label_trigger:'発動条件', opt_every_n_visits:'N回来店ごと', opt_every_n_points:'Nポイントごと',
+  label_applies_to:'適用範囲', opt_any_style:'すべてのサービス', opt_hair_only:'ヘアのみ', opt_nail_only:'ネイルのみ', opt_spa_only:'スパのみ',
+  label_reward:'リワード', opt_percent_off:'割引率', opt_flat_off:'割引額', opt_free_service:'無料サービス',
+  label_value:'数値', rules_submit:'ルールを追加',
+  th_date:'日付', th_client:'お客様', th_style:'サービス', th_points:'ポイント', ledger_empty:'まだ来店記録がありません。',
+  admin_title:'プラットフォーム管理', admin_pending_title:'承認待ち', admin_all_title:'全サロン',
+  pending_banner_base:'サロンは現在管理者の承認待ちです。承認前でもサービス項目やリワードルールの設定は可能です——承認後「サロンを探す」に表示されます。',
+  pending_banner_founding:'創業50店舗メンバーとして、承認後の初月は無料です。',
+  pending_banner_standard:'承認後の初月は無料です。',
+  suspended_banner:'このアカウントは現在停止されています。再開についてはサポートまでご連絡ください。',
+  toast_founding_welcome:'\uD83C\uDF89 ようこそ！あなたは創業50店舗の一つです——承認後の初月は無料です。',
+  toast_standard_welcome:'ようこそ！承認後の初月は無料です。',
+  toast_approved_prefix:'承認済み：', toast_suspended_prefix:'停止済み：',
+  toast_style_added_prefix:'サービスを追加しました：', toast_rule_added_prefix:'リワードルールを追加しました：',
+  toast_add_style_first:'来店を記録する前にサービス項目を追加してください。',
+  toast_visit_logged_prefix:'来店を記録しました — +', toast_visit_logged_suffix:' ポイント（',
+  toast_visit_logged_unlocked_prefix:'来店を記録しました（+', toast_visit_logged_unlocked_mid:' ポイント）— \uD83C\uDF89 解放：',
+  ph_new_client_name:'新規のお客様ですか？お名前を入力',
+  stat_visits_logged:'記録済み来店数', stat_points_issued:'付与ポイント', stat_unique_clients:'ユニーク顧客数', stat_active_rules:'有効なルール',
+  stat_active_salons:'稼働中サロン数', stat_suspended:'停止中', stat_est_mrr:'推定MRR',
+  badge_founding_50:'創業50店舗', meta_applied:'申請日', meta_first_month_free:'初月無料',
+  btn_approve:'承認', btn_suspend:'停止', btn_reactivate:'再開',
+  admin_nothing_pending:'保留中の申請はありません——すべて対応済みです。', admin_no_salons:'まだサロンがありません。',
+  status_active:'稼働中', status_pending:'承認待ち', status_suspended:'停止中',
+  badge_founding_50_member:'創業50店舗メンバー', badge_standard:'標準',
+  opt_add_style_first:'先にサービス項目を追加してください',
+  last_logged:'最近の記録',
+},
+ar: {
+  promo_bar:'🎉 <b>أول 50 صالونًا ومركز سبا</b> يحصلون على شارة عضو مؤسس — بالإضافة إلى أن كل صالون جديد يحصل على شهره الأول مجانًا.',
+  nav_home:'الرئيسية', nav_rewards:'مكافآتي', nav_admin:'الإدارة', nav_business:'للصالونات',
+  hero_eyebrow:'الولاء، بشكل رقمي.',
+  hero_headline:'كل زيارة تقربك<br><em>أكثر</em> من شيء ما.',
+  hero_sub:'يحوّل Glow+ زياراتك المفضلة لصالونات الشعر والأظافر والسبا إلى بطاقة ختم حقيقية — رقمية بالكامل. لا جداول بيانات، ولا أختام تُفقد. فقط تقدم مستمر مع كل زيارة.',
+  hero_cta_consumer:'ابدأ بجمع المكافآت', hero_cta_business:'أنا أدير صالونًا',
+  hero_card_label:'التقدم في Bloom Hair Studio',
+  hero_card_note:'<b>زيارة واحدة أخرى</b> تفتح خصم 20% على تصفيفتك القادمة.',
+  hero_stat_points:'إجمالي النقاط', hero_stat_manicures:'عدد جلسات المانيكير', hero_stat_salons:'الصالونات التي زرتها',
+  cat_hair:'الشعر', cat_nail:'الأظافر', cat_nail_opt:'الأظافر', cat_spa:'سبا',
+  how_title:'كيف يعمل',
+  how_desc:'نفس فكرة بطاقة الختم الملصقة على الثلاجة — إلا أن هذه لا تُفقد أبدًا وتُحدَّث تلقائيًا.',
+  how_step1_idx:'01 — زيارة', how_step1_title:'زيارة',
+  how_step1_body:'احصل على التصفيفة أو الخدمة التي تفضلها دائمًا — في أي صالون على Glow+. كل صالون ينشئ قائمته الخاصة، فما تراه هو بالضبط ما يقدمونه.',
+  how_step2_idx:'02 — اكسب', how_step2_title:'اكسب',
+  how_step2_body:'يقوم مصفف الشعر بتسجيل الزيارة وتُضاف نقاطك فورًا. كل خدمة لها عدد نقاط ثابت، دون الحاجة لمسح أي إيصال.',
+  how_step3_idx:'03 — استبدل', how_step3_title:'استبدل',
+  how_step3_body:'شاهد بطاقة الختم الخاصة بك تمتلئ في الوقت الفعلي. عند الوصول إلى الحد الذي يضعه الصالون، يُفتح خصمك أو خدمتك المجانية تلقائيًا.',
+  find_title:'ابحث عن صالون',
+  find_desc:'كل عمل تجاري على Glow+ ينشئ ويسعّر مكافآته الخاصة — إليك من هو نشط حاليًا.',
+  pricing_title:'أسعار بسيطة للصالونات',
+  pricing_desc:'سعر ثابت واحد. بدون رسوم على كل معاملة، وبدون رسوم لكل مقعد.',
+  founding_title:'المؤسسون الخمسون',
+  founding_sub:'كل صالون جديد يحصل على شهره الأول مجانًا. أول 50 صالونًا يسجلون يحصلون أيضًا على شارة دائمة "عضو مؤسس".',
+  founding_checking:'جارٍ التحقق من الأماكن المتبقية…',
+  founding_spots_left_suffix:'من أصل {cap} شارة تأسيسية متبقية',
+  founding_spots_claimed:'تم الحصول على جميع شارات التأسيس',
+  price_monthly_label:'شهري', price_monthly_note:'يُدفع شهريًا، يمكن الإلغاء في أي وقت', price_per_mo:'/شهريًا', price_per_yr:'/سنويًا',
+  price_feat_styles:'تصفيفات وقواعد مكافآت غير محدودة', price_feat_visits:'زيارات وعملاء غير محدودين', price_feat_trial:'تجربة مجانية لمدة 7 أيام',
+  price_cta:'ابدأ التجربة المجانية',
+  price_save_badge:'وفّر 20%', price_annual_label:'سنوي', price_annual_note:'حوالي 40$/شهريًا، يُدفع مرة واحدة سنويًا',
+  price_feat_everything:'كل ما في الخطة الشهرية', price_feat_free_months:'أكثر من شهرين مجانًا مقارنة بالدفع الشهري',
+  split_consumer_title:'لعملاء الصالونات',
+  split_consumer_body:'تابع كل زيارة عبر جميع الصالونات التي تحبها، في مكان واحد. بلا تطبيق منفصل لكل عمل، وبلا بطاقات مفقودة.',
+  split_consumer_cta:'أنشئ حسابك',
+  split_owner_title:'لأصحاب الصالونات',
+  split_owner_body:'أنشئ قائمة تصفيفاتك الخاصة، وحدد قواعد مكافآتك، وسجّل الزيارات في ثوانٍ. 49.99$ شهريًا أو 479.99$ سنويًا.',
+  split_owner_cta:'أعدّ صالونك',
+  footer_copy:'© Glow+ — منصة ولاء لأعمال الشعر والأظافر والسبا.',
+  footer_note:'نموذج أولي فعّال · البيانات مشتركة ومحفوظة مباشرة لكل من يشاهد هذه الصفحة',
+  consumer_auth_title:'تابع مكافآتك',
+  consumer_auth_sub:'أدخل رقم هاتفك لعرض نقاطك، أو ابدأ بطاقة جديدة.',
+  label_your_name:'اسمك', label_phone:'رقم الهاتف', consumer_auth_submit:'عرض مكافآتي',
+  quickpick_existing_card:'أو اختر بطاقة موجودة:',
+  consumer_auth_switch:'هل تدير صالونًا بدلاً من ذلك؟ ', business_login_link:'الانتقال إلى دخول الأعمال',
+  dash_title:'مكافآتك', switch_account:'تبديل الحساب',
+  business_auth_title:'بوابة الصالون',
+  business_auth_sub:'أدخل اسم صالونك لفتح لوحة التحكم الخاصة بك، أو أنشئ واحدة جديدة.',
+  label_business_name:'اسم الصالون / العمل', business_auth_submit:'الدخول إلى البوابة',
+  quickpick_existing_salon:'أو اختر صالونًا موجودًا:',
+  business_auth_switch:'هل أتيت لكسب المكافآت؟ الانتقال إلى دخول العملاء',
+  switch_salon:'تبديل الصالون',
+  tab_logvisit:'تسجيل زيارة', tab_styles:'التصفيفات', tab_rules:'قواعد المكافآت', tab_ledger:'سجل الزيارات',
+  logvisit_title:'تسجيل زيارة', logvisit_hint:'يمنح النقاط فورًا ويتحقق من المكافآت المفتوحة.',
+  label_client_phone:'هاتف العميل', label_client_name:'اسم العميل', label_style_service:'التصفيفة / الخدمة',
+  logvisit_submit:'تسجيل الزيارة ومنح النقاط',
+  logvisit_add_style_first:'أضف تصفيفة أولاً إذا كانت هذه القائمة فارغة — انتقل إلى تبويب التصفيفات.',
+  styles_form_title:'إضافة تصفيفة', styles_form_hint:'قائمتك الخاصة — بلا كتالوج عام.',
+  label_style_name:'اسم التصفيفة', label_type:'النوع', label_points_per_visit:'النقاط / الزيارة', styles_submit:'إضافة تصفيفة',
+  rules_form_title:'إضافة قاعدة مكافأة',
+  rules_form_hint:'أنت من يحدد الشرط والمكافأة — أي نسبة مئوية أو مبلغ أو خدمة مجانية. تتكرر في كل مرة يتم فيها بلوغ الحد.',
+  label_rule_name:'اسم القاعدة', label_trigger:'الشرط', opt_every_n_visits:'كل N من الزيارات', opt_every_n_points:'كل N من النقاط',
+  label_applies_to:'تنطبق على', opt_any_style:'أي تصفيفة', opt_hair_only:'الشعر فقط', opt_nail_only:'الأظافر فقط', opt_spa_only:'السبا فقط',
+  label_reward:'المكافأة', opt_percent_off:'نسبة خصم', opt_flat_off:'مبلغ خصم', opt_free_service:'خدمة مجانية',
+  label_value:'القيمة', rules_submit:'إضافة قاعدة',
+  th_date:'التاريخ', th_client:'العميل', th_style:'التصفيفة', th_points:'النقاط', ledger_empty:'لا توجد زيارات مسجلة بعد.',
+  admin_title:'إدارة المنصة', admin_pending_title:'بانتظار الموافقة', admin_all_title:'كل الصالونات',
+  pending_banner_base:'صالونك بانتظار موافقة الإدارة. يمكنك إعداد التصفيفات وقواعد المكافآت الآن — وستظهر في "ابحث عن صالون" بمجرد الموافقة.',
+  pending_banner_founding:'بصفتك عضوًا من المؤسسين الخمسين، سيكون شهرك الأول مجانيًا بمجرد الموافقة.',
+  pending_banner_standard:'سيكون شهرك الأول مجانيًا بمجرد الموافقة.',
+  suspended_banner:'حسابك موقوف حاليًا. يرجى التواصل مع الدعم لإعادة التفعيل.',
+  toast_founding_welcome:'\uD83C\uDF89 أهلًا بك! أنت أحد صالوناتنا المؤسسة الخمسين — شهرك الأول مجاني بمجرد الموافقة.',
+  toast_standard_welcome:'أهلًا بك! شهرك الأول مجاني بمجرد الموافقة.',
+  toast_approved_prefix:'تمت الموافقة: ', toast_suspended_prefix:'تم الإيقاف: ',
+  toast_style_added_prefix:'تمت إضافة التصفيفة: ', toast_rule_added_prefix:'تمت إضافة قاعدة المكافأة: ',
+  toast_add_style_first:'أضف تصفيفة قبل تسجيل زيارة.',
+  toast_visit_logged_prefix:'تم تسجيل الزيارة — +', toast_visit_logged_suffix:' نقطة لـ ',
+  toast_visit_logged_unlocked_prefix:'تم تسجيل الزيارة (+', toast_visit_logged_unlocked_mid:' نقطة) — \uD83C\uDF89 تم فتح: ',
+  ph_new_client_name:'عميل جديد؟ أدخل الاسم',
+  stat_visits_logged:'الزيارات المسجلة', stat_points_issued:'النقاط الممنوحة', stat_unique_clients:'العملاء الفريدون', stat_active_rules:'القواعد النشطة',
+  stat_active_salons:'الصالونات النشطة', stat_suspended:'موقوف', stat_est_mrr:'الإيراد الشهري المتكرر التقديري',
+  badge_founding_50:'المؤسسون الخمسون', meta_applied:'تم التقديم في', meta_first_month_free:'الشهر الأول مجانًا',
+  btn_approve:'موافقة', btn_suspend:'إيقاف', btn_reactivate:'إعادة التفعيل',
+  admin_nothing_pending:'لا يوجد شيء بانتظار الموافقة — كل شيء محدّث.', admin_no_salons:'لا توجد صالونات بعد.',
+  status_active:'نشط', status_pending:'قيد الانتظار', status_suspended:'موقوف',
+  badge_founding_50_member:'عضو من المؤسسين الخمسين', badge_standard:'قياسي',
+  opt_add_style_first:'أضف تصفيفة أولاً',
+  last_logged:'آخر تسجيل',
+},
+};
+
+function t(key, params){
+  const dict = I18N[currentLang] || I18N.en;
+  let str = (dict && dict[key]!==undefined) ? dict[key] : (I18N.en[key]!==undefined ? I18N.en[key] : key);
+  if(params){ Object.keys(params).forEach(p=>{ str = str.replace('{'+p+'}', params[p]); }); }
+  return str;
+}
+
+function applyStaticTranslations(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    el.innerHTML = t(key);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{
+    const key = el.getAttribute('data-i18n-placeholder');
+    el.setAttribute('placeholder', t(key));
+  });
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = currentLang==='ar' ? 'rtl' : 'ltr';
+}
+
+async function setLanguage(lang){
+  if(!I18N[lang]) lang = 'en';
+  currentLang = lang;
+  applyStaticTranslations();
+  try{ await window.storage.set('preferredLanguage', lang, false); }catch(e){}
+  renderFoundingSpots();
+  if(document.getElementById('view-admin').classList.contains('active')) renderAdmin();
+  if(currentMerchant && document.getElementById('view-business-portal').classList.contains('active')) renderBusinessPortal();
+}
+
+async function initLanguage(){
+  const select = document.getElementById('langSwitcher');
+  select.innerHTML = Object.keys(LANG_NAMES).map(code=>'<option value="'+code+'">'+LANG_NAMES[code]+'</option>').join('');
+  let preferred = 'en';
+  try{
+    const res = await window.storage.get('preferredLanguage', false);
+    if(res && I18N[res.value]) preferred = res.value;
+  }catch(e){
+    const nav = (navigator.language||'en').slice(0,2);
+    if(I18N[nav]) preferred = nav;
+  }
+  select.value = preferred;
+  currentLang = preferred;
+  applyStaticTranslations();
+}
+
+/* ============================================================
+   STORAGE LAYER — this is the "database": persisted via
+   window.storage, shared across everyone previewing this artifact.
+   ============================================================ */
+async function loadJSON(key, fallback){
+  try{
+    const res = await window.storage.get(key, true);
+    return res ? JSON.parse(res.value) : fallback;
+  }catch(e){ return fallback; }
+}
+async function saveJSON(key, value){
+  try{ await window.storage.set(key, JSON.stringify(value), true); }
+  catch(e){ console.error('storage set failed', key, e); }
+}
+function genId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function normPhone(p){ return (p||'').replace(/\D/g,''); }
+
+async function getMerchants(){ return loadJSON('merchants', []); }
+async function saveMerchants(list){ return saveJSON('merchants', list); }
+async function getConsumers(){ return loadJSON('consumers', []); }
+async function saveConsumers(list){ return saveJSON('consumers', list); }
+async function getStyles(merchantId){ return loadJSON('styles:'+merchantId, []); }
+async function saveStyles(merchantId, list){ return saveJSON('styles:'+merchantId, list); }
+async function getRules(merchantId){ return loadJSON('rules:'+merchantId, []); }
+async function saveRules(merchantId, list){ return saveJSON('rules:'+merchantId, list); }
+async function getVisits(merchantId){ return loadJSON('visits:'+merchantId, []); }
+async function saveVisits(merchantId, list){ return saveJSON('visits:'+merchantId, list); }
+
+/* ============================================================
+   APP STATE
+   ============================================================ */
+let currentConsumer = null;   // {phone, name}
+let currentMerchant = null;   // {id, businessName}
+
+function showView(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function goHome(){ showView('view-marketing'); renderSalonGrid(); }
+
+function toast(msg, ms){
+  const toastEl = document.getElementById('toast');
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastEl._timer);
+  toastEl._timer = setTimeout(()=>toastEl.classList.remove('show'), ms||3200);
+}
+
+/* ============================================================
+   PUNCH CARD RENDERER — the shared visual signature
+   ============================================================ */
+function renderPunch(container, total, filled){
+  container.innerHTML = '';
+  const n = Math.max(total,1);
+  for(let i=0;i<n;i++){
+    const d = document.createElement('div');
+    d.className = 'dot' + (container.dataset.small==='1' ? ' small' : '');
+    d.style.transitionDelay = (i*45)+'ms';
+    container.appendChild(d);
+  }
+  requestAnimationFrame(()=>{
+    const dots = container.querySelectorAll('.dot');
+    dots.forEach((d,i)=>{ if(i<filled) d.classList.add('filled'); });
+  });
+}
+
+/* hero animation on load */
+document.addEventListener('DOMContentLoaded', ()=>{
+  initLanguage();
+  const hp = document.getElementById('heroPunch');
+  renderPunch(hp, 5, 4);
+  renderSalonGrid();
+  renderFoundingSpots();
+});
+
+const FOUNDING_BADGE_CAP = 50; // informational only — everyone still gets the free first month
+
+async function renderFoundingSpots(){
+  const merchants = await getMerchants();
+  const el = document.getElementById('foundingSpotsLeft');
+  if(!el) return;
+  const taken = merchants.filter(m=>m.foundingBadge).length;
+  const left = Math.max(FOUNDING_BADGE_CAP - taken, 0);
+  el.textContent = left>0 ? left+' '+t('founding_spots_left_suffix', {cap:FOUNDING_BADGE_CAP}) : t('founding_spots_claimed');
+}
+
+/* ============================================================
+   MARKETING — live "find a salon" grid
+   ============================================================ */
+async function renderSalonGrid(){
+  const grid = document.getElementById('salonGrid');
+  const merchants = (await getMerchants()).filter(m=>(m.status||'ACTIVE')==='ACTIVE');
+  if(!merchants.length){
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1;">No salons live on Glow+ yet &mdash; <b>be the first to add yours.</b></div>';
+    return;
+  }
+  const cards = await Promise.all(merchants.map(async m=>{
+    const styles = await getStyles(m.id);
+    const types = [...new Set(styles.filter(s=>s.active!==false).map(s=>s.type))];
+    const tags = types.map(t=>'<span class="tag '+t+'">'+t.toLowerCase()+'</span>').join(' ');
+    return '<div class="salon-card"><h4>'+escapeHtml(m.businessName)+'</h4>'
+      + '<div class="meta">'+styles.length+' style'+(styles.length===1?'':'s')+' on the menu</div>'
+      + '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">'+(tags||'<span class="meta">Menu coming soon</span>')+'</div></div>';
+  }));
+  grid.innerHTML = cards.join('');
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+/* ============================================================
+   ADMIN
+   ============================================================ */
+async function enterAdmin(){
+  showView('view-admin');
+  await renderAdmin();
+}
+async function renderAdmin(){
+  const merchants = await getMerchants();
+  const pending = merchants.filter(m=>(m.status||'ACTIVE')==='PENDING');
+  const active = merchants.filter(m=>(m.status||'ACTIVE')==='ACTIVE');
+  const suspended = merchants.filter(m=>m.status==='SUSPENDED');
+
+  const mrrCents = active.length * 4999; // simplified: everyone shown as monthly-equivalent
+  document.getElementById('adminStats').innerHTML = [
+    [t('stat_active_salons'), active.length],
+    [t('admin_pending_title'), pending.length],
+    [t('stat_suspended'), suspended.length],
+    [t('stat_est_mrr'), '$'+(mrrCents/100).toFixed(2)]
+  ].map(([lbl,num])=>'<div class="stat-box"><div class="num">'+num+'</div><div class="lbl">'+lbl+'</div></div>').join('');
+
+  document.getElementById('adminPending').innerHTML = pending.length
+    ? pending.map(m=>
+        '<div class="list-card"><div><div class="lc-name">'+escapeHtml(m.businessName)+'</div>'
+        + '<div class="lc-meta">'+(m.foundingBadge?t('badge_founding_50')+' &middot; ':'')+t('meta_applied')+' '+new Date(m.createdAt).toLocaleDateString()+' &middot; '+t('meta_first_month_free')+'</div></div>'
+        + '<button class="toggle active" onclick="adminApprove(\''+m.id+'\')">'+t('btn_approve')+'</button></div>'
+      ).join('')
+    : '<div class="empty">'+t('admin_nothing_pending')+'</div>';
+
+  document.getElementById('adminAll').innerHTML = merchants.length
+    ? merchants.map(m=>{
+        const status = m.status||'ACTIVE';
+        const statusLabel = status==='ACTIVE'?t('status_active'):status==='PENDING'?t('status_pending'):status==='SUSPENDED'?t('status_suspended'):status;
+        return '<div class="list-card"><div><div class="lc-name">'+escapeHtml(m.businessName)+' '
+          + '<span class="tag '+(status==='ACTIVE'?'SPA':status==='PENDING'?'NAIL':'HAIR')+'">'+statusLabel+'</span></div>'
+          + '<div class="lc-meta">'+(m.foundingBadge?t('badge_founding_50_member'):t('badge_standard'))+'</div></div>'
+          + (status==='ACTIVE'
+              ? '<button class="toggle inactive" onclick="adminSuspend(\''+m.id+'\')">'+t('btn_suspend')+'</button>'
+              : status==='SUSPENDED'
+                ? '<button class="toggle active" onclick="adminApprove(\''+m.id+'\')">'+t('btn_reactivate')+'</button>'
+                : '<button class="toggle active" onclick="adminApprove(\''+m.id+'\')">'+t('btn_approve')+'</button>')
+          + '</div>';
+      }).join('')
+    : '<div class="empty">'+t('admin_no_salons')+'</div>';
+}
+async function adminApprove(id){
+  const merchants = await getMerchants();
+  const m = merchants.find(x=>x.id===id);
+  if(m){ m.status='ACTIVE'; await saveMerchants(merchants); renderAdmin(); renderSalonGrid(); toast(t('toast_approved_prefix')+m.businessName); }
+}
+async function adminSuspend(id){
+  const merchants = await getMerchants();
+  const m = merchants.find(x=>x.id===id);
+  if(m){ m.status='SUSPENDED'; await saveMerchants(merchants); renderAdmin(); renderSalonGrid(); toast(t('toast_suspended_prefix')+m.businessName); }
+}
+
+/* ============================================================
+   CONSUMER FLOW
+   ============================================================ */
+async function enterConsumerFlow(){
+  showView('view-consumer-auth');
+  const consumers = await getConsumers();
+  const wrap = document.getElementById('consumerQuickWrap');
+  const box = document.getElementById('consumerQuick');
+  if(consumers.length){
+    wrap.style.display = 'block';
+    box.innerHTML = consumers.slice(-6).reverse().map(c=>
+      '<button type="button" onclick="quickLoginConsumer(\''+c.phone+'\')">'+escapeHtml(c.name)+'</button>'
+    ).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+async function quickLoginConsumer(phone){
+  const consumers = await getConsumers();
+  const c = consumers.find(x=>x.phone===phone);
+  if(c){ currentConsumer = c; renderConsumerDashboard(); }
+}
+async function submitConsumerAuth(ev){
+  ev.preventDefault();
+  const name = document.getElementById('cName').value.trim();
+  const phone = normPhone(document.getElementById('cPhone').value);
+  if(!name || !phone) return false;
+  let consumers = await getConsumers();
+  let existing = consumers.find(c=>c.phone===phone);
+  if(existing){
+    existing.name = name;
+  } else {
+    existing = {phone, name, createdAt: Date.now()};
+    consumers.push(existing);
+  }
+  await saveConsumers(consumers);
+  currentConsumer = existing;
+  renderConsumerDashboard();
+  return false;
+}
+function logoutConsumer(){ currentConsumer = null; enterConsumerFlow(); }
+
+async function renderConsumerDashboard(){
+  showView('view-consumer-dashboard');
+  document.getElementById('dashName').textContent = currentConsumer.name;
+  document.getElementById('dashPhone').textContent = formatPhone(currentConsumer.phone);
+  document.getElementById('dashAvatar').textContent = initials(currentConsumer.name);
+
+  const merchants = await getMerchants();
+  let totalPoints = 0;
+  const merchantBlocks = [];
+
+  for(const m of merchants){
+    const visits = (await getVisits(m.id)).filter(v=>v.consumerPhone===currentConsumer.phone);
+    if(visits.length===0) continue; // only show salons this consumer has actually visited
+    const rules = (await getRules(m.id)).filter(r=>r.active!==false);
+    const points = visits.reduce((s,v)=>s+v.pointsEarned,0);
+    totalPoints += points;
+
+    const rewardRows = rules.map(r=>{
+      const scoped = r.styleScope ? visits.filter(v=>v.styleType===r.styleScope) : visits;
+      const progressRaw = r.triggerType==='VISIT_COUNT' ? scoped.length : scoped.reduce((s,v)=>s+v.pointsEarned,0);
+      const progress = progressRaw % r.triggerValue;
+      const remaining = r.triggerValue - progress;
+      const rewardLabel = r.rewardType==='PERCENT_OFF' ? r.rewardValue+'% off'
+                         : r.rewardType==='FLAT_DISCOUNT' ? '$'+r.rewardValue+' off'
+                         : r.rewardValue+' free';
+      const unit = r.triggerType==='VISIT_COUNT' ? 'visits' : 'points';
+      const id = 'rp-'+m.id+'-'+r.id;
+      return '<div class="reward-row">'
+        + '<div class="rname">'+escapeHtml(r.name)+'</div>'
+        + '<div class="punch small" data-small="1" id="'+id+'"></div>'
+        + '<div class="punch-note" style="margin-top:8px;">'
+        + (remaining===r.triggerValue ? '<b>'+r.triggerValue+' more '+unit+'</b>' : '<b>'+remaining+' more '+unit+'</b>')
+        + ' for '+rewardLabel+'</div></div>';
+    }).join('') || '<div class="reward-row"><div class="punch-note">This salon hasn\u2019t set up reward rules yet.</div></div>';
+
+    const visitItems = visits.slice().sort((a,b)=>b.date-a.date).slice(0,5).map(v=>
+      '<div class="visit-item"><span class="vstyle">'+escapeHtml(v.styleName)+'</span><span class="vpts">+'+v.pointsEarned+' pts</span></div>'
+    ).join('');
+
+    merchantBlocks.push({html:
+      '<div class="merchant-card">'
+      + '<div class="merchant-card-head"><h3>'+escapeHtml(m.businessName)+'</h3><div class="merchant-points">'+points+' pts here</div></div>'
+      + rewardRows
+      + '<div class="visit-list"><div class="rname" style="margin-bottom:6px;">Recent visits</div>'+visitItems+'</div>'
+      + '</div>',
+      rules, visits, merchantId:m.id});
+  }
+
+  document.getElementById('dashTotalPoints').textContent = totalPoints;
+
+  if(merchantBlocks.length===0){
+    document.getElementById('dashMerchants').innerHTML = '<div class="empty">No visits yet. Ask your salon to log your first visit &mdash; your rewards will show up here.</div>';
+    return;
+  }
+  document.getElementById('dashMerchants').innerHTML = merchantBlocks.map(b=>b.html).join('');
+
+  // animate punch cards after DOM insert
+  for(const b of merchantBlocks){
+    for(const r of b.rules){
+      const scoped = r.styleScope ? b.visits.filter(v=>v.styleType===r.styleScope) : b.visits;
+      const progressRaw = r.triggerType==='VISIT_COUNT' ? scoped.length : scoped.reduce((s,v)=>s+v.pointsEarned,0);
+      const progress = progressRaw % r.triggerValue;
+      const el = document.getElementById('rp-'+b.merchantId+'-'+r.id);
+      if(el) renderPunch(el, r.triggerValue, progress);
+    }
+  }
+}
+function initials(name){
+  return name.trim().split(/\s+/).map(p=>p[0]).join('').slice(0,2).toUpperCase();
+}
+function formatPhone(p){
+  const d = normPhone(p);
+  if(d.length===10) return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+  return p;
+}
+
+/* ============================================================
+   BUSINESS FLOW
+   ============================================================ */
+async function enterBusinessFlow(){
+  showView('view-business-auth');
+  const merchants = await getMerchants();
+  const wrap = document.getElementById('businessQuickWrap');
+  const box = document.getElementById('businessQuick');
+  if(merchants.length){
+    wrap.style.display = 'block';
+    box.innerHTML = merchants.slice(-6).reverse().map(m=>
+      '<button type="button" onclick="quickLoginBusiness(\''+m.id+'\')">'+escapeHtml(m.businessName)+'</button>'
+    ).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+async function quickLoginBusiness(id){
+  const merchants = await getMerchants();
+  const m = merchants.find(x=>x.id===id);
+  if(m){ currentMerchant = m; renderBusinessPortal(); }
+}
+async function submitBusinessAuth(ev){
+  ev.preventDefault();
+  const name = document.getElementById('bName').value.trim();
+  if(!name) return false;
+  let merchants = await getMerchants();
+  let existing = merchants.find(m=>m.businessName.toLowerCase()===name.toLowerCase());
+  if(!existing){
+    const foundingCount = merchants.filter(m=>m.foundingBadge).length;
+    // Everyone gets the free first month — the founding badge is just an
+    // honest "you were early" honor for the first 50 and doesn't gate or
+    // limit the actual benefit for anyone who signs up after them.
+    const foundingBadge = foundingCount < FOUNDING_BADGE_CAP;
+    existing = {id: genId(), businessName: name, status:'PENDING', foundingBadge, freeFirstMonth:true, createdAt: Date.now()};
+    merchants.push(existing);
+    await saveMerchants(merchants);
+    renderFoundingSpots();
+    toast(foundingBadge ? t('toast_founding_welcome') : t('toast_standard_welcome'));
+  }
+  currentMerchant = existing;
+  renderBusinessPortal();
+  return false;
+}
+function logoutBusiness(){ currentMerchant = null; enterBusinessFlow(); }
+
+function switchPTab(tab){
+  document.querySelectorAll('.ptab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.ptab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('ptab-'+tab).classList.add('active');
+}
+
+async function renderBusinessPortal(){
+  showView('view-business-portal');
+  document.getElementById('portalBizName').textContent = currentMerchant.businessName;
+
+  let banner = document.getElementById('pendingBanner');
+  const status = currentMerchant.status || 'ACTIVE';
+  if(status!=='ACTIVE'){
+    const msg = status==='PENDING'
+      ? t('pending_banner_base') + (currentMerchant.foundingBadge ? ' ' + t('pending_banner_founding') : ' ' + t('pending_banner_standard'))
+      : t('suspended_banner');
+    if(!banner){
+      banner = document.createElement('div');
+      banner.id = 'pendingBanner';
+      banner.className = 'pending-banner';
+      document.querySelector('#view-business-portal .portal-head').insertAdjacentElement('afterend', banner);
+    }
+    banner.textContent = msg;
+    banner.style.display = 'block';
+  } else if(banner){
+    banner.style.display = 'none';
+  }
+
+  await Promise.all([renderStyles(), renderRules(), renderLedger(), renderVisitStyleOptions(), renderPortalStats()]);
+}
+
+async function renderPortalStats(){
+  const styles = await getStyles(currentMerchant.id);
+  const rules = await getRules(currentMerchant.id);
+  const visits = await getVisits(currentMerchant.id);
+  const uniqueClients = new Set(visits.map(v=>v.consumerPhone)).size;
+  const totalPoints = visits.reduce((s,v)=>s+v.pointsEarned,0);
+  document.getElementById('portalStats').innerHTML = [
+    [t('stat_visits_logged'), visits.length],
+    [t('stat_points_issued'), totalPoints],
+    [t('stat_unique_clients'), uniqueClients],
+    [t('stat_active_rules'), rules.filter(r=>r.active!==false).length]
+  ].map(([lbl,num])=>'<div class="stat-box"><div class="num">'+num+'</div><div class="lbl">'+lbl+'</div></div>').join('');
+}
+
+/* ---- Styles ---- */
+async function renderStyles(){
+  const styles = await getStyles(currentMerchant.id);
+  const list = document.getElementById('stylesList');
+  if(!styles.length){ list.innerHTML = '<div class="empty">No styles yet &mdash; add your first one on the left.</div>'; return; }
+  list.innerHTML = styles.map(s=>
+    '<div class="list-card">'
+    + '<div><div class="lc-name">'+escapeHtml(s.name)+' <span class="tag '+s.type+'">'+s.type.toLowerCase()+'</span></div>'
+    + '<div class="lc-meta">'+s.pointsPerVisit+' pts / visit</div></div>'
+    + '<button class="toggle '+(s.active!==false?'active':'inactive')+'" onclick="toggleStyle(\''+s.id+'\')">'+(s.active!==false?'Active':'Inactive')+'</button>'
+    + '</div>'
+  ).join('');
+}
+async function submitStyle(ev){
+  ev.preventDefault();
+  const name = document.getElementById('sName').value.trim();
+  const type = document.getElementById('sType').value;
+  const points = parseInt(document.getElementById('sPoints').value,10);
+  if(!name || !points) return false;
+  const styles = await getStyles(currentMerchant.id);
+  styles.push({id:genId(), name, type, pointsPerVisit:points, active:true});
+  await saveStyles(currentMerchant.id, styles);
+  document.getElementById('styleForm').reset();
+  document.getElementById('sPoints').value = 40;
+  await renderStyles();
+  await renderVisitStyleOptions();
+  toast(t('toast_style_added_prefix')+name);
+  return false;
+}
+async function toggleStyle(id){
+  const styles = await getStyles(currentMerchant.id);
+  const s = styles.find(x=>x.id===id);
+  if(s){ s.active = s.active===false ? true : false; await saveStyles(currentMerchant.id, styles); renderStyles(); renderVisitStyleOptions(); }
+}
+
+/* ---- Rules ---- */
+async function renderRules(){
+  const rules = await getRules(currentMerchant.id);
+  const list = document.getElementById('rulesList');
+  if(!rules.length){ list.innerHTML = '<div class="empty">No reward rules yet &mdash; add one on the left.</div>'; return; }
+  list.innerHTML = rules.map(r=>{
+    const unit = r.triggerType==='VISIT_COUNT' ? 'visits':'points';
+    const scope = r.styleScope ? r.styleScope+' only' : 'any style';
+    const reward = r.rewardType==='PERCENT_OFF' ? r.rewardValue+'% off' : r.rewardType==='FLAT_DISCOUNT' ? '$'+r.rewardValue+' off' : r.rewardValue+' free';
+    return '<div class="list-card">'
+      + '<div><div class="lc-name">'+escapeHtml(r.name)+'</div>'
+      + '<div class="lc-meta">every '+r.triggerValue+' '+unit+' ('+scope+') &rarr; '+reward+'</div></div>'
+      + '<button class="toggle '+(r.active!==false?'active':'inactive')+'" onclick="toggleRule(\''+r.id+'\')">'+(r.active!==false?'Active':'Inactive')+'</button>'
+      + '</div>';
+  }).join('');
+}
+async function submitRule(ev){
+  ev.preventDefault();
+  const name = document.getElementById('rName').value.trim();
+  const triggerType = document.getElementById('rTrigger').value;
+  const triggerValue = parseInt(document.getElementById('rValue').value,10);
+  const styleScope = document.getElementById('rScope').value || null;
+  const rewardType = document.getElementById('rRewardType').value;
+  const rewardValue = document.getElementById('rRewardValue').value.trim();
+  if(!name || !triggerValue || !rewardValue) return false;
+  const rules = await getRules(currentMerchant.id);
+  rules.push({id:genId(), name, triggerType, triggerValue, styleScope, rewardType, rewardValue, active:true});
+  await saveRules(currentMerchant.id, rules);
+  document.getElementById('ruleForm').reset();
+  document.getElementById('rValue').value = 5;
+  await renderRules();
+  await renderPortalStats();
+  toast(t('toast_rule_added_prefix')+name);
+  return false;
+}
+async function toggleRule(id){
+  const rules = await getRules(currentMerchant.id);
+  const r = rules.find(x=>x.id===id);
+  if(r){ r.active = r.active===false ? true : false; await saveRules(currentMerchant.id, rules); renderRules(); renderPortalStats(); }
+}
+
+/* ---- Log visit ---- */
+async function renderVisitStyleOptions(){
+  const styles = (await getStyles(currentMerchant.id)).filter(s=>s.active!==false);
+  const sel = document.getElementById('vStyle');
+  sel.innerHTML = styles.length
+    ? styles.map(s=>'<option value="'+s.id+'">'+escapeHtml(s.name)+' &mdash; '+s.pointsPerVisit+' pts ('+s.type.toLowerCase()+')</option>').join('')
+    : '<option value="">'+t('opt_add_style_first')+'</option>';
+}
+async function submitVisit(ev){
+  ev.preventDefault();
+  const phone = normPhone(document.getElementById('vPhone').value);
+  const name = document.getElementById('vName').value.trim();
+  const styleId = document.getElementById('vStyle').value;
+  if(!phone || !name || !styleId) return false;
+
+  const styles = await getStyles(currentMerchant.id);
+  const style = styles.find(s=>s.id===styleId);
+  if(!style){ toast(t('toast_add_style_first')); return false; }
+
+  // upsert consumer
+  let consumers = await getConsumers();
+  let consumer = consumers.find(c=>c.phone===phone);
+  if(!consumer){ consumer = {phone, name, createdAt:Date.now()}; consumers.push(consumer); }
+  else { consumer.name = name; }
+  await saveConsumers(consumers);
+
+  // record visit
+  const visits = await getVisits(currentMerchant.id);
+  const visit = {id:genId(), consumerPhone:phone, styleId:style.id, styleName:style.name, styleType:style.type, pointsEarned:style.pointsPerVisit, date:Date.now()};
+  visits.push(visit);
+  await saveVisits(currentMerchant.id, visits);
+
+  // check reward triggers (modulo logic — repeats every Nth visit/points)
+  const rules = (await getRules(currentMerchant.id)).filter(r=>r.active!==false);
+  const clientVisits = visits.filter(v=>v.consumerPhone===phone);
+  const unlocked = [];
+  for(const r of rules){
+    const scoped = r.styleScope ? clientVisits.filter(v=>v.styleType===r.styleScope) : clientVisits;
+    const progress = r.triggerType==='VISIT_COUNT' ? scoped.length : scoped.reduce((s,v)=>s+v.pointsEarned,0);
+    if(progress>0 && progress % r.triggerValue === 0) unlocked.push(r);
+  }
+
+  document.getElementById('visitForm').reset();
+  await Promise.all([renderLedger(), renderPortalStats()]);
+
+  if(unlocked.length){
+    const rewardTxt = unlocked.map(r=>r.name).join(', ');
+    toast(t('toast_visit_logged_unlocked_prefix')+style.pointsPerVisit+t('toast_visit_logged_unlocked_mid')+rewardTxt, 4500);
+  } else {
+    toast(t('toast_visit_logged_prefix')+style.pointsPerVisit+t('toast_visit_logged_suffix')+name);
+  }
+  return false;
+}
+
+/* ---- Ledger ---- */
+async function renderLedger(){
+  const visits = (await getVisits(currentMerchant.id)).slice().sort((a,b)=>b.date-a.date);
+  const body = document.getElementById('ledgerBody');
+  const empty = document.getElementById('ledgerEmpty');
+  const consumers = await getConsumers();
+  const nameByPhone = {}; consumers.forEach(c=>nameByPhone[c.phone]=c.name);
+
+  if(!visits.length){ body.innerHTML=''; empty.style.display='block'; }
+  else {
+    empty.style.display='none';
+    body.innerHTML = visits.map(v=>
+      '<tr><td>'+new Date(v.date).toLocaleDateString()+'</td>'
+      + '<td>'+escapeHtml(nameByPhone[v.consumerPhone]||v.consumerPhone)+'</td>'
+      + '<td>'+escapeHtml(v.styleName)+' <span class="tag '+v.styleType+'">'+v.styleType.toLowerCase()+'</span></td>'
+      + '<td class="pts">+'+v.pointsEarned+'</td></tr>'
+    ).join('');
+  }
+
+  document.getElementById('recentVisitsPreview').innerHTML = visits.length
+    ? '<div class="hint" style="margin-bottom:8px;">'+t('last_logged')+'</div>' + visits.slice(0,4).map(v=>
+        '<div class="list-card"><div><div class="lc-name">'+escapeHtml(nameByPhone[v.consumerPhone]||v.consumerPhone)+'</div>'
+        + '<div class="lc-meta">'+escapeHtml(v.styleName)+' &middot; '+new Date(v.date).toLocaleDateString()+'</div></div>'
+        + '<div class="merchant-points">+'+v.pointsEarned+'</div></div>'
+      ).join('')
+    : '';
+}
+</script>
+</body>
+</html>

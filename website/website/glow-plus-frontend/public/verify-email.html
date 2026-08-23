@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verify your email — Glow+</title>
+<script src="/config.js"></script>
+<style>
+  :root{
+    --white:#ffffff; --ink:#1d1d1f; --ink-soft:#86868b; --surface:#f5f5f7;
+    --accent:#0071e3; --sage:#0d8a5f; --rose:#e0116f;
+    --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--surface);font-family:var(--font);color:var(--ink);padding:20px;
+  }
+  .card{
+    background:var(--white);border-radius:20px;padding:40px;max-width:420px;width:100%;
+    text-align:center;box-shadow:0 20px 60px -30px rgba(0,0,0,0.25);
+  }
+  .brand{font-size:20px;font-weight:800;margin-bottom:24px;}
+  .brand .plus{color:var(--accent);}
+  .icon{font-size:48px;margin-bottom:16px;}
+  h1{font-size:22px;margin:0 0 10px;font-weight:700;}
+  p{color:var(--ink-soft);font-size:14.5px;line-height:1.5;margin:0;}
+  .status-success h1{color:var(--sage);}
+  .status-error h1{color:var(--rose);}
+  .spinner{
+    width:28px;height:28px;border:3px solid #e5e5ea;border-top-color:var(--accent);
+    border-radius:50%;margin:0 auto 16px;animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="brand">Glow<span class="plus">+</span></div>
+    <div class="spinner"></div>
+    <h1>Confirming your email…</h1>
+    <p>Just a moment.</p>
+  </div>
+
+  <script>
+    async function verify() {
+      const card = document.getElementById('card');
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+
+      if (!token) {
+        renderError('Missing verification link', 'This link looks incomplete. Please use the link from your email exactly as it was sent.');
+        return;
+      }
+
+      try {
+        const res = await fetch(window.GLOW_API_BASE_URL + '/auth/verify-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          renderError('Verification failed', body.message || 'This link may have expired or already been used.');
+          return;
+        }
+
+        const data = await res.json();
+        renderSuccess(data.accountType);
+      } catch (err) {
+        renderError(
+          'Could not reach the server',
+          'Make sure your Glow+ backend is running at ' + window.GLOW_API_BASE_URL + ' and try again.'
+        );
+      }
+    }
+
+    function renderSuccess(accountType) {
+      const card = document.getElementById('card');
+      card.className = 'card status-success';
+      const who = accountType === 'MERCHANT' ? 'salon account' : 'account';
+      card.innerHTML =
+        '<div class="brand">Glow<span class="plus">+</span></div>' +
+        '<div class="icon">✅</div>' +
+        '<h1>Email confirmed!</h1>' +
+        '<p>Your ' + who + ' is now verified. You can close this tab and continue.</p>';
+    }
+
+    function renderError(title, message) {
+      const card = document.getElementById('card');
+      card.className = 'card status-error';
+      card.innerHTML =
+        '<div class="brand">Glow<span class="plus">+</span></div>' +
+        '<div class="icon">⚠️</div>' +
+        '<h1>' + title + '</h1>' +
+        '<p>' + message + '</p>';
+    }
+
+    verify();
+  </script>
+</body>
+</html>

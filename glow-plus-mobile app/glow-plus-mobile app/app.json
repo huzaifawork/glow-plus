@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Glow+",
+    "slug": "glow-plus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "bundleIdentifier": "com.glowplus.app",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.glowplus.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "https://your-glow-plus-api.example.com"
+    }
+  }
+}
