@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/verify-email", "destination": "/verify-email.html" },
+    { "source": "/business/billing", "destination": "/billing-result.html" }
+  ]
+}

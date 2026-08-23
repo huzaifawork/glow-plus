@@ -68,6 +68,9 @@ Rules:
 | F11 | Email provider **does** support Resend; defaults to `log` | `email.provider.ts` — set `EMAIL_PROVIDER=resend` |
 | F12 | JWT is hand-rolled HS256, fixed 7-day, **no refresh** | `jwt.util.ts` |
 | F13 | No `/health` endpoint | no matches in `src/` |
+| F24 | **The auth-switch links never worked.** A "Go to business login" / "Go to customer login" anchor was nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation — destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing | `Glow-Plus-Website .html:426,466` vs `applyStaticTranslations()` |
+| F25 | **Mobile overflows horizontally** — at a 390px viewport the document is 401px wide because the `.topnav` buttons don't wrap. Measured identically on the original, so it is pre-existing, not migration damage → **T39** | Chromium, both versions, session 3 |
+| F26 | **`footer_note` is now factually wrong** — it reads "data is shared & persisted live for everyone previewing this page", true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again | `translations.js`, key `footer_note` |
 | F14 | **The backend source does not compile.** `nest start` fails with 7 TS2307 errors before it reaches the DB | dry run 2026-08-23 |
 | F15 | **`bookings/` + `business-hours/` exist ONLY at `src/modules/booking/src/modules/…`** — an unzipped delivery dumped in with its full path preserved, so every relative import (`../../prisma/prisma.service`) resolves to nothing. There is no top-level `src/modules/bookings/` | `find src -type f` |
 | F16 | `reward-rules` is genuinely duplicated — a real wired copy at `src/modules/reward-rules/` and a second inside the nested delivery | same |
@@ -218,14 +221,18 @@ Rules:
   Render functions already written: `renderAdmin`, `renderBusinessPortal`, `renderConsumerDashboard`, `renderFoundingSpots`, `renderLedger`, `renderPortalStats`, `renderPunch`, `renderRules`, `renderSalonGrid`, `renderStyles`, `renderVisitStyleOptions`.
 
   **So the rebuild is "swap the data layer, keep the design"** — replace `window.storage` calls with real API calls, add the missing auth UI. The visual work is largely done; that meaningfully reduces the effort versus designing from scratch.
-- [ ] **T34 — Project setup** (framework, routing, API client, token storage, protected routes).
+- [x] **T34 — Project setup.** ✅ **DONE & VERIFIED 2026-08-23 (session 3).** React + Vite app at `website/website/glow-plus-web/`, three entry points (main site, `verify-email`, `billing-result`). Framework, routing and the storage seam are in place; **API client + token storage + protected routes are NOT** — they arrive with T35–T38. See `glow-plus-web/MIGRATION.md` and CONTEXT.md §11.
+  **Evidence:** layout fingerprint vs. the original prototype (tag, class, id, text and bounding rect for every element, in document order) → **276 vs 276 elements, IDENTICAL at 1280px and 390px** · functional pass **67/67** in real Chromium · production build serves `/verify-email` and `/business/billing` 200 with correct titles.
+  **The storage seam:** `src/lib/storage.js` keeps `window.storage`'s exact async contract but is backed by `localStorage`, so `src/lib/data.js` ported over unchanged. ➡️ **Replacing that one file is how Phase 5/6 moves onto the real API — do not scatter `fetch` calls through the views.**
 - [ ] **T35 — Auth UI** — signup, login, logout, email verification.
 - [ ] **T36 — Consumer flow** — salon directory, styles, rewards, visit history, bookings.
 - [ ] **T37 — Merchant portal** — profile, styles, reward rules, visits, staff, billing.
 - [ ] **T38 — Admin panel** — approval queue, MRR/churn metrics.
-- [ ] **T39 — Mobile-friendly** across all views (docx explicitly asks for this).
-- [ ] **T40 — Preserve the i18n — it's 8 languages, not 3.** `en, es, fr, de, pt, zh, ja, ar` — including **Arabic with full RTL** (`document.documentElement.dir` flips). All translation strings already exist in the prototype and are directly reusable. This is a genuine asset; don't lose it in the rebuild.
-- [ ] **T41 — Keep `verify-email` + `billing-result` pages working** (the only currently-functional frontend).
+- [ ] **T39 — Mobile-friendly** across all views (docx explicitly asks for this). ⚠️ **Concrete starting point [F25]:** at 390px the document is **401px** wide — the `.topnav` buttons don't wrap. Reproduced from the original, so it is a real design bug to fix, not a regression.
+- [x] **T40 — Preserve the i18n — it's 8 languages, not 3.** ✅ **DONE & VERIFIED 2026-08-23.** `I18N` + `LANG_NAMES` extracted verbatim with `sed` (source lines 627, 630–1352) into `src/i18n/translations.js`; all 8 language blocks confirmed present. Browser-verified: switcher lists 8, Arabic flips `document.documentElement.dir` to `rtl` and translates, French returns it to `ltr`. `en, es, fr, de, pt, zh, ja, ar` — including **Arabic with full RTL** (`document.documentElement.dir` flips). All translation strings already exist in the prototype and are directly reusable. This is a genuine asset; don't lose it in the rebuild.
+- [x] **T41 — Keep `verify-email` + `billing-result` pages working.** ✅ **DONE & VERIFIED 2026-08-23.** Both ported to React as **separate Vite entry points** (their CSS targets bare `body`/`.card`/`h1`/`p` and would collide with the main site's stylesheet in a single SPA). Real API call to `POST /auth/verify-email` preserved.
+  **Routing:** Express's two routes are now a `vite.config.js` plugin (dev/preview) + `vercel.json` rewrites (prod): `/verify-email` → `verify-email.html`, `/business/billing` → `billing-result.html`. ⚠️ **Any other host needs the same two rewrites** — the backend has these URLs baked in (`APP_URL`, `billing.service.ts` `success_url`/`cancel_url`).
+  **Evidence:** verify-email missing-token error, bogus-token → real 'Verification failed' from the running backend · billing success (+ session id echoed, webhook note), canceled, and direct-visit states all correct.
 
 # PHASE 6 — Endpoints the clients need but that don't exist
 

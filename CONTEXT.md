@@ -30,14 +30,14 @@ Per task: **implement → test by actually running it → record evidence → ti
 
 Why strict: the exact problem we were hired to fix is *"functionality that exists vs. functionality that's been validated."*
 
-## 4. Environment — CURRENT STATE (updated 2026-08-23, end of session 2)
+## 4. Environment — CURRENT STATE (updated 2026-08-23, end of session 3)
 
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 11 tables + `_prisma_migrations`** (was 0 applied) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
-| Website | ✅ Runs on :3000 (`glow-plus-frontend`, `npm start`) |
+| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
 | Tests | ✅ Jest configured, **8 passing** (`npm test`) |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
@@ -50,8 +50,8 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 & "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe" compose -f docker/docker-compose.yml up -d postgres
 # Backend  (from website/website/glow-plus-backend/glow-plus-backend)
 npm run start:dev
-# Website  (from website/website/glow-plus-frontend)
-npm start
+# Website  (from website/website/glow-plus-web)   ← React + Vite as of session 3
+npm run dev
 # Stripe   (from website/website)
 ./stripe.exe listen --api-key <STRIPE_SECRET_KEY from .env> --forward-to localhost:4000/billing/webhook
 ```
@@ -83,9 +83,11 @@ joziilunga-attachments/
 ├─ Software Developer Project Experience.docx   ← client's requirements doc
 ├─ glow-plus-mobile app/     ← Order 2. DO NOT EDIT.
 └─ website/website/
-   ├─ Glow-Plus-Website .html      ← the design prototype (1,932 lines)
+   ├─ Glow-Plus-Website .html      ← the design prototype (1,932 lines). KEEP — it is
+   │                                 the reference the migration is verified against
    ├─ stripe.exe
-   ├─ glow-plus-frontend/          ← tiny Express helper, 2 real pages
+   ├─ glow-plus-web/               ← ⭐ THE WEBSITE (React + Vite, session 3). Work here.
+   ├─ glow-plus-frontend/          ← SUPERSEDED Express helper. Kept as reference only.
    └─ glow-plus-backend/glow-plus-backend/   ← the NestJS backend
 ```
 
@@ -120,6 +122,14 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
 ## 8. EXACTLY where to resume — **START PHASE 1 AT T15**
+
+> **Session 3 note (2026-08-23):** the user asked, out of task order, for the
+> HTML website to be converted to React + Vite. That is **done and verified** —
+> see §11. It covers **T34 structurally** and satisfies **T40** and **T41**.
+> It does **not** wire the site to the API, so T35–T38 remain open.
+> The user's instruction for the next session was explicit:
+> **"we will start from phase 0 things once starting"** — i.e. resume the
+> numbered tasks in order from T15, treating the migration as banked work.
 
 **Session 2 (2026-08-23) finished Phase 0 and the first half of Phase 1.**
 
@@ -200,3 +210,96 @@ Its actual title is **"Software Developer Project Experience & Technical Assessm
 - **Confirm the website rebuild** (biggest item, absent from the client's list)
 - **Vercel plan** — Hobby allows only 2 cron jobs at once-daily; this project has 4 → Pro (~$20/mo) or consolidate.
 - Domain purchase — blocks production email and Stripe webhooks.
+
+---
+
+## 11. Website migration to React + Vite — DONE (session 3, 2026-08-23)
+
+Requested by the user out of task order. **Structural migration only** — same
+design, same content, same behaviour. The API wiring was deliberately left for
+Phase 5/6.
+
+### What exists now
+
+`website/website/glow-plus-web/` — one Vite app, **three entry points**:
+
+| Entry | Serves | Source |
+|---|---|---|
+| `index.html` | the 6-view main site | `Glow-Plus-Website .html` (1,932 lines) |
+| `verify-email.html` | `/verify-email` | `glow-plus-frontend/public/verify-email.html` |
+| `billing-result.html` | `/business/billing` | `glow-plus-frontend/public/billing-result.html` |
+
+Three entries rather than one SPA because the two Stripe/verify pages carry
+their own stylesheets that target bare `body`, `.card`, `h1`, `p` — separate
+documents is what keeps them from colliding with the main site's CSS.
+
+**Read `glow-plus-web/MIGRATION.md` before touching this app.** It documents the
+architecture, the storage seam, and every carried-over quirk.
+
+### The critical thing to know: the storage seam
+
+The prototype persisted via `window.storage` — a Claude-artifact API that does
+not exist in a real browser, so [F9] "saves nothing, silently" was literal.
+
+`src/lib/storage.js` now keeps that **exact async contract** (`get(key) →
+{value}|null`, `set(key, value)`) but is backed by `localStorage`. Every caller
+in `src/lib/data.js` ported over unchanged.
+
+➡️ **This is the single file Phase 5/6 replaces to move onto the real API.**
+Nothing else in the app needs to change. Do not scatter `fetch` calls through
+the views.
+
+### Verified, not assumed
+
+Both run against the original (served on `:8080`) and the new app side by side
+in real Chromium. Scripts are in the session scratchpad (`compare.js`,
+`functional.js`) — rewrite them if needed, they're throwaway.
+
+- **Layout fingerprint** (tag, class, id, text, bounding rect for every element,
+  in document order): **276 vs 276 elements, IDENTICAL at 1280px and 390px.**
+- **Functional:** 67/67 checks pass — 8 languages + Arabic RTL, business signup,
+  styles, reward rules, visit logging, reward-trigger modulo maths, portal
+  stats, ledger, consumer dashboard, admin approve/suspend, persistence across
+  reload, both Stripe/verify pages in every state, zero console errors.
+- **Production build** checked separately: `/verify-email` and `/business/billing`
+  both 200 with the correct page titles.
+
+### Routing — do not break these two URLs
+
+The backend has them baked in (`APP_URL`; `billing.service.ts` `success_url` /
+`cancel_url`). Express used to map them; now:
+
+- **dev/preview** — a plugin in `vite.config.js`
+- **production** — `vercel.json` rewrites
+
+Any other host needs the same two rewrites or email verification and Stripe
+returns break.
+
+### Two gotchas that will waste time if forgotten
+
+1. **A stray `C:\Users\GCA\Documents\postcss.config.js`** (outside the repo)
+   requires `tailwindcss`. Vite walks up the tree and fails the build on it.
+   `vite.config.js` declares `css.postcss` inline to stop the search — **don't
+   remove that block.**
+2. **Don't run `glow-plus-frontend` and `glow-plus-web` together** — both bind
+   :3000, and `glow-plus-web` uses `strictPort`.
+
+### Carried over as-is — pre-existing, NOT introduced (F24–F26)
+
+| # | Finding |
+|---|---|
+| **F24** | **The auth-switch links never worked.** The markup nested a "Go to business login" / "Go to customer login" anchor inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation, destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing. One-line fix; needs a design call. |
+| **F25** | **Mobile overflows horizontally.** At a 390px viewport the document is 401px wide — the `.topnav` buttons don't wrap. Measured identically on the original, so it is original, not migration damage. This is **T39**. |
+| **F26** | **`footer_note` is now factually wrong.** It reads "data is shared & persisted live for everyone previewing this page" — true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again. |
+
+### What this does and doesn't close in TASKS.md
+
+- ✅ **T34** (project setup) — structurally done: framework, entry points, routing, storage seam
+- ✅ **T40** (preserve i18n) — all 8 languages + Arabic RTL verified
+- ✅ **T41** (keep verify-email + billing-result working) — verified in every state
+- ⬜ **T35–T38** (auth UI, consumer, merchant, admin against the **real API**) — still open
+- ⬜ **T39** (mobile-friendly) — still open; see F25
+- ⚠️ **Blocked on missing endpoints** — the views cannot be wired until these exist:
+  `GET /merchants` public directory (**T43**), `GET /me/rewards` (**T42**),
+  `GET /visits/me` (**T45**), `GET /styles/public/:merchantId` (**T44**), and a
+  **reward-rules controller — that module has no HTTP routes at all.**

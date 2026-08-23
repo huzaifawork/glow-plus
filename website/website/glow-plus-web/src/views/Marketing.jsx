@@ -1,0 +1,249 @@
+import { useI18n } from '../i18n/I18nContext.jsx';
+import { useApp } from '../context/AppContext.jsx';
+import { useNav } from '../lib/useNav.js';
+import { useAsyncData } from '../lib/useAsyncData.js';
+import { getMerchants, getStyles } from '../lib/data.js';
+import { FOUNDING_BADGE_CAP } from '../lib/helpers.js';
+import Punch from '../components/Punch.jsx';
+import T from '../components/T.jsx';
+
+/* ---------- live "find a salon" grid (port of renderSalonGrid) ---------- */
+function SalonGrid() {
+  const { dataVersion } = useApp();
+
+  const cards = useAsyncData(
+    async () => {
+      const merchants = (await getMerchants()).filter(
+        (m) => (m.status || 'ACTIVE') === 'ACTIVE'
+      );
+      return Promise.all(
+        merchants.map(async (m) => {
+          const styles = await getStyles(m.id);
+          const types = [
+            ...new Set(styles.filter((s) => s.active !== false).map((s) => s.type)),
+          ];
+          // styleCount deliberately counts every style, active or not — that is
+          // what the original "N styles on the menu" line reported.
+          return {
+            id: m.id,
+            businessName: m.businessName,
+            styleCount: styles.length,
+            types,
+          };
+        })
+      );
+    },
+    [dataVersion],
+    null
+  );
+
+  if (!cards || !cards.length) {
+    return (
+      <div className="salon-grid" id="salonGrid">
+        <div className="empty" style={{ gridColumn: '1/-1' }}>
+          No salons live on Glow+ yet — <b>be the first to add yours.</b>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="salon-grid" id="salonGrid">
+      {cards.map((c) => (
+        <div className="salon-card" key={c.id}>
+          <h4>{c.businessName}</h4>
+          <div className="meta">
+            {c.styleCount} style{c.styleCount === 1 ? '' : 's'} on the menu
+          </div>
+          <div style={{ marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {c.types.length ? (
+              c.types.map((type) => (
+                <span className={'tag ' + type} key={type}>
+                  {type.toLowerCase()}
+                </span>
+              ))
+            ) : (
+              <span className="meta">Menu coming soon</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- founding-spots counter (port of renderFoundingSpots) ---------- */
+function FoundingSpots() {
+  const { t } = useI18n();
+  const { dataVersion } = useApp();
+
+  const taken = useAsyncData(
+    async () => (await getMerchants()).filter((m) => m.foundingBadge).length,
+    [dataVersion],
+    null
+  );
+
+  // Until the count lands, the element keeps its data-i18n placeholder copy,
+  // exactly as the original markup did.
+  if (taken === null) {
+    return <T as="div" className="fsub" id="foundingSpotsLeft" k="founding_checking" />;
+  }
+
+  const left = Math.max(FOUNDING_BADGE_CAP - taken, 0);
+
+  return (
+    <div className="fsub" id="foundingSpotsLeft">
+      {left > 0
+        ? left + ' ' + t('founding_spots_left_suffix', { cap: FOUNDING_BADGE_CAP })
+        : t('founding_spots_claimed')}
+    </div>
+  );
+}
+
+export default function Marketing({ active }) {
+  const { enterConsumerFlow, enterBusinessFlow } = useNav();
+
+  return (
+    <section className={'view' + (active ? ' active' : '')} id="view-marketing">
+      <div className="hero">
+        <T as="div" className="eyebrow" k="hero_eyebrow" />
+        <T as="h1" className="headline" k="hero_headline" />
+        <T as="p" className="sub" k="hero_sub" />
+        <div className="cta-row">
+          <T as="button" className="btn btn-primary" onClick={enterConsumerFlow} k="hero_cta_consumer" />
+          <T as="button" className="btn btn-outline" onClick={enterBusinessFlow} k="hero_cta_business" />
+        </div>
+
+        <div className="hero-visual">
+          <div className="hero-card">
+            <T as="div" className="card-label" k="hero_card_label" />
+            <div className="card-style-name">Silk Press</div>
+            <Punch id="heroPunch" total={5} filled={4} />
+            <T as="div" className="punch-note" k="hero_card_note" />
+            <div className="hero-stats">
+              <div className="stat">
+                <div className="num">340</div>
+                <T as="div" className="lbl" k="hero_stat_points" />
+              </div>
+              <div className="stat">
+                <div className="num">3/6</div>
+                <T as="div" className="lbl" k="hero_stat_manicures" />
+              </div>
+              <div className="stat">
+                <div className="num">7</div>
+                <T as="div" className="lbl" k="hero_stat_salons" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="categories">
+          <div className="pill hair"><span className="dotsw"></span><T as="span" k="cat_hair" /></div>
+          <div className="pill nail"><span className="dotsw"></span><T as="span" k="cat_nail" /></div>
+          <div className="pill spa"><span className="dotsw"></span><T as="span" k="cat_spa" /></div>
+        </div>
+      </div>
+
+      <section className="block">
+        <div className="block-inner">
+          <div className="block-head">
+            <T as="h2" className="block-title" k="how_title" />
+            <T as="div" className="block-desc" k="how_desc" />
+          </div>
+          <div className="steps">
+            <div className="step">
+              <T as="div" className="idx" k="how_step1_idx" />
+              <T as="h3" k="how_step1_title" />
+              <T as="p" k="how_step1_body" />
+            </div>
+            <div className="step">
+              <T as="div" className="idx" k="how_step2_idx" />
+              <T as="h3" k="how_step2_title" />
+              <T as="p" k="how_step2_body" />
+            </div>
+            <div className="step">
+              <T as="div" className="idx" k="how_step3_idx" />
+              <T as="h3" k="how_step3_title" />
+              <T as="p" k="how_step3_body" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="block surface">
+        <div className="block-inner">
+          <div className="block-head">
+            <T as="h2" className="block-title" k="find_title" />
+            <T as="div" className="block-desc" k="find_desc" />
+          </div>
+          <SalonGrid />
+        </div>
+      </section>
+
+      <section className="block dark" id="pricingSection">
+        <div className="block-inner">
+          <div className="block-head">
+            <T as="h2" className="block-title" k="pricing_title" />
+            <T as="div" className="block-desc ink-soft-on-dark" k="pricing_desc" />
+          </div>
+
+          <div className="founding-banner">
+            <div>
+              <T as="div" className="ftitle" k="founding_title" />
+              <T as="div" className="fsub" k="founding_sub" />
+            </div>
+            <FoundingSpots />
+          </div>
+
+          <div className="pricing-grid">
+            <div className="price-card">
+              <T as="h3" k="price_monthly_label" />
+              <div className="price-amt">$49.99<T as="span" k="price_per_mo" /></div>
+              <T as="div" className="price-note" k="price_monthly_note" />
+              <ul className="price-feat">
+                <T as="li" k="price_feat_styles" />
+                <T as="li" k="price_feat_visits" />
+                <T as="li" k="price_feat_trial" />
+              </ul>
+              <T as="button" className="btn btn-primary auth-submit" onClick={enterBusinessFlow} k="price_cta" />
+            </div>
+            <div className="price-card featured">
+              <T as="div" className="price-badge" k="price_save_badge" />
+              <T as="h3" k="price_annual_label" />
+              <div className="price-amt">$479.99<T as="span" k="price_per_yr" /></div>
+              <T as="div" className="price-note" k="price_annual_note" />
+              <ul className="price-feat">
+                <T as="li" k="price_feat_everything" />
+                <T as="li" k="price_feat_free_months" />
+                <T as="li" k="price_feat_trial" />
+              </ul>
+              <T as="button" className="btn btn-primary auth-submit" onClick={enterBusinessFlow} k="price_cta" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="block">
+        <div className="block-inner">
+          <div className="split">
+            <div className="split-card">
+              <T as="h3" k="split_consumer_title" />
+              <T as="p" k="split_consumer_body" />
+              <T as="button" className="btn btn-outline" onClick={enterConsumerFlow} k="split_consumer_cta" />
+            </div>
+            <div className="split-card">
+              <T as="h3" k="split_owner_title" />
+              <T as="p" k="split_owner_body" />
+              <T as="button" className="btn btn-outline" onClick={enterBusinessFlow} k="split_owner_cta" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        <T as="div" k="footer_copy" />
+        <T as="div" k="footer_note" />
+      </footer>
+    </section>
+  );
+}

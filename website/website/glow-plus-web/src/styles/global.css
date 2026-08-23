@@ -1,0 +1,252 @@
+  :root{
+    --white:#ffffff;
+    --black:#000000;
+    --ink:#1d1d1f;
+    --ink-soft:#86868b;
+    --ink-faint:#d2d2d7;
+    --surface:#f5f5f7;
+    --surface-2:#fbfbfd;
+    --accent:#0071e3;
+    --accent-hover:#0077ed;
+    --rose:#e0116f;
+    --gold:#a9813f;
+    --sage:#0d8a5f;
+    --line:rgba(0,0,0,0.08);
+    --radius:20px;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:var(--white);color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased;font-size:17px;line-height:1.47059;letter-spacing:-0.022em;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  /* ---------- shell ---------- */
+  .promo-bar{
+    background:var(--ink);color:var(--white);text-align:center;
+    font-size:12.5px;font-weight:600;padding:9px 16px;letter-spacing:0.01em;
+  }
+  .promo-bar b{color:#7fd4ff;}
+  .topbar{
+    position:sticky;top:0;z-index:40;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px;height:52px;background:rgba(255,255,255,0.8);backdrop-filter:saturate(180%) blur(20px);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{font-weight:700;font-size:19px;letter-spacing:-0.01em;display:flex;align-items:center;gap:1px;}
+  .brand .plus{color:var(--accent);}
+  .topnav{display:flex;align-items:center;gap:2px;}
+  .navbtn{padding:9px 16px;border-radius:980px;border:1px solid transparent;background:transparent;font-weight:500;font-size:12.5px;color:var(--ink);}
+  .navbtn:hover{color:var(--ink-soft);}
+  .navbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:8px 16px;}
+  .navbtn.primary:hover{background:var(--accent-hover);}
+  .navbtn.ghost{border-color:var(--ink-faint);}
+
+  main{max-width:1180px;margin:0 auto;padding:0 22px;}
+  .full{max-width:none;padding:0;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---------- hero (Apple-style: giant centered type) ---------- */
+  .hero{padding:88px 22px 56px;text-align:center;max-width:900px;margin:0 auto;}
+  .eyebrow{font-size:19px;font-weight:600;color:var(--accent);margin-bottom:6px;}
+  h1.headline{font-weight:700;font-size:clamp(40px,6.4vw,80px);line-height:1.05;letter-spacing:-0.015em;margin:0 0 10px;color:var(--ink);}
+  h1.headline em{font-style:normal;background:linear-gradient(90deg,var(--rose),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .sub{font-size:21px;line-height:1.38;color:var(--ink-soft);max-width:640px;margin:0 auto 30px;font-weight:400;}
+  .cta-row{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center;}
+  .btn{padding:12.5px 22px;border-radius:980px;font-weight:500;font-size:17px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-primary:hover{background:var(--accent-hover);}
+  .btn-outline{background:transparent;color:var(--accent);padding:12.5px 4px;}
+  .btn-outline:hover{text-decoration:underline;}
+  .btn-outline::after{content:"›";margin-left:2px;}
+
+  /* hero visual: the punch card, scaled up, framed like a product shot */
+  .hero-visual{max-width:640px;margin:56px auto 0;}
+  .hero-card{
+    background:var(--surface);border-radius:32px;padding:48px;
+    position:relative;overflow:hidden;text-align:left;
+  }
+  .card-label{font-size:12.5px;font-weight:600;letter-spacing:0.03em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:8px;}
+  .card-style-name{font-size:32px;font-weight:700;margin:0 0 26px;letter-spacing:-0.01em;}
+  .punch{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+  .dot{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--ink-faint);background:var(--white);transition:background .5s ease, border-color .5s ease, transform .35s ease;}
+  .dot.filled{background:var(--accent);border-color:var(--accent);transform:scale(1.05);}
+  .dot.small{width:16px;height:16px;border-width:2px;}
+  .punch-note{font-size:16px;color:var(--ink-soft);}
+  .punch-note b{color:var(--ink);font-weight:600;}
+  .hero-stats{display:flex;gap:0;margin-top:32px;padding-top:28px;border-top:1px solid var(--line);}
+  .stat{flex:1;}
+  .stat .num{font-size:28px;font-weight:700;letter-spacing:-0.01em;}
+  .stat .lbl{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+
+  /* ---------- category pills ---------- */
+  .categories{display:flex;gap:10px;padding:36px 0 0;flex-wrap:wrap;justify-content:center;}
+  .pill{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:980px;font-weight:500;font-size:13.5px;border:1px solid var(--line);background:var(--surface-2);}
+  .pill .dotsw{width:8px;height:8px;border-radius:50%;}
+  .pill.hair .dotsw{background:var(--rose);}
+  .pill.nail .dotsw{background:var(--gold);}
+  .pill.spa .dotsw{background:var(--sage);}
+
+  /* ---------- full-bleed alternating sections ---------- */
+  section.block{padding:100px 22px;border-top:1px solid var(--line);}
+  section.block.dark{background:var(--ink);color:var(--white);border-top:none;}
+  section.block.dark .ink-soft-on-dark{color:#a1a1a6;}
+  section.block.surface{background:var(--surface);border-top:none;}
+  .block-inner{max-width:1180px;margin:0 auto;}
+  .block-head{text-align:center;max-width:680px;margin:0 auto 54px;}
+  h2.block-title{font-size:clamp(32px,4.4vw,52px);font-weight:700;margin:0 0 14px;letter-spacing:-0.015em;line-height:1.07;}
+  .block-desc{color:var(--ink-soft);font-size:19px;line-height:1.42;}
+  .block.dark .block-desc{color:#a1a1a6;}
+
+  /* how it works — Apple-style numbered stack */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:var(--radius);overflow:hidden;}
+  .step{background:var(--white);padding:44px 34px;}
+  .step .idx{font-size:15px;font-weight:600;color:var(--accent);margin-bottom:18px;}
+  .step h3{font-size:24px;margin:0 0 10px;font-weight:700;letter-spacing:-0.01em;}
+  .step p{margin:0;color:var(--ink-soft);font-size:15.5px;line-height:1.5;}
+
+  /* find a salon */
+  .salon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1px;background:var(--line);border-radius:var(--radius);overflow:hidden;}
+  .salon-card{background:var(--white);padding:26px;transition:background .2s ease;}
+  .salon-card:hover{background:var(--surface-2);}
+  .salon-card h4{font-size:19px;margin:0 0 8px;font-weight:700;letter-spacing:-0.01em;}
+  .salon-card .meta{font-size:13px;color:var(--ink-soft);}
+  .empty{padding:44px;text-align:center;border:1.5px dashed var(--ink-faint);border-radius:var(--radius);color:var(--ink-soft);background:var(--surface-2);}
+  .empty b{color:var(--ink);}
+
+  /* pricing */
+  .pricing-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:820px;margin:0 auto;}
+  .price-card{background:var(--white);border:1px solid var(--line);border-radius:24px;padding:36px;text-align:left;position:relative;color:var(--ink);}
+  .price-card.featured{border:2px solid var(--accent);}
+  .price-badge{position:absolute;top:-13px;right:28px;background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:980px;letter-spacing:0.02em;}
+  .price-card h3{font-size:15px;font-weight:600;color:var(--ink-soft);margin:0 0 14px;text-transform:uppercase;letter-spacing:0.03em;}
+  .price-amt{font-size:44px;font-weight:700;letter-spacing:-0.02em;margin-bottom:2px;}
+  .price-amt span{font-size:17px;font-weight:500;color:var(--ink-soft);}
+  .price-note{font-size:13.5px;color:var(--ink-soft);margin-bottom:22px;}
+  .price-feat{list-style:none;padding:0;margin:0 0 26px;font-size:14.5px;color:var(--ink);}
+  .price-feat li{padding:8px 0;border-top:1px solid var(--line);display:flex;gap:8px;}
+  .price-feat li:first-child{border-top:none;}
+  .price-feat li::before{content:"✓";color:var(--accent);font-weight:700;}
+  .founding-banner{
+    max-width:820px;margin:0 auto 28px;background:linear-gradient(90deg,#0071e3,#e0116f);
+    border-radius:18px;padding:18px 26px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  }
+  .founding-banner .ftitle{font-weight:700;font-size:16px;}
+  .founding-banner .fsub{font-size:13px;opacity:0.9;}
+
+  /* CTA split */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1180px;margin:0 auto;}
+  .split-card{border-radius:24px;padding:44px;position:relative;overflow:hidden;background:var(--surface);}
+  .split-card h3{font-size:28px;margin:0 0 10px;font-weight:700;letter-spacing:-0.01em;}
+  .split-card p{color:var(--ink-soft);font-size:15.5px;line-height:1.5;margin:0 0 22px;max-width:36ch;}
+
+  footer{padding:32px 22px 56px;color:var(--ink-soft);font-size:12.5px;display:flex;justify-content:space-between;border-top:1px solid var(--line);max-width:1180px;margin:0 auto;flex-wrap:wrap;gap:10px;}
+
+  /* ---------- auth views ---------- */
+  .auth-shell{max-width:420px;margin:80px auto;background:var(--white);border:1px solid var(--line);border-radius:24px;padding:40px;}
+  .auth-shell h2{font-size:28px;margin:0 0 8px;font-weight:700;letter-spacing:-0.01em;}
+  .auth-shell .sub{font-size:15px;margin-bottom:26px;max-width:none;text-align:left;}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin:16px 0 6px;}
+  input[type=text], input[type=tel], input[type=number], select, textarea{
+    width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--ink-faint);font-family:var(--font);font-size:15px;background:var(--surface-2);color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{border-color:var(--accent);outline:none;}
+  .auth-submit{width:100%;margin-top:24px;justify-content:center;}
+  .switch-role{margin-top:18px;text-align:center;font-size:13.5px;color:var(--ink-soft);}
+  .switch-role a{color:var(--accent);font-weight:600;}
+  .quickpick{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+  .quickpick button{padding:7px 14px;border-radius:980px;border:1px solid var(--line);background:var(--surface-2);font-size:12.5px;font-weight:500;}
+  .quickpick button:hover{background:var(--ink-faint);}
+
+  /* ---------- consumer dashboard ---------- */
+  .dash-header{display:flex;justify-content:space-between;align-items:center;padding:30px 0 10px;flex-wrap:wrap;gap:14px;}
+  .id-card{
+    background:linear-gradient(135deg,#000 0%, #2c2c2e 100%);color:#fff;
+    border-radius:24px;padding:28px 30px;display:flex;justify-content:space-between;align-items:center;
+    margin:18px 0 40px;
+  }
+  .id-left{display:flex;align-items:center;gap:16px;}
+  .avatar{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;}
+  .id-name{font-size:19px;font-weight:700;}
+  .id-phone{font-size:12.5px;opacity:0.6;}
+  .id-right{text-align:right;}
+  .id-right .num{font-size:26px;font-weight:700;}
+  .id-right .lbl{font-size:11px;opacity:0.65;letter-spacing:0.04em;text-transform:uppercase;}
+
+  .merchant-card{background:var(--white);border:1px solid var(--line);border-radius:20px;padding:26px;margin-bottom:16px;}
+  .merchant-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+  .merchant-card-head h3{font-size:20px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .merchant-points{font-size:13px;color:var(--accent);font-weight:700;}
+  .reward-row{padding:14px 0;border-top:1px solid var(--line);}
+  .reward-row:first-child{border-top:none;}
+  .reward-row .rname{font-weight:700;font-size:14.5px;margin-bottom:8px;}
+  .visit-list{margin-top:10px;font-size:13.5px;}
+  .visit-item{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);color:var(--ink-soft);}
+  .visit-item:first-child{border-top:none;}
+  .visit-item .vstyle{color:var(--ink);font-weight:600;}
+  .visit-item .vpts{color:var(--accent);font-weight:600;}
+  .tag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:980px;text-transform:uppercase;letter-spacing:0.03em;}
+  .tag.HAIR{background:rgba(224,17,111,0.1);color:var(--rose);}
+  .tag.NAIL{background:rgba(169,129,63,0.12);color:var(--gold);}
+  .tag.SPA{background:rgba(13,138,95,0.1);color:var(--sage);}
+
+  /* ---------- business portal ---------- */
+  .portal-head{display:flex;justify-content:space-between;align-items:center;padding:28px 0 6px;flex-wrap:wrap;gap:14px;}
+  .portal-head h2{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
+  .pending-banner{background:#fff8e6;border:1px solid #f0d98c;color:#8a6d00;padding:14px 18px;border-radius:14px;font-size:14px;margin:18px 0;}
+  .portal-tabs{display:flex;gap:6px;margin:20px 0 30px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .ptab{padding:12px 4px;margin-right:22px;font-weight:600;font-size:14px;color:var(--ink-soft);border-bottom:2px solid transparent;background:none;border-radius:0;}
+  .ptab.active{color:var(--ink);border-bottom-color:var(--accent);}
+  .ptab-panel{display:none;}
+  .ptab-panel.active{display:block;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border-radius:16px;overflow:hidden;margin-bottom:34px;}
+  .stat-box{background:var(--white);padding:20px;}
+  .stat-box .num{font-size:24px;font-weight:700;color:var(--accent);}
+  .stat-box .lbl{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+
+  .panel-grid{display:grid;grid-template-columns:340px 1fr;gap:28px;align-items:start;}
+  .panel-form{background:var(--surface-2);border:1px solid var(--line);border-radius:18px;padding:24px;}
+  .panel-form h4{font-size:18px;margin:0 0 4px;font-weight:700;}
+  .panel-form .hint{font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  .list-card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:14px;}
+  .list-card .lc-name{font-weight:700;font-size:14.5px;}
+  .list-card .lc-meta{font-size:12.5px;color:var(--ink-soft);}
+  .toggle{padding:7px 13px;border-radius:980px;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);}
+  .toggle.active{background:rgba(13,138,95,0.1);color:var(--sage);border-color:transparent;}
+  .toggle.inactive{background:rgba(224,17,111,0.08);color:var(--rose);border-color:transparent;}
+
+  table.ledger{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.ledger th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-soft);padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.ledger td{padding:10px 10px;border-bottom:1px solid var(--line);}
+  table.ledger td.pts{color:var(--accent);font-weight:700;}
+
+  .toast{
+    position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:var(--ink);color:var(--white);padding:15px 24px;border-radius:14px;font-size:14.5px;font-weight:500;
+    z-index:90;transition:opacity .35s ease, transform .35s ease;pointer-events:none;max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:860px){
+    .split{grid-template-columns:1fr;}
+    .steps{grid-template-columns:1fr;}
+    .panel-grid{grid-template-columns:1fr;}
+    .stat-row{grid-template-columns:repeat(2,1fr);}
+    .pricing-grid{grid-template-columns:1fr;}
+    .topbar{padding:0 14px;}
+    main{padding:0 16px;}
+    section.block{padding:64px 16px;}
+  }
+
+/* --- Migration shim (the only rule not lifted verbatim from the original) ---
+   React mounts into <div id="root">, which the original page did not have.
+   `display:contents` removes that wrapper from the box tree entirely, so the
+   card stays a direct flex child of <body> and `position:sticky` still resolves
+   against the viewport — i.e. layout is identical to the pre-migration DOM. */
+#root{display:contents;}
