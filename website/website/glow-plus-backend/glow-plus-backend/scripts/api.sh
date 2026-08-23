@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Glow+ authed request helper  (T10)
+#
+# Logs in as a seeded account, caches the JWT, and reuses it for later calls so
+# per-task testing doesn't mean re-pasting tokens.
+#
+#   ./scripts/api.sh merchant GET  /bookings
+#   ./scripts/api.sh consumer GET  /bookings/me
+#   ./scripts/api.sh consumer POST /bookings '{"merchantId":"...","styleId":"...","startTime":"..."}'
+#   ./scripts/api.sh public   GET  /bookings/availability?merchantId=x&styleId=y&date=2026-08-24
+#   ./scripts/api.sh token merchant     # print just the token
+#   ./scripts/api.sh reset              # drop cached tokens
+#
+# Accounts come from `npm run seed`. Requires the API running on $API_BASE.
+set -euo pipefail
+
+API_BASE="${API_BASE:-http://localhost:4000}"
+CACHE_DIR="${TMPDIR:-/tmp}/glow-tokens"
+mkdir -p "$CACHE_DIR"
+
+MERCHANT_EMAIL="merchant@glowplus.test"; MERCHANT_PASSWORD="Merchant123!"
+CONSUMER_EMAIL="consumer@glowplus.test"; CONSUMER_PASSWORD="Consumer123!"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+# Logs in if there's no cached token, or if the cached one is rejected.
+get_token() {
+  local role="$1"
+  local cache="$CACHE_DIR/$role.jwt"
+  local path email password
+  if [[ -s "$cache" ]] && curl -sf -o /dev/null \
+      -H "Authorization: Bearer $(cat "$cache")" "$API_BASE/bookings/me" 2>/dev/null; then
+    cat "$cache"; return
+  fi
+
+  case "$role" in
+    merchant) path=/merchants/login; email=$MERCHANT_EMAIL; password=$MERCHANT_PASSWORD ;;
+    consumer) path=/auth/login;      email=$CONSUMER_EMAIL; password=$CONSUMER_PASSWORD ;;
+    *) die "unknown role '$role' (use merchant|consumer|public)" ;;
+  esac
+
+  local body token
+  body=$(curl -s -X POST "$API_BASE$path" -H 'Content-Type: application/json' \
+           -d "{\"email\":\"$email\",\"password\":\"$password\"}")
+  token=$(printf '%s' "$body" | sed -nE 's/.*"token"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')
+  [[ -n "$token" ]] || die "login failed for $role. Is the API up and seeded (npm run seed)? Response: $body"
+  printf '%s' "$token" > "$cache"
+  printf '%s' "$token"
+}
+
+case "${1:-}" in
+  reset) rm -f "$CACHE_DIR"/*.jwt 2>/dev/null || true; echo "cached tokens cleared"; exit 0 ;;
+  token) get_token "${2:?usage: api.sh token <merchant|consumer>}"; echo; exit 0 ;;
+  "")    die "usage: api.sh <merchant|consumer|public> <METHOD> <path> [json-body]" ;;
+esac
+
+ROLE="$1"; METHOD="${2:?missing METHOD}"; RAW_PATH="${3:?missing path}"; BODY="${4:-}"
+PATH_ONLY="/${RAW_PATH#/}"
+
+args=(-s -w '\n--- HTTP %{http_code} ---\n' -X "$METHOD" "$API_BASE$PATH_ONLY")
+[[ "$ROLE" != "public" ]] && args+=(-H "Authorization: Bearer $(get_token "$ROLE")")
+[[ -n "$BODY" ]] && args+=(-H 'Content-Type: application/json' -d "$BODY")
+
+curl "${args[@]}"
