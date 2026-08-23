@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **46 passing** (`npm test`) — 6 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard |
+| Tests | ✅ Jest configured, **49 passing** (`npm test`) — 7 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, trialEndingReminder job |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -166,8 +166,10 @@ Frontend: new standalone page `glow-plus-web/booking.html` → `/consumer/bookin
 
 Suite now **46 passing** (was 40).
 
-➡️ **NEXT: Phase 2 continues — T19 (trial-ending email — testable against real recipients thanks to T60), T20 (`invoice.payment_failed` via Stripe CLI)**.
-⚠️ **The email blocker is gone** — F27 is fixed and R6 lifted, so T19/T20 can be verified against any recipient address, not just the account owner's.
+✅ **T19 — done 2026-08-24 (session 6).** `TrialEndingReminderJob` had never actually been executed — only the code existed. Triggered it directly (booted a Nest application context, called `job.run()`) against real Postgres and real Resend, rather than waiting for its daily 9am cron or faking the system clock in the running dev server. Seeded two `TRIALING` subscriptions with `trialEnd` inside the job's 3–4-day window — the seeded merchant, plus a disposable second merchant at Resend's own `delivered@resend.dev` test address specifically to prove full **delivery**, not just a 200 (`merchant@glowplus.test` isn't a real inbox, so it can only ever show `sent`). Confirmed both back from the live Resend API: `sent` and **`delivered`** respectively, correct subject/content. **No bug found** — the job runs exactly as written. Checked the related webhook backup path (`billing.service.ts` `onTrialWillEnd` / `customer.subscription.trial_will_end`) while here; it's wired, so the cron is genuinely a backup, not the only path. Test data cleaned up after. Added `trialEndingReminder.job.spec.ts` (3 specs: date-window query, emails every match, no-op with no throw when nothing matches). Suite now **49 passing** (was 46).
+
+➡️ **NEXT: Phase 2 — T20 (`invoice.payment_failed` via Stripe CLI trigger; verify handler + email).**
+⚠️ **The email blocker is gone** — F27 is fixed and R6 lifted, so T20 can be verified against any recipient address, not just the account owner's. The `onPaymentFailed` handler already exists in `billing.service.ts` (case `'invoice.payment_failed'`) — T20 is triggering and watching it, same pattern as T19, likely via `stripe trigger invoice.payment_failed` through the already-running Stripe CLI forwarding rather than a manual DB seed.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
