@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -14,6 +15,11 @@ async function bootstrap() {
     // billing.controller.ts reads.
     rawBody: true,
   });
+
+  // One error envelope for every failure: { statusCode, message, error }.
+  // `message` is always a string — ValidationPipe's array moves to `details`,
+  // because the RN client renders body.message directly (client.js:25).
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

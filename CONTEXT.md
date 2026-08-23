@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **8 passing** (`npm test`) |
+| Tests | ✅ Jest configured, **28 passing** (`npm test`) — 3 suites: jwt.util, health controller, exception filter |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,7 +121,7 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **START PHASE 1 AT T15**
+## 8. EXACTLY where to resume — **PHASE 1 IS COMPLETE. START PHASE 2 AT T17**
 
 > **Session 3 note (2026-08-23):** the user asked, out of task order, for the
 > HTML website to be converted to React + Vite. That is **done and verified** —
@@ -138,10 +138,24 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 ⏸️ **Deferred by agreement:** T6 (Resend send — do it with T19/T20)
 🟡 **Partly done early:** T27 (JWT secret rotated because it was live-exploitable)
 
-➡️ **NEXT: T15 — `GET /health`**, then **T16 — global exception filter**. That completes Phase 1.
-Then Phase 2 (T17–T20), which is the client's stated priority #1.
+> **Session 4 (2026-08-23) closed Phase 1.** T15 and T16 done, tested against the
+> running API and pushed. The user asked to stop at the end of Phase 1 and will
+> give the go-ahead for Phase 2 separately — **do not start T17 without it.**
+
+✅ **T15 — `GET /health` + `GET /health/ready`.** Split liveness/readiness on purpose; readiness returns **503 + Prisma code** when the DB is unreachable. Verified by actually stopping the Postgres container: liveness stayed 200, readiness went 503 `P1001`, both recovered on restart with no API restart.
+✅ **T16 — global exception filter.** `{ statusCode, message, error, details? }` for every failure. `message` is now always a string and `error` is always present — **neither was true before**. Prisma errors mapped (P2002→409, P2025→404, P1001→503) instead of collapsing to a blank 500.
+
+➡️ **NEXT: Phase 2 — T17 (subscription cancel/resume), T18 (booking end-to-end), T19 (trial-ending email), T20 (`invoice.payment_failed`)**, the client's stated priority #1.
+⚠️ **Read F27 before starting T19** — signup already fails at the email step for any address that isn't the Resend account owner's, which will shape how T19/T20 can be tested. T60 (domain verification) lifts it.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
+
+**New findings from session 4** (both reproduced against the running API):
+
+| # | Finding |
+|---|---|
+| **F27** | **`POST /auth/signup` returns 500 *after* creating the account.** The user row is committed, then `sendVerificationEmail` throws — Resend answers `403 "You can only send testing emails to your own email address"` [R6]. So the client sees a failure, cannot retry (409 on the second attempt), and never gets a verification email. **Pre-existing, not caused by T16.** The email send must not be able to fail the signup. Blocks clean testing of **T19/T21**; **T60** removes the underlying cause. |
+| **F28** | **Signup's duplicate check is a check-then-create race.** Four concurrent signups on one fresh email: 1 succeeded, **3 raised Prisma `P2002`** — bare 500s before T16, correct 409s after. The filter makes it degrade safely; the real fix (drop the pre-check, rely on the unique constraint) belongs to **T31**. |
 
 **New findings from session 2** (all verified by running the code, not by reading it):
 

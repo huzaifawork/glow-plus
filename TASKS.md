@@ -71,6 +71,8 @@ Rules:
 | F24 | **The auth-switch links never worked.** A "Go to business login" / "Go to customer login" anchor was nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation — destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing | `Glow-Plus-Website .html:426,466` vs `applyStaticTranslations()` |
 | F25 | **Mobile overflows horizontally** — at a 390px viewport the document is 401px wide because the `.topnav` buttons don't wrap. Measured identically on the original, so it is pre-existing, not migration damage → **T39** | Chromium, both versions, session 3 |
 | F26 | **`footer_note` is now factually wrong** — it reads "data is shared & persisted live for everyone previewing this page", true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again | `translations.js`, key `footer_note` |
+| F27 | **`POST /auth/signup` returns 500 *after* creating the account.** `signupConsumer` creates the user and then awaits `sendVerificationEmail`, which throws when Resend refuses the recipient — `403 "You can only send testing emails to your own email address"` [R6]. The row is committed, so the client sees a failure, cannot retry (409), and never receives a verification email. **Pre-existing, not introduced by T16** — before the filter it was the same 500, just without the `error` key. The email send should not be able to fail the signup: queue it, or catch and surface via `POST /auth/resend-verification`. → **T19/T21/T60** | reproduced live 2026-08-23, backend log |
+| F28 | **Signup's duplicate check is a check-then-create race.** `findUnique` then `create` with no transaction or constraint handling. Four concurrent signups on one fresh email: 1 succeeded, **3 raised Prisma `P2002`** — which before T16 were bare 500s. T16 now maps them to a correct 409, so the race degrades safely, but the real fix is to drop the pre-check and rely on the unique constraint. → **T31** | reproduced live 2026-08-23 |
 | F14 | **The backend source does not compile.** `nest start` fails with 7 TS2307 errors before it reaches the DB | dry run 2026-08-23 |
 | F15 | **`bookings/` + `business-hours/` exist ONLY at `src/modules/booking/src/modules/…`** — an unzipped delivery dumped in with its full path preserved, so every relative import (`../../prisma/prisma.service`) resolves to nothing. There is no top-level `src/modules/bookings/` | `find src -type f` |
 | F16 | `reward-rules` is genuinely duplicated — a real wired copy at `src/modules/reward-rules/` and a second inside the nested delivery | same |
@@ -179,7 +181,29 @@ Rules:
   **Error message is not echoed back** — only the Prisma code. The driver message can carry the DB host and credentials; `code` alone is enough to diagnose and safe to expose publicly.
   **Tests:** `src/modules/health/health.controller.spec.ts` — 4 specs incl. the 503 path and a leak check. Suite now **12 passing** (was 8).
   **Verify independently:** `curl -i http://localhost:4000/health` and `curl -i http://localhost:4000/health/ready`.
-- [ ] **T16 — Global exception filter** → stable `{ statusCode, message, error }` envelope (the RN client already reads `body.message`).
+- [x] **T16 — Global exception filter.** ✅ **DONE & VERIFIED 2026-08-23.** `src/common/all-exceptions.filter.ts`, registered in `main.ts`. Envelope is now `{ statusCode: number, message: string, error: string, details?: string[] }` for **every** failure.
+  **Two things were genuinely broken, both confirmed by calling the running API before the change:**
+  1. **Validation returned `message` as an ARRAY.** The RN client does `throw new Error(body.message || …)` (`client.js:25`), so an array reached the user comma-joined by `Error`'s own stringification — working by accident and unrenderable as one clean message. Now `message` is the first validation error and **the full list moves to `details`**, so nothing is lost but the type never changes per response.
+  2. **Any non-`HttpException` returned `{"statusCode":500,"message":"Internal server error"}` with NO `error` key.** So the "stable envelope" was not stable in exactly the case a client most needs to branch on.
+
+  **Prisma errors are now mapped instead of collapsing to a blank 500:** `P2002`→**409** (+ `details: ["email is already taken"]`), `P2025`→404, `P2003`/`P2014`→400, `P1001`/`P1002`/`P1008`→**503** (transient and retryable — matches what T15's readiness probe reports for the same condition). Detection is by code shape `/^P\d{4}$/`, not by importing Prisma's error classes, so it survives a client regeneration and still catches errors that crossed a module boundary and lost their prototype.
+  **Nothing unexpected is echoed to the client.** Unmapped errors return a generic 500; the driver message (which quotes tables, columns, the DB host, and in one real case an account owner's personal email) goes to the log only.
+  **Logging is split by class:** 5xx → `logger.error` **with the stack**; 4xx → a one-line `logger.warn`. Logging every 401 at error level would bury real faults.
+
+  **Evidence — every row is a real request against the running API:**
+  | Case | Before | After |
+  |---|---|---|
+  | Validation (`POST /auth/signup`, bad email + short password) | `{"message":["email must be an email","password must be…"],…}` — **array** | `{"statusCode":400,"message":"email must be an email","error":"Bad Request","details":[…2 items]}` |
+  | 401 thrown in **middleware** (`GET /visits`) | `{message,error,statusCode}` | `{"statusCode":401,"message":"Missing bearer token","error":"Unauthorized"}` — **the filter does catch middleware exceptions**, which was not a given |
+  | Malformed JSON body | 400, string message | `{"statusCode":400,"message":"Unexpected end of JSON input","error":"Bad Request"}` |
+  | Wrong password | 401 | `{"statusCode":401,"message":"Invalid email or password","error":"Unauthorized"}` |
+  | **DB stopped** → `POST /auth/login` | `{"statusCode":500,"message":"Internal server error"}` — **no `error` key** | `{"statusCode":503,"message":"The service is temporarily unavailable","error":"Service Unavailable"}` |
+  | **Real P2002** — 4 concurrent signups on one fresh email | bare 500 | 3× `{"statusCode":409,…,"details":["email is already taken"]}` [F28] |
+  | Successful login | 201 | 201 — unchanged |
+  | `GET /health`, `GET /health/ready` | — | unchanged; they set status directly and never raise |
+
+  **Tests:** `src/common/all-exceptions.filter.spec.ts` — 16 specs, incl. a table asserting the envelope invariant across 8 exception kinds (`null` and a thrown string included), both leak checks, and the log-level split. Suite now **28 passing** (was 12).
+  **Verify independently:** `curl -i -X POST http://localhost:4000/auth/signup -H "Content-Type: application/json" -d '{"email":"nope","password":"x","name":""}'`
 
 # PHASE 2 — Finish what's mid-test *(client priority #1)*
 
