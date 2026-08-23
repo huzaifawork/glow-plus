@@ -1,12 +1,14 @@
 # ---- Secrets -------------------------------------------------------------
 # .env holds live Stripe + Resend credentials. Never commit it.
 .env
-.env.local
-.env.*.local
+# Catch every variant (.env.local, .env.production, .env.bak, .env.save …)
+# so a stray backup of a live .env can never become committable.
+.env.*
 *.pem
 *.key
 
 # .env.example IS committed — it must contain placeholders only.
+!.env.example
 
 # ---- Dependencies --------------------------------------------------------
 node_modules/
