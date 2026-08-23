@@ -306,7 +306,23 @@ Rules:
   **Test data cleaned up** — both seeded subscriptions and the disposable merchant deleted after verification; the seed script's baseline (`{merchants:1, users:1, styles:3, rewardRules:2, businessHours:7}`) is unaffected.
   **Tests:** `trialEndingReminder.job.spec.ts` — 3 specs (correct date-window query, emails every match with its own `trialEnd`, no-op with no throw when nothing matches). Suite now **49 passing** (was 46).
   **Verify independently:** the job is cron-triggered, not endpoint-triggered, so there's nothing to click; re-run by seeding a `TRIALING` subscription with `trialEnd` 3.5 days out and calling `TrialEndingReminderJob.run()` from a Nest application context, then checking `GET https://api.resend.com/emails` for the send.
-- [ ] **T20 — Trigger and watch `invoice.payment_failed`** via Stripe CLI; verify handler + email.
+- [x] **T20 — Trigger and watch `invoice.payment_failed`.** ✅ **DONE & VERIFIED 2026-08-24.** `onPaymentFailed` (`billing.service.ts:226`) had never actually fired. Restarted `stripe listen` myself (output captured, same pattern as T7) rather than trusting the pre-existing background process's invisible output, and confirmed its signing secret still matches `.env`'s `STRIPE_WEBHOOK_SECRET` before triggering anything.
+
+  **Two paths verified, not just the happy one:**
+  | Path | Setup | Result |
+  |---|---|---|
+  | **Unmatched customer** | `stripe trigger invoice.payment_failed` (CLI fixture — always creates its own synthetic customer, not tied to any merchant in our DB) | Webhook **200**, handler's `findFirst` returned nothing, **no-op** — DB re-checked after, merchant row untouched. This is the honest default case for real Stripe traffic against unlinked/deleted customers, and it degrades safely. |
+  | **Matched merchant** | Linked the seeded merchant's `stripeCustomerId` to the fixture's real Stripe test customer (`cus_V7z…`), then **replayed the exact same event** with a freshly computed, genuinely valid `Stripe-Signature` (`stripe.webhooks.generateTestHeaderString`) — same technique as constructing any other authentic webhook call, not a mock | Webhook **200**; merchant `status` **ACTIVE → PAST_DUE**, confirmed via direct Prisma query |
+
+  **Email confirmed by actual delivery, not just a 200 from the send call** (same standard as T6/T19): sent to `merchant@glowplus.test` → Resend `last_event: sent` (not a real inbox); replayed a second time against `merchant@glowplus.test` temporarily repointed at Resend's own `delivered@resend.dev` → **`last_event: delivered`**. Pulled the delivered email's HTML back from the Resend API and confirmed it contains the real `invoice.stripe.com` link (`invoice.hosted_invoice_url` from the event payload) and **not** the literal string `undefined` — the template's only piece of dynamic data actually resolved.
+
+  **No bug found** — like T19, the handler runs exactly as written: correct customer lookup, correct status transition, correct email template and data. The webhook's blanket `default: break` for unhandled event types (confirmed harmless here — `customer.updated`, `charge.failed`, `payment_intent.*` etc. all came through the same forwarding session and 200'd without side effects) means this event type was reachable and wired correctly the whole time; it just had never been exercised.
+
+  **Test data cleaned up after:** merchant restored to exact seed baseline (`status: ACTIVE`, `stripeCustomerId: null`, `email: merchant@glowplus.test`); the three orphaned Stripe test customers created while finding a workable decline technique (see below) were deleted via the API; no `_tmp_*.js` scripts left in the repo (`git status` clean throughout).
+
+  **One dead end worth recording:** the obvious approach — attach a Stripe test "always-declines" PaymentMethod (`pm_card_chargeDeclined`) to a real customer, then pay a real invoice — does not reach the invoice-payment step at all. Those tokens are designed to fail on **any** use, including a bare `paymentMethods.attach()`, before an invoice is ever involved. Raw test PANs are blocked outright on this account ("raw card data APIs" not enabled, by design — a real security control, not a bug). `stripe trigger` plus a same-secret signed replay was the reliable path.
+  **Suite unchanged: 49 passing** (no new code, so no new tests — consistent with T19, which also found no bug).
+  **Verify independently:** no UI surface (webhook-only, like T19) — re-run by triggering `stripe trigger invoice.payment_failed` with `stripe listen` forwarding to `:4000/billing/webhook` and watching the CLI's own output for the `200`.
 
 # PHASE 3 — Structural gaps _(client priority #2)_
 
