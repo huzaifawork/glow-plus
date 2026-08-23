@@ -69,8 +69,8 @@ Get-NetTCPConnection -LocalPort 4000 -State Listen | %{ Stop-Process -Id $_.Owni
 **The client has given access to Stripe, Resend and Hostinger.** Testing that previously needed the client no longer does.
 
 - **Stripe** — key in `.env` is **`sk_test_` (test mode)**, so experiments cannot move real money. Webhook forwarding works end to end.
-- **Resend** — key is live and valid, but **no domain is verified** (`GET /domains` → `[]`), so `onboarding@resend.dev` still delivers **only to the Resend account owner's address**. T6 was deferred by agreement to whenever T19/T20 (the email tasks) are done.
-- **Hostinger** — a domain is available. Verifying it in Resend (T60) is mostly DNS records and would lift the "self-addressed only" ceiling for **every** email task. Worth pulling forward when email work starts.
+- **Resend** — ✅ **`mail.glowplusmember.com` is VERIFIED (2026-08-24, T60).** `EMAIL_FROM` is now `Glow+ <noreply@mail.glowplusmember.com>`. Email delivers to **any** recipient — confirmed `last_event: delivered` to a non-owner address. **[R6] is lifted** and **T6 is done**.
+- **Hostinger** — domain is **`glowplusmember.com`**, on Hostinger nameservers (`pixel/byte.dns-parking.com`). The four Resend DNS records live under `mail.` (DKIM TXT, two CNAMEs, plus `_dmarc` at the root). The root domain itself is still free of MX/TXT, deliberately, so the client can add real mailboxes later without colliding with Resend.
 
 ⚠️ **Never paste keys into chat.** Put them straight into the gitignored `.env`; they can be read from disk.
 
@@ -145,8 +145,10 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 ✅ **T15 — `GET /health` + `GET /health/ready`.** Split liveness/readiness on purpose; readiness returns **503 + Prisma code** when the DB is unreachable. Verified by actually stopping the Postgres container: liveness stayed 200, readiness went 503 `P1001`, both recovered on restart with no API restart.
 ✅ **T16 — global exception filter.** `{ statusCode, message, error, details? }` for every failure. `message` is now always a string and `error` is always present — **neither was true before**. Prisma errors mapped (P2002→409, P2025→404, P1001→503) instead of collapsing to a blank 500.
 
-➡️ **NEXT: Phase 2 — T17 (subscription cancel/resume), T18 (booking end-to-end), T19 (trial-ending email), T20 (`invoice.payment_failed`)**, the client's stated priority #1.
-⚠️ **Read F27 before starting T19** — signup already fails at the email step for any address that isn't the Resend account owner's, which will shape how T19/T20 can be tested. T60 (domain verification) lifts it.
+✅ **T60 + T6 — done 2026-08-24, out of phase order** (agreed: they blocked half of Phase 2). `mail.glowplusmember.com` verified in Resend; full loop proven — signup → email **delivered** → link from the delivered email → `/auth/verify-email` → DB updated → replay refused. **F27 resolved.**
+
+➡️ **NEXT: Phase 2 — T17 (subscription cancel/resume), T18 (booking end-to-end), T19 (trial-ending email), T20 (`invoice.payment_failed`)**, the client's stated priority #1. **T19/T20 are now testable against real recipients.**
+⚠️ **The email blocker is gone** — F27 is fixed and R6 lifted, so T19/T20 can be verified against any recipient address, not just the account owner's.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
@@ -156,7 +158,7 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 |---|---|
 | **F29** | **🔴 Cross-tenant data leak.** A **consumer** token on `GET /styles` returns **200 and every style row**. 19 call sites pass `req.merchantId!`; a consumer has no `merchantId`, so `undefined` reaches `findMany({ where: { merchantId } })` and **Prisma drops an `undefined` filter**, returning the whole table. The seed has one merchant, which is why it looked plausible. There is **exactly one role check in the entire codebase** and it picks a branch rather than denying. → **T29** |
 | **F30** | **🔴 The subscription paywall is inert.** `RequireActiveSubscriptionMiddleware` is registered for `styles/(.*)`, `visits/(.*)`, `reward-rules/(.*)` and matches **none** of the real paths. With the merchant forced to **`SUSPENDED`**, `GET /styles` still returned 200 and `POST /styles` still returned **201 and created the row** — a revenue control that does nothing. Same class as [F3]. Its own `if (!req.merchantId)` guard **would have caught F29** had it ever run. → **T29** |
-| **F27** | **`POST /auth/signup` returns 500 *after* creating the account.** The user row is committed, then `sendVerificationEmail` throws — Resend answers `403 "You can only send testing emails to your own email address"` [R6]. So the client sees a failure, cannot retry (409 on the second attempt), and never gets a verification email. **Pre-existing, not caused by T16.** The email send must not be able to fail the signup. Blocks clean testing of **T19/T21**; **T60** removes the underlying cause. |
+| **F27** | ✅ **RESOLVED 2026-08-24 by T60** — signup now returns **201** and the email is delivered. Was: **`POST /auth/signup` returned 500 *after* creating the account.** The user row is committed, then `sendVerificationEmail` throws — Resend answers `403 "You can only send testing emails to your own email address"` [R6]. So the client sees a failure, cannot retry (409 on the second attempt), and never gets a verification email. **Pre-existing, not caused by T16.** The email send must not be able to fail the signup. Blocks clean testing of **T19/T21**; **T60** removes the underlying cause. |
 | **F28** | **Signup's duplicate check is a check-then-create race.** Four concurrent signups on one fresh email: 1 succeeded, **3 raised Prisma `P2002`** — bare 500s before T16, correct 409s after. The filter makes it degrade safely; the real fix (drop the pre-check, rely on the unique constraint) belongs to **T31**. |
 
 **New findings from session 2** (all verified by running the code, not by reading it):
