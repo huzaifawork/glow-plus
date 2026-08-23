@@ -5,8 +5,14 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    // Stripe webhooks need the raw request body to verify signatures —
-    // that's configured per-route in billing.module.ts, not globally here.
+    // Stripe webhooks need the raw request body to verify signatures.
+    // billing.module.ts applies express.raw() to the webhook route, but that
+    // is not enough on its own: Nest's global JSON body parser runs first and
+    // consumes the stream, so express.raw() no-ops and req.rawBody is never
+    // set — every event then fails constructEvent() with a 400. This flag
+    // makes Nest retain the untouched bytes on req.rawBody, which is what
+    // billing.controller.ts reads.
+    rawBody: true,
   });
 
   app.useGlobalPipes(

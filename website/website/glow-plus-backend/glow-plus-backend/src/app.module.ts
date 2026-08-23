@@ -10,6 +10,8 @@ import { VisitsModule } from './modules/visits/visits.module';
 import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
+import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
 import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveSubscription';
@@ -26,6 +28,8 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     RewardRulesModule,
     BillingModule,
     AdminModule,
+    BookingsModule,
+    BusinessHoursModule,
     JobsModule,
   ],
 })
@@ -38,6 +42,13 @@ export class AppModule implements NestModule {
         { path: 'merchants/signup', method: RequestMethod.POST },
         { path: 'merchants/login', method: RequestMethod.POST },   
         { path: 'billing/webhook', method: RequestMethod.POST },
+        // Public by design — a consumer browses times and opening hours
+        // before creating an account. Both controllers document these as
+        // public; AuthMiddleware throws 401 without a bearer token, so they
+        // must be excluded here or they are not actually public.
+        // GET only: PUT /business-hours (merchant-only) stays protected.
+        { path: 'bookings/availability', method: RequestMethod.GET },
+        { path: 'business-hours/(.*)', method: RequestMethod.GET },
       )
       .forRoutes('*');
 
