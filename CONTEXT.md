@@ -34,8 +34,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 
 | Thing | Status |
 |---|---|
-| Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop
-esourcesin\docker.exe"` |
+| Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 11 tables + `_prisma_migrations`** (was 0 applied) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
 | Website | ✅ Runs on :3000 (`glow-plus-frontend`, `npm start`) |
@@ -48,8 +47,7 @@ esourcesin\docker.exe"` |
 **Restart everything:**
 ```
 # Postgres (if down)
-& "$env:LOCALAPPDATA\Programs\DockerDesktop
-esourcesin\docker.exe" compose -f docker/docker-compose.yml up -d postgres
+& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe" compose -f docker/docker-compose.yml up -d postgres
 # Backend  (from website/website/glow-plus-backend/glow-plus-backend)
 npm run start:dev
 # Website  (from website/website/glow-plus-frontend)
