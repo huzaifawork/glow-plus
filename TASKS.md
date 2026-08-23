@@ -159,7 +159,26 @@ Rules:
   **Also required, not just the imports:** `AuthMiddleware` **throws 401 when no bearer token is present**, and it is applied to `'*'`. Both controllers document public endpoints (`bookings.controller.ts:14` "browsing available times shouldn't require an account", `business-hours.controller.ts:10`), so merely importing the modules would have left those endpoints 401-ing and *not* public. Added two exclusions, scoped to `GET` so the merchant-only `PUT /business-hours` stays protected: `bookings/availability` and `business-hours/(.*)`. (Partially pre-empts T48.)
   **Evidence:** boot log shows `BookingsModule` + `BusinessHoursModule` dependencies initialized and **all 10 routes mapped** — `/bookings/availability`, `/bookings` (POST, GET), `/bookings/me`, `/bookings/:id/{cancel,confirm,no-show,complete}`, `/business-hours/:merchantId`, `/business-hours` (PUT). [F18] is resolved: booking routes now register.
   **Note for T29:** merchant-only booking routes are **not** behind `RequireActiveSubscription` (it's path-based, and `bookings/*` mixes consumer and merchant routes — blanket-applying it would break consumer booking). Deliberate; flagged for the authorization audit.
-- [ ] **T15 — Add `GET /health`.** Needed for deploy checks. [F13]
+- [x] **T15 — Add `GET /health`.** ✅ **DONE & VERIFIED 2026-08-23.** [F13]
+  **Two routes, deliberately split** (`src/modules/health/health.controller.ts`):
+  - `GET /health` — **liveness**. Process is up. No DB, no I/O. `{ status, uptime, timestamp }`.
+  - `GET /health/ready` — **readiness**. Runs `SELECT 1` through Prisma. `{ status, database: { status, latencyMs }, timestamp }`, and **503** with `database.code` when the DB is unreachable.
+
+  **Why two and not one:** a single DB-checking `/health` is the version that bites later. On Vercel (Phase 8) a frequently-polled probe that opens a DB connection every time eats the connection budget T55's pooling exists to protect; and a liveness probe that fails during a DB blip makes the platform kill a process that is actually fine. Split, the platform polls the cheap one and the deploy gate polls the honest one.
+  **Public by necessity:** both are excluded from `AuthMiddleware` in `app.module.ts` (GET only). Without that, every probe 401s and reads as "the API is down".
+  **Evidence — the failure path was tested, not just the happy one:**
+  | Check | Result |
+  |---|---|
+  | `GET /health` no token | **200** `{"status":"ok","uptime":27,…}` |
+  | `GET /health/ready` no token | **200** `{"database":{"status":"up","latencyMs":27}}` |
+  | control: `GET /bookings/me` no token | **401** — auth still enforced elsewhere, the exclusion is scoped |
+  | **Postgres container stopped** → `GET /health` | **200** — liveness correctly unaffected by a DB outage |
+  | **Postgres container stopped** → `GET /health/ready` | **503** `{"status":"error","database":{"status":"down","code":"P1001"}}` |
+  | Postgres restarted → `GET /health/ready` | **200**, `latencyMs: 1` — recovers on its own, no API restart needed |
+
+  **Error message is not echoed back** — only the Prisma code. The driver message can carry the DB host and credentials; `code` alone is enough to diagnose and safe to expose publicly.
+  **Tests:** `src/modules/health/health.controller.spec.ts` — 4 specs incl. the 503 path and a leak check. Suite now **12 passing** (was 8).
+  **Verify independently:** `curl -i http://localhost:4000/health` and `curl -i http://localhost:4000/health/ready`.
 - [ ] **T16 — Global exception filter** → stable `{ statusCode, message, error }` envelope (the RN client already reads `body.message`).
 
 # PHASE 2 — Finish what's mid-test *(client priority #1)*

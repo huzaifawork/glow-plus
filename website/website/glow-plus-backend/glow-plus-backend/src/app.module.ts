@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { PrismaModule } from './prisma/prisma.module';
+import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { MerchantsModule } from './modules/merchants/merchants.module';
 import { StylesModule } from './modules/styles/styles.module';
@@ -21,6 +22,7 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    HealthModule,
     AuthModule,
     MerchantsModule,
     StylesModule,
@@ -38,6 +40,10 @@ export class AppModule implements NestModule {
     consumer
       .apply(AuthMiddleware)
       .exclude(
+        // Deploy/uptime probes carry no bearer token; without this every
+        // health check would 401 and read as "the API is down".
+        { path: 'health', method: RequestMethod.GET },
+        { path: 'health/(.*)', method: RequestMethod.GET },
         { path: 'auth/(.*)', method: RequestMethod.ALL },
         { path: 'merchants/signup', method: RequestMethod.POST },
         { path: 'merchants/login', method: RequestMethod.POST },   
