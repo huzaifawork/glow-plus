@@ -44,6 +44,21 @@ export class MerchantsService {
     return merchant;
   }
 
+  /**
+   * Public salon directory (T18, pulled forward from T43 — the booking flow
+   * needs a way to name a merchant that isn't a raw database id typed into
+   * the frontend). Only ACTIVE merchants are listed: a PENDING one hasn't
+   * been approved yet, and a SUSPENDED/CANCELLED one shouldn't be taking
+   * new bookings. No auth required — a consumer browses before signing up.
+   */
+  async listPublic() {
+    return this.prisma.merchant.findMany({
+      where: { status: 'ACTIVE' },
+      orderBy: { businessName: 'asc' },
+      select: { id: true, businessName: true },
+    });
+  }
+
   /** Used by the admin merchant-approval queue. */
   async listByStatus(status?: string) {
     return this.prisma.merchant.findMany({

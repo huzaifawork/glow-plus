@@ -22,6 +22,10 @@
 import { API_BASE_URL } from './config.js';
 
 const TOKEN_KEY = 'glowplus:token';
+// Separate storage key for consumer sessions (T18). The merchant billing page
+// (T17) and this page's consumer login can both be open in the same browser —
+// one shared key would mean logging in on one silently logs the other out.
+const CONSUMER_TOKEN_KEY = 'glowplus:token:consumer';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -34,39 +38,47 @@ export class ApiError extends Error {
 
 /* --------------------------------------------------------------------------
    Token storage
-   Kept in localStorage so a refresh doesn't log the merchant out. Wrapped in
+   Kept in localStorage so a refresh doesn't log the user out. Wrapped in
    try/catch for the same reason lib/storage.js is: private-mode browsers throw
    on access rather than returning null.
    -------------------------------------------------------------------------- */
-export function getToken() {
+function readToken(key) {
   try {
-    return window.localStorage.getItem(TOKEN_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-export function setToken(token) {
+function writeToken(key, token) {
   try {
-    window.localStorage.setItem(TOKEN_KEY, token);
+    window.localStorage.setItem(key, token);
   } catch {
     /* non-persistent session is better than a crash */
   }
 }
 
-export function clearToken() {
+function removeToken(key) {
   try {
-    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem(key);
   } catch {
     /* ignore */
   }
 }
 
+export const getToken = () => readToken(TOKEN_KEY);
+export const setToken = (token) => writeToken(TOKEN_KEY, token);
+export const clearToken = () => removeToken(TOKEN_KEY);
+
+export const getConsumerToken = () => readToken(CONSUMER_TOKEN_KEY);
+export const setConsumerToken = (token) => writeToken(CONSUMER_TOKEN_KEY, token);
+export const clearConsumerToken = () => removeToken(CONSUMER_TOKEN_KEY);
+
 /* --------------------------------------------------------------------------
    Request
    -------------------------------------------------------------------------- */
-export async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
-  const token = auth ? getToken() : null;
+export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY } = {}) {
+  const token = auth ? readToken(tokenKey) : null;
 
   let res;
   try {
@@ -137,4 +149,45 @@ export function resumeSubscription() {
 
 export function createCheckoutSession(plan = 'MONTHLY') {
   return apiRequest('/billing/checkout', { method: 'POST', body: { plan } });
+}
+
+/* --------------------------------------------------------------------------
+   Endpoints used by the consumer booking page (T18)
+   -------------------------------------------------------------------------- */
+export async function consumerLogin(email, password) {
+  const data = await apiRequest('/auth/login', { method: 'POST', auth: false, body: { email, password } });
+  if (data?.token) setConsumerToken(data.token);
+  return data;
+}
+
+export function listPublicMerchants() {
+  return apiRequest('/merchants/public', { auth: false });
+}
+
+export function listPublicStyles(merchantId) {
+  return apiRequest(`/styles/public/${encodeURIComponent(merchantId)}`, { auth: false });
+}
+
+export function getAvailability(merchantId, styleId, date) {
+  const qs = new URLSearchParams({ merchantId, styleId, date }).toString();
+  return apiRequest(`/bookings/availability?${qs}`, { auth: false });
+}
+
+export function createBooking({ merchantId, styleId, startTime, notes }) {
+  return apiRequest('/bookings', {
+    method: 'POST',
+    tokenKey: CONSUMER_TOKEN_KEY,
+    body: { merchantId, styleId, startTime, notes: notes || undefined },
+  });
+}
+
+export function listMyBookings() {
+  return apiRequest('/bookings/me', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
+export function cancelBooking(id) {
+  return apiRequest(`/bookings/${encodeURIComponent(id)}/cancel`, {
+    method: 'PATCH',
+    tokenKey: CONSUMER_TOKEN_KEY,
+  });
 }

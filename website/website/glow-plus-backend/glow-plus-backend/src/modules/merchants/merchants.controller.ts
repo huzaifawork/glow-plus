@@ -23,6 +23,12 @@ export class MerchantsController {
     return this.merchantAuth.login(dto);
   }
 
+  // Public salon directory — see MerchantsService.listPublic() (T18/T43).
+  @Get('public')
+  listPublic() {
+    return this.merchants.listPublic();
+  }
+
   @Get('me')
   me(@Req() req: AuthedRequest) {
     return this.merchants.getProfile(req.merchantId!);

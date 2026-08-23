@@ -1,0 +1,94 @@
+/* Self-contained, like billing-result.css (T17) — this page ships its own CSS
+   rather than pulling in the main SPA's stylesheet, so it can't collide with
+   the prototype views T35–T38 will eventually replace. Root vars + the
+   brand/card/form/field/err/btn primitives are duplicated from
+   billing-result.css on purpose (same look, independent file). */
+:root{
+  --white:#ffffff; --ink:#1d1d1f; --ink-soft:#86868b; --surface:#f5f5f7;
+  --accent:#0071e3; --sage:#0d8a5f; --rose:#e0116f;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;min-height:100vh;background:var(--surface);font-family:var(--font);
+  color:var(--ink);padding:32px 20px;
+}
+#root{display:flex;justify-content:center;}
+
+.page{max-width:640px;width:100%;}
+.card{
+  background:var(--white);border-radius:20px;padding:32px;width:100%;
+  box-shadow:0 20px 60px -30px rgba(0,0,0,0.25);margin-bottom:20px;
+}
+.card.center{max-width:440px;margin:0 auto;text-align:center;}
+
+.brand{font-size:20px;font-weight:800;margin-bottom:24px;}
+.brand .plus{color:var(--accent);}
+h1{font-size:20px;margin:0 0 6px;font-weight:700;}
+h2{font-size:16px;margin:0 0 14px;font-weight:700;}
+p{color:var(--ink-soft);font-size:14px;line-height:1.55;margin:0 0 8px;}
+
+/* Sign-in / booking form */
+.form{display:flex;flex-direction:column;gap:14px;margin-top:18px;text-align:left;}
+.field{display:flex;flex-direction:column;gap:6px;}
+.field > span{font-size:12.5px;font-weight:600;color:var(--ink);}
+.field input,.field select{
+  font-family:var(--font);font-size:15px;color:var(--ink);
+  padding:11px 13px;border:1px solid #d9d9de;border-radius:10px;
+  background:var(--white);width:100%;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.15);}
+
+.btn{
+  font-family:var(--font);font-size:14.5px;font-weight:600;
+  padding:12px 18px;border-radius:10px;border:1px solid transparent;
+  cursor:pointer;transition:opacity .15s ease;
+}
+.btn:disabled{opacity:.55;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:var(--white);width:100%;}
+.btn-danger{background:var(--white);color:var(--rose);border-color:var(--rose);}
+.btn-quiet{background:transparent;color:var(--ink-soft);border-color:#d9d9de;}
+.btn-small{font-size:13px;padding:7px 12px;border-radius:8px;}
+
+.err{
+  color:var(--rose);font-size:13px;font-weight:500;text-align:left;
+  background:rgba(224,17,111,0.07);border-radius:9px;padding:10px 12px;margin:14px 0 0;
+}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+
+/* Slot grid */
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:14px;}
+.slot{
+  font-family:var(--font);font-size:13px;font-weight:600;color:var(--ink);
+  padding:9px 6px;border-radius:8px;border:1px solid #d9d9de;background:var(--white);
+  cursor:pointer;text-align:center;
+}
+.slot:hover{border-color:var(--accent);}
+.slot.selected{background:var(--accent);color:var(--white);border-color:var(--accent);}
+.empty-note{font-size:13px;color:var(--ink-soft);margin-top:10px;}
+
+/* Booking list */
+.bookings-list{display:flex;flex-direction:column;gap:10px;}
+.booking-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:1px solid #ececee;border-radius:12px;padding:12px 14px;
+}
+.booking-info{text-align:left;}
+.booking-salon{font-weight:700;font-size:14px;}
+.booking-style{font-size:13px;color:var(--ink-soft);}
+.booking-time{font-size:12.5px;color:var(--ink-soft);margin-top:2px;}
+.badge{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:3px 8px;border-radius:999px;text-transform:uppercase;margin-left:8px;
+}
+.badge-PENDING{background:rgba(0,113,227,0.1);color:var(--accent);}
+.badge-CONFIRMED{background:rgba(13,138,95,0.1);color:var(--sage);}
+.badge-CANCELLED{background:rgba(29,29,31,0.08);color:var(--ink-soft);}
+.badge-COMPLETED{background:rgba(13,138,95,0.1);color:var(--sage);}
+.badge-NO_SHOW{background:rgba(224,17,111,0.08);color:var(--rose);}
+
+@media (max-width:420px){
+  .card{padding:22px 18px;}
+  .booking-row{flex-direction:column;align-items:flex-start;}
+}

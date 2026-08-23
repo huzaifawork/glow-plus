@@ -12,6 +12,12 @@ export class StylesController {
     return this.styles.list(req.merchantId!);
   }
 
+  // Public — a consumer picks a style before booking (T18/T44).
+  @Get('public/:merchantId')
+  listPublic(@Param('merchantId') merchantId: string) {
+    return this.styles.listPublicForMerchant(merchantId);
+  }
+
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateStyleDto) {
     return this.styles.create(req.merchantId!, dto);

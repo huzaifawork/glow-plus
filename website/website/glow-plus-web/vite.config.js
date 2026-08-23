@@ -17,6 +17,9 @@ function legacyRouteRewrites() {
   const routes = {
     '/verify-email': '/verify-email.html',
     '/business/billing': '/billing-result.html',
+    // Not backend-baked like the two above — chosen to sit next to where
+    // T36's future consumer portal will live (T18).
+    '/consumer/booking': '/booking.html',
   };
   return {
     name: 'glow-plus-legacy-route-rewrites',
@@ -67,6 +70,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         verifyEmail: resolve(__dirname, 'verify-email.html'),
         billingResult: resolve(__dirname, 'billing-result.html'),
+        booking: resolve(__dirname, 'booking.html'),
       },
     },
   },

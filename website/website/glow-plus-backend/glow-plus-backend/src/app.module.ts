@@ -46,7 +46,7 @@ export class AppModule implements NestModule {
         { path: 'health/(.*)', method: RequestMethod.GET },
         { path: 'auth/(.*)', method: RequestMethod.ALL },
         { path: 'merchants/signup', method: RequestMethod.POST },
-        { path: 'merchants/login', method: RequestMethod.POST },   
+        { path: 'merchants/login', method: RequestMethod.POST },
         { path: 'billing/webhook', method: RequestMethod.POST },
         // Public by design — a consumer browses times and opening hours
         // before creating an account. Both controllers document these as
@@ -55,6 +55,12 @@ export class AppModule implements NestModule {
         // GET only: PUT /business-hours (merchant-only) stays protected.
         { path: 'bookings/availability', method: RequestMethod.GET },
         { path: 'business-hours/(.*)', method: RequestMethod.GET },
+        // Public salon directory + style list (T18, pulled forward from
+        // T43/T44) — a consumer picks a merchant and a style before booking,
+        // both before creating an account. GET only: the merchant-scoped
+        // GET /merchants/me and GET /styles stay protected.
+        { path: 'merchants/public', method: RequestMethod.GET },
+        { path: 'styles/public/(.*)', method: RequestMethod.GET },
       )
       .forRoutes('*');
 

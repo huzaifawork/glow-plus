@@ -256,8 +256,39 @@ Rules:
   **Tested in a real, driven Chrome instance** (no test framework in the repo — T12 was deliberately skipped; `puppeteer-core` installed to the session scratchpad only, not the repo) against the real dev servers: **15/15 checks passed** — real sign-in with a real password field (the prototype had zero, [F9]), a wrong-password call rendering the exact API error text, login, cancel, resume (both re-verified against the server, not assumed), a page reload keeping the session, the two Stripe-redirect states unchanged, no bcrypt hash reaching browser storage, zero unexpected console errors, and no horizontal overflow at 390px.
   **Tests:** `billing.service.spec.ts` (`readPeriod` — 6 specs covering both Stripe shapes and the Invalid-Date failure mode) + `require-merchant.guard.spec.ts` (6 specs). Suite now **40 passing** (was 28).
   **Verify independently:** open `http://localhost:3000/business/billing`, sign in as `merchant@glowplus.test` / `Merchant123!`, click Cancel then Resume, and check Stripe's test dashboard alongside — both change together.
-- [ ] **T18 — Booking flow end-to-end against real Postgres** (unblocked by T13/T14). Availability → create → list → cancel; verify rows.
-  - [ ] Frontend: real booking UI calling the real API.
+- [x] **T18 — Booking flow end-to-end against real Postgres.** ✅ **DONE & VERIFIED 2026-08-23.** Backend guard fix, two small public endpoints, and a real frontend page — all tested against the live API and Postgres, not assumed.
+
+  **Auth bug found and fixed first, same class as [F29]/T17:** `bookings.controller.ts` had FOUR more call sites reading `req.merchantId!` / `req.accountId!` with no role check — `GET /bookings` (merchant calendar), `PATCH /:id/confirm`, `PATCH /:id/no-show`, `PATCH /:id/complete` (merchant-only), and `POST /bookings` / `GET /bookings/me` (consumer-only). **Reproduced live before fixing:** a consumer's token on `GET /bookings` would have hit `findMany({ where: { merchantId: undefined } })` — the exact [F29] cross-tenant read, just in a different controller. Fixed by applying the existing `RequireMerchantGuard` (built in T17, written to be reused) to the four merchant-only routes, and a new mirror `RequireConsumerGuard` (`src/common/guards/require-consumer.guard.ts`) to the two consumer-only ones. `PATCH /:id/cancel` was already safe — it derives the role instead of asserting it, so it was left as-is.
+  | Caller | Route | Before (would have been) | After |
+  |---|---|---|---|
+  | Consumer token | `GET /bookings` | 200 + every merchant's bookings | **403** "This action requires a merchant account" |
+  | Merchant token | `GET /bookings/me` | created a nonsensical row owned by the merchant's own staff account | **403** "This action requires a consumer account" |
+  | Merchant token | `GET /bookings` (own) | — | 200, own bookings only |
+  | Consumer token | `GET /bookings/me` (own) | — | 200, own bookings only |
+
+  **Two small public endpoints added, pulled forward from T43/T44:** the booking flow needs a way for a consumer to name a merchant and a style, and there was no way to do that without either a public endpoint or hardcoding a database id into shipped frontend code. Kept deliberately minimal — not the full versions those tasks will eventually need (no pagination/search):
+  - `GET /merchants/public` — `{id, businessName}[]`, `status: ACTIVE` only (`merchants.service.ts` `listPublic()`)
+  - `GET /styles/public/:merchantId` — `{id, name, type, pointsPerVisit, durationMinutes}[]`, active styles at an ACTIVE merchant only, 404 otherwise (`styles.service.ts` `listPublicForMerchant()`)
+
+  Both excluded from `AuthMiddleware` (GET only) in `app.module.ts`, same pattern as `bookings/availability` and `business-hours/(.*)`. **T43 and T44 are left open** (not ticked) — these are stopgaps sized for T18, not the final shape.
+
+  **Full flow, real Stripe-free Postgres, real seeded accounts (`consumer@glowplus.test`), verified end to end:**
+  | Step | Result |
+  |---|---|
+  | `GET /bookings/availability` for a future date | **27 open slots** returned, no auth required |
+  | `POST /bookings` (consumer) | **201**, real row created — confirmed independently via a direct Prisma query against Postgres, not just the API response |
+  | `POST /bookings` with no token | **401** |
+  | `POST /bookings` for the same slot again | **400** "That time slot was just booked by someone else" — the race-check in `availability.service.ts` works |
+  | `GET /bookings/me` | lists the booking |
+  | `PATCH /:id/cancel` with no token | 401 |
+  | `PATCH /:id/cancel` (owner) | **200**, status → `CANCELLED` |
+  | `PATCH /:id/cancel` again | **400** "Cannot cancel a booking with status CANCELLED" |
+  | Merchant lifecycle on a second booking: `GET /bookings` (merchant) → `PATCH /:id/confirm` → consumer tries to confirm (**403**) → `PATCH /:id/complete` | confirm **200**, complete **200** and **auto-created a `Visit` row** (`pointsEarned: 50`, `bookingId` linked) — the booking→loyalty integration in `bookings.service.ts complete()` works end to end |
+
+  **Frontend** (`glow-plus-web/booking.html` → `/consumer/booking`, same standalone-page pattern as T17's billing page): consumer sign-in (real password field, real `/auth/login`) → salon dropdown (`GET /merchants/public`) → service dropdown (`GET /styles/public/:id`) → date picker → "Check availability" → slot grid → book → confirmation → "Your bookings" list with cancel. `lib/api.js` extended with a **separate consumer token key** (`glowplus:token:consumer`, distinct from the merchant billing page's `glowplus:token`) so both pages can be logged in independently in the same browser without clobbering each other's session — a real collision that would have hit the moment T36 needed both flows live at once.
+  **Driven in real Chrome** (`puppeteer-core`, session scratchpad only, same as T17 — no test framework in the repo, T12 skipped): **14/14 functional checks passed** — wrong password shows the real API error text, real seeded salon/styles populate the dropdowns from the live API, real availability slots, booking creates and shows PENDING, cancel flips it to CANCELLED and removes the button, session survives a reload (consumer token persisted independently of any merchant session), no horizontal overflow at 390px. The only two browser console entries logged during the whole run are expected noise, not bugs: the deliberate wrong-password 401, and a `/favicon.ico` 404 that every page in this app already produces (verified — no page here declares a favicon).
+  **Backend tests:** new `require-consumer.guard.spec.ts` (6 specs, mirrors `require-merchant.guard.spec.ts`). Suite now **46 passing** (was 40). `tsc --noEmit` clean.
+  **Verify independently:** open `http://localhost:3000/consumer/booking`, sign in as `consumer@glowplus.test` / `Consumer123!`, pick a date a few days out, book a slot, then cancel it — and separately, confirm `http://localhost:3000/business/billing` (merchant login) still works in the same browser without logging the consumer session out.
 - [ ] **T19 — Trigger and watch the trial-ending email fire.** Job exists, never run.
 - [ ] **T20 — Trigger and watch `invoice.payment_failed`** via Stripe CLI; verify handler + email.
 
