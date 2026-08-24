@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,12 +121,25 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T49.**
+## 8. EXACTLY where to resume — **Phases 5–6 DONE. Phase 7 is one task from done; next is T49.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 23 (2026-08-25): 48 of 65 done. PHASE 6 IS CLOSED and
-> PHASE 7 IS UNDER WAY — T46 ✅ T47 ✅ T48 ✅. The next task is T49.**
+> **State as of session 23 (2026-08-25): 50 of 65 done. PHASE 6 IS CLOSED and
+> PHASE 7 IS NEARLY DONE — T46 ✅ T47 ✅ T48 ✅ T50 ✅ T51 ✅. Only T49
+> (API versioning) is left in Phase 7; after it, everything remaining is
+> Phase 8 deployment plus T64–T66.**
+>
+> **T50: every list route paginates, and the body is still a BARE ARRAY** —
+> `?limit=`/`?offset=` with the total in `X-Total-Count`, the same contract as
+> T43/T44. Do not "tidy" any of them into `{ items, total }`: `client.js` maps
+> these directly. Page and count share one `where` in one `$transaction`, so
+> the header describes the *filtered* list.
+>
+> **T51 is narrower than it sounds and the note is worth keeping: the NATIVE
+> app never needed CORS.** It sends no `Origin`, so CORS never engages. The
+> entries added are for **Expo web** only (8081 Metro, 19006 legacy webpack),
+> dev-fallback only, with a test that production gets no localhost exemption.
 >
 > **T48 found [F47], the sharpest bug of the session: `POST /bookings`
 > accepted bookings at SUSPENDED, PENDING and CANCELLED salons**, and
