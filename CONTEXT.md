@@ -35,11 +35,11 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
-| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25; **`RefreshToken` added T47**, and `AccountType` gained a fourth value `STAFF`) |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,12 +121,57 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T47.**
+## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T48.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 23 (2026-08-25): 46 of 65 done. PHASE 6 IS CLOSED and
-> PHASE 7 HAS STARTED — T46 ✅. The next task is T47 (refresh tokens).**
+> **State as of session 23 (2026-08-25): 47 of 65 done. PHASE 6 IS CLOSED and
+> PHASE 7 IS UNDER WAY — T46 ✅ T47 ✅. The next task is T48.**
+>
+> **T47 is done and it is the biggest behavioural change in the backend so
+> far: the access token is now 15 MINUTES, not 7 days.** Read its TASKS.md
+> entry before touching auth; five things there are easy to undo by accident.
+>
+> 1. **`token` keeps its name and its position in every login response.**
+>    `refreshToken` and `expiresIn` are additive beside it. `client.js:99`
+>    reads `result.token` and nothing else, so **Order 2 still works
+>    unchanged** — that is the whole reason T47 landed before deployment.
+> 2. **Rotation is single-use and a replay revokes the WHOLE family**, which
+>    logs the legitimate user out too. That is intended, not a bug: the server
+>    cannot tell the thief from the victim. Do not add a "grace window" to
+>    make multi-tab easier — that window is exactly what a thief replays in.
+>    The multi-tab race is handled on the CLIENT instead.
+> 3. **`api.js` refreshes ONE AT A TIME, and that is load-bearing.** The
+>    consumer dashboard fires three authed calls on mount; without the shared
+>    in-flight promise, two of them are replays and **the user is signed out
+>    by their own dashboard loading**. If you touch `refreshSession`, re-run
+>    the burst check.
+> 4. **Claims are RE-DERIVED from the account row on every refresh**, never
+>    replayed out of the stored token. That is what stops a demoted OWNER
+>    keeping owner claims for 30 days. `RefreshToken` therefore stores
+>    `accountId`/`accountType` and deliberately NOT `role`/`merchantId`.
+> 5. **`/auth/refresh` is on `ThrottleRefresh()` (60/5min/IP), NOT
+>    `ThrottleCredentials()` (20/5min/IP).** Refresh is routine automated
+>    traffic; the credential tier would sign a NAT'd salon out mid-shift.
+>
+> ⚠️ **A password reset now revokes every session that predates it**, as a
+> query inside the existing reset transaction. **Do not move it out** — it has
+> to commit with the new password hash or not at all.
+>
+> ⚠️ **The four `setToken`/`setConsumerToken`/`setStaffToken`/`setAdminToken`
+> exports in `api.js` are GONE.** A session is a pair now; storing only the
+> access half produces a page that looks signed in for 15 minutes and then
+> signs itself out with no way back. `writeSession` is the one writer and it
+> is internal.
+>
+> ⚠️ **Testing note that cost time twice this session:** the SPA resets to the
+> **marketing** view on reload, so reloading the page proves nothing about an
+> authenticated flow — it fires no authenticated request at all. Drive the app
+> module directly instead (`await import('/src/lib/api.js')` in the page; Vite
+> dev serves it and the page has already imported it, so it is the same
+> instance the views use). Also: authenticated responses carry an **ETag**, so
+> a successful retry comes back **304**, not 200 — `fetch` surfaces that to JS
+> as a normal success, so do not read it as a failure.
 >
 > **T46 is done, and it was not the no-op it looked like.** Auth *was* already
 > token-only everywhere — but the scheme was matched **case-sensitively**, and
@@ -227,13 +272,21 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > matches `.js`, and ts-jest then follows the sourcemap until it runs out of
 > memory. Session 21 lost time to this.
 >
-> **Phase 6 is closed. Phase 7 (T46–T51) is under way — T46 ✅.** T46 was
-> indeed mostly satisfied already, but verifying it rather than assuming it is
-> what turned up the case-sensitivity defect. **T47 (refresh tokens) is next
-> and is the one Phase 7 task that CHANGES the login response** both clients
-> read, so it cannot be deferred past deployment: `client.js:99` does
-> `await saveToken(result.token)` and the web client's `api.js` does the same
-> per role. Whatever T47 returns must keep `token` present under that name.
+> **Phase 6 is closed. Phase 7 (T46–T51) is under way — T46 ✅ T47 ✅.** T46
+> was indeed mostly satisfied already, but verifying it rather than assuming
+> it is what turned up the case-sensitivity defect. T47 was the one Phase 7
+> task that changes the login response both clients read, and it is done with
+> `token` preserved under that name.
+>
+> **T48 (public endpoints truly public) is next**, and like T46 it may already
+> be largely satisfied — `app.module.ts` carries an explicit AuthMiddleware
+> exclusion list, and T43/T44 both verified their own routes are reachable
+> without a token. **Start by auditing that list against what the RN app
+> actually calls before signing up** (`client.js`: `/merchants`,
+> `/styles/public/:id`, `/bookings/availability`), rather than assuming either
+> that it is complete or that it is broken. Note the exclusions are matched as
+> **exact paths, not prefixes**, on purpose — `merchants` and not
+> `merchants/(.*)`, or `GET /merchants/me` goes public with it.
 >
 > **T39 is done — the mobile pass found four real defects, not none.** Read
 > its TASKS.md entry before touching `global.css`. The headline: **T36's

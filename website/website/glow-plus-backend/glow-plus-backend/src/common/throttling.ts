@@ -74,6 +74,35 @@ export const ThrottleCredentials = () =>
   });
 
 /**
+ * Session continuation — POST /auth/refresh and POST /auth/logout  (T47).
+ *
+ * Deliberately NOT `ThrottleCredentials`, which was the first thing tried and
+ * is wrong here for two reasons.
+ *
+ * It is the wrong *shape*: refresh is routine automated traffic, not a human
+ * typing. Every signed-in client spends a refresh token roughly every 15
+ * minutes and again on any 401, so the NAT'd-salon case this file already
+ * worries about is far worse here than it is for login — four staff plus
+ * customers on the shop wifi go through 20 requests in five minutes without
+ * anyone doing anything unusual, and the failure mode is the whole building
+ * being signed out mid-shift.
+ *
+ * And it is the wrong *defence*: a refresh token is 32 bytes from a CSPRNG,
+ * so guessing one is not something a rate limit is holding back. What the
+ * limit is actually for is stopping an unauthenticated caller from using this
+ * route as a free database-lookup amplifier — which a much looser ceiling does
+ * just as well.
+ *
+ * No `identity` tier, because there is no email in the body for it to key on;
+ * it would be skipped anyway (`bodyEmail` returns undefined). Naming that here
+ * so its absence reads as a decision rather than an oversight.
+ */
+export const ThrottleRefresh = () =>
+  Throttle({
+    default: { limit: 60, ttl: 5 * MINUTE, blockDuration: 5 * MINUTE },
+  });
+
+/**
  * Endpoints whose whole job is to send an email to an address the caller
  * names. Unlimited, these are a free inbox-flooding tool pointed at a victim
  * who never signed up for anything — and every send costs the client money at

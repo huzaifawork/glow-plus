@@ -54,7 +54,31 @@ import { AccountRole } from './auth.middleware';
 export const JWT_ISSUER = 'glow-plus-api';
 export const JWT_AUDIENCE = 'glow-plus-app';
 export const JWT_ALGORITHM = 'HS256' as const;
-export const DEFAULT_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7; // 7 days — T47 shortens this
+/**
+ * T47 shortened this from **7 days to 15 minutes**, and that is the whole
+ * point of the task rather than a detail of it.
+ *
+ * A 7-day access token with no refresh mechanism was the worst of both: it
+ * could not be revoked (nothing consults a store on the way in — see the
+ * `jti` note above), so a token that leaked stayed usable for a week, and
+ * yet the user was still logged out abruptly at the end of it. Fifteen
+ * minutes is short enough that a leaked access token is a small window, and
+ * the refresh token behind it (RefreshTokenService) is the half that IS
+ * revocable and that keeps the session alive across it.
+ *
+ * ⚠ Order 2: the React Native app does not refresh yet — `client.js` stores
+ * `result.token` and nothing else. Login now also returns `refreshToken` and
+ * `expiresIn`, so that is app-side work, not backend rework, which is exactly
+ * why T47 lands before deployment rather than after.
+ */
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
+
+/**
+ * 30 days. Long enough that a customer checking their points once a month
+ * stays signed in; short enough to bound a stolen refresh token that is never
+ * used (a used one is rotated, and a replayed one kills its whole family).
+ */
+export const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export interface TokenPayload {
   sub: string;
@@ -93,7 +117,7 @@ function requireSecret(): string {
 
 export function sign(
   payload: Pick<TokenPayload, 'sub' | 'role' | 'merchantId'>,
-  expiresInSeconds = DEFAULT_EXPIRES_IN_SECONDS,
+  expiresInSeconds = ACCESS_TOKEN_TTL_SECONDS,
 ): string {
   // `sub`, `iss`, `aud`, `exp`, `iat` and `jti` go through jsonwebtoken's own
   // options rather than the payload object, so the library owns their format

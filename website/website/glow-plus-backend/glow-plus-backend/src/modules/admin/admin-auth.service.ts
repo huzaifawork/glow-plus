@@ -1,8 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
-import { sign } from '../../middleware/jwt.util';
 import { AdminLoginDto } from './login.dto';
+import { RefreshTokenService } from '../auth/refresh-token.service';
 
 /**
  * Admin accounts are not self-service (see schema.prisma) — there is no
@@ -10,7 +10,10 @@ import { AdminLoginDto } from './login.dto';
  */
 @Injectable()
 export class AdminAuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly refreshTokens: RefreshTokenService,
+  ) {}
 
   async login(dto: AdminLoginDto) {
     const admin = await this.prisma.admin.findUnique({ where: { email: dto.email } });
@@ -18,7 +21,8 @@ export class AdminAuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = sign({ sub: admin.id, role: 'admin' });
-    return { token, admin: { id: admin.id, email: admin.email } };
+    // T47 — additive beside `token`.
+    const session = await this.refreshTokens.issueSession(admin.id, 'ADMIN', { role: 'admin' });
+    return { ...session, admin: { id: admin.id, email: admin.email } };
   }
 }

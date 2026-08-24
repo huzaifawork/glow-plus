@@ -70,3 +70,18 @@ export class ResetPasswordDto {
   @MaxLength(MAX_PASSWORD)
   password!: string;
 }
+
+/**
+ * T47 — the body of both POST /auth/refresh and POST /auth/logout.
+ *
+ * Bound as a DTO rather than read loose off `@Body()`, for the same reason
+ * T44 bound its route param [F38]: both routes are UNAUTHENTICATED, so an
+ * unbounded string here reaches a database lookup with no ceiling on it. The
+ * value we issue is 64 hex characters; MAX_TOKEN (512) leaves room for a
+ * future format without leaving the field open.
+ */
+export class RefreshTokenDto {
+  @IsString()
+  @MaxLength(MAX_TOKEN)
+  refreshToken!: string;
+}

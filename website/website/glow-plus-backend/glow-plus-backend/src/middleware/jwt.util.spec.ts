@@ -20,7 +20,7 @@ import {
   verify,
   JWT_ISSUER,
   JWT_AUDIENCE,
-  DEFAULT_EXPIRES_IN_SECONDS,
+  ACCESS_TOKEN_TTL_SECONDS,
 } from './jwt.util';
 
 // jest.setup.ts supplies JWT_SECRET; jwt.util reads it at import time.
@@ -77,8 +77,8 @@ describe('jwt.util', () => {
     const delta = decoded.exp - Math.floor(Date.now() / 1000);
 
     // Allow a couple of seconds of execution slack.
-    expect(delta).toBeGreaterThan(DEFAULT_EXPIRES_IN_SECONDS - 5);
-    expect(delta).toBeLessThanOrEqual(DEFAULT_EXPIRES_IN_SECONDS);
+    expect(delta).toBeGreaterThan(ACCESS_TOKEN_TTL_SECONDS - 5);
+    expect(delta).toBeLessThanOrEqual(ACCESS_TOKEN_TTL_SECONDS);
   });
 
   it('rejects an expired token', () => {

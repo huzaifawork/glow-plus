@@ -69,6 +69,26 @@ export class PasswordResetService {
     const queries: Prisma.PrismaPromise<any>[] = [
       this.prisma.passwordReset.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
       ...this.updatePasswordQuery(record.accountId, record.accountType as AccountType, passwordHash),
+      // T47 — every session issued before this reset dies with it.
+      //
+      // Until now a password reset changed the password and nothing else: the
+      // tokens already out there kept working, because nothing consulted a
+      // store on the way in [F12]. That is the wrong outcome for the one flow
+      // whose entire purpose is "someone else may have my credentials". The
+      // user is signed out everywhere and signs in once with the new password.
+      //
+      // Written as a query in THIS transaction rather than as a call out to
+      // RefreshTokenService, because it has to commit with the new password
+      // hash or not at all — a reset that succeeded while the revocation
+      // failed would leave open the exact gap being closed here.
+      this.prisma.refreshToken.updateMany({
+        where: {
+          accountId: record.accountId,
+          accountType: record.accountType as AccountType,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      }),
     ];
 
     await this.prisma.$transaction(queries);

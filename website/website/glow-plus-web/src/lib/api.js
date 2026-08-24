@@ -13,6 +13,11 @@
  *   - **Auth is token-only** (`Authorization: Bearer`), never cookies — the
  *     React Native app has no cookie jar, so the web client must not rely on
  *     one either or the two clients diverge (T46).
+ *   - **The access token lives 15 minutes and is refreshed transparently**
+ *     (T47). Every login response now carries `refreshToken` and `expiresIn`
+ *     beside the `token` it always had. `apiRequest` spends the refresh token
+ *     on a 401 and retries once, so no view has to know any of this happened —
+ *     which is why none of them changed.
  *   - **Errors always arrive as `{ statusCode, message, error, details? }`
  *     with `message` a STRING** (T16). Before that filter existed, validation
  *     errors put an ARRAY in `message`, so anything rendering it directly
@@ -75,26 +80,119 @@ function removeToken(key) {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Sessions  (T47)
+
+   A session is now a PAIR — a 15-minute access token and a 30-day refresh
+   token — so each of the four session keys above gets a sibling key holding
+   its refresh half. They are stored and cleared together; a page holding one
+   without the other is a signed-out page that thinks it is signed in.
+   -------------------------------------------------------------------------- */
+const REFRESH_SUFFIX = ':refresh';
+const refreshKeyFor = (key) => key + REFRESH_SUFFIX;
+
+/** Store a login/refresh response. `refreshToken` is absent from nothing the API returns now, but treated as optional so an older backend degrades to T46 behaviour rather than wiping the session. */
+function writeSession(key, data) {
+  if (data?.token) writeToken(key, data.token);
+  if (data?.refreshToken) writeToken(refreshKeyFor(key), data.refreshToken);
+}
+
+/** Forget a session locally. Does NOT tell the server — see `endSession`. */
+function clearSession(key) {
+  removeToken(key);
+  removeToken(refreshKeyFor(key));
+}
+
+/**
+ * Log out properly: revoke the session server-side, then forget it locally.
+ *
+ * Before T47 "log out" only ever meant the first half of that sentence's
+ * second clause — the client forgot its token and the token stayed valid for
+ * the rest of its life anywhere else it had reached. `POST /auth/logout`
+ * revokes the whole refresh lineage, so the session cannot be continued.
+ *
+ * Fire-and-forget on purpose: the local clear must happen whether or not the
+ * network call does, or a user on a dead connection cannot sign out of their
+ * own browser. The request is also deliberately made BEFORE the clear reads
+ * are lost, and swallows its own errors (the endpoint always answers
+ * `{ ok: true }` anyway, so there is nothing to branch on).
+ */
+function endSession(key) {
+  const refreshToken = readToken(refreshKeyFor(key));
+  clearSession(key);
+  if (refreshToken) {
+    apiRequest('/auth/logout', { method: 'POST', auth: false, body: { refreshToken } }).catch(() => {});
+  }
+}
+
+/**
+ * One refresh at a time per session key.
+ *
+ * Without this, a page that fires four requests on mount gets four 401s and
+ * four refresh attempts — and since rotation is single-use server-side, three
+ * of them are REPLAYS, which the backend correctly treats as a leak and
+ * answers by revoking the whole family. The user would be logged out by their
+ * own dashboard loading. So concurrent callers share one in-flight promise.
+ */
+const refreshInFlight = new Map();
+
+function refreshSession(key) {
+  if (refreshInFlight.has(key)) return refreshInFlight.get(key);
+
+  const attempt = (async () => {
+    const refreshToken = readToken(refreshKeyFor(key));
+    if (!refreshToken) return null;
+
+    try {
+      const data = await apiRequest('/auth/refresh', {
+        method: 'POST',
+        auth: false,
+        body: { refreshToken },
+      });
+      writeSession(key, data);
+      return data?.token ?? null;
+    } catch {
+      // The single-flight promise above only covers THIS tab. Two tabs share
+      // localStorage but not the promise, so the one that loses the race
+      // presents a token the winner already spent and is refused. Before
+      // concluding the session is dead, look at what is in storage now: if the
+      // refresh token changed while we were asking, another tab rotated it
+      // successfully and this tab should simply adopt the result.
+      const current = readToken(refreshKeyFor(key));
+      if (current && current !== refreshToken) return readToken(key);
+
+      clearSession(key);
+      return null;
+    }
+  })();
+
+  refreshInFlight.set(key, attempt);
+  attempt.finally(() => refreshInFlight.delete(key));
+  return attempt;
+}
+
+/**
+ * `getX`/`clearX` only — the `setX` writers were removed by T47. A session is
+ * a pair now, and a caller that stored only the access half would produce a
+ * page that looks signed in for 15 minutes and then signs itself out with no
+ * way back. `writeSession` is the one writer, and it is internal.
+ */
 export const getToken = () => readToken(TOKEN_KEY);
-export const setToken = (token) => writeToken(TOKEN_KEY, token);
-export const clearToken = () => removeToken(TOKEN_KEY);
+export const clearToken = () => endSession(TOKEN_KEY);
 
 export const getConsumerToken = () => readToken(CONSUMER_TOKEN_KEY);
-export const setConsumerToken = (token) => writeToken(CONSUMER_TOKEN_KEY, token);
-export const clearConsumerToken = () => removeToken(CONSUMER_TOKEN_KEY);
+export const clearConsumerToken = () => endSession(CONSUMER_TOKEN_KEY);
 
 export const getStaffToken = () => readToken(STAFF_TOKEN_KEY);
-export const setStaffToken = (token) => writeToken(STAFF_TOKEN_KEY, token);
-export const clearStaffToken = () => removeToken(STAFF_TOKEN_KEY);
+export const clearStaffToken = () => endSession(STAFF_TOKEN_KEY);
 
 export const getAdminToken = () => readToken(ADMIN_TOKEN_KEY);
-export const setAdminToken = (token) => writeToken(ADMIN_TOKEN_KEY, token);
-export const clearAdminToken = () => removeToken(ADMIN_TOKEN_KEY);
+export const clearAdminToken = () => endSession(ADMIN_TOKEN_KEY);
 
 /* --------------------------------------------------------------------------
    Request
    -------------------------------------------------------------------------- */
-export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY } = {}) {
+export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY, retried = false } = {}) {
   const token = auth ? readToken(tokenKey) : null;
 
   let res;
@@ -135,7 +233,25 @@ export async function apiRequest(path, { method = 'GET', body, auth = true, toke
     // Only on 401. A 403 is a *valid* token being refused a *specific* route
     // (T29's role guards, T29's paywall) — throwing that session away would
     // log a merchant out for touching one admin URL.
-    if (res.status === 401 && token) removeToken(tokenKey);
+    //
+    // T47 — but a 401 is now usually just "the 15 minutes are up", not "this
+    // session is over". So before giving up, spend the refresh token and
+    // replay the request exactly once. `retried` is what makes it exactly
+    // once: a route that 401s for a reason refreshing cannot fix must not
+    // become an infinite loop. `/auth/refresh` itself is sent with
+    // `auth: false`, so it has no `token` and can never reach this branch.
+    if (res.status === 401 && token && !retried) {
+      const fresh = await refreshSession(tokenKey);
+      if (fresh) {
+        return apiRequest(path, { method, body, auth, tokenKey, retried: true });
+      }
+    }
+
+    // Either there was no refresh token, or spending it failed — the session
+    // really is over. `clearSession`, not `removeToken`: leaving the refresh
+    // half behind would have the next 401 try to spend a token the server has
+    // already revoked, which reads to it as a replay.
+    if (res.status === 401 && token) clearSession(tokenKey);
 
     throw new ApiError(
       payload?.message || `Request failed (${res.status})`,
@@ -164,7 +280,7 @@ export async function merchantLogin(email, password) {
     auth: false,
     body: { email, password },
   });
-  if (data?.token) setToken(data.token);
+  writeSession(TOKEN_KEY, data);
   return data;
 }
 
@@ -217,7 +333,7 @@ export const logoutAdmin = clearAdminToken;
    -------------------------------------------------------------------------- */
 export async function consumerLogin(email, password) {
   const data = await apiRequest('/auth/login', { method: 'POST', auth: false, body: { email, password } });
-  if (data?.token) setConsumerToken(data.token);
+  writeSession(CONSUMER_TOKEN_KEY, data);
   return data;
 }
 
@@ -332,7 +448,7 @@ export function listMyVisits() {
    -------------------------------------------------------------------------- */
 export async function adminLogin(email, password) {
   const data = await apiRequest('/admin/login', { method: 'POST', auth: false, body: { email, password } });
-  if (data?.token) setAdminToken(data.token);
+  writeSession(ADMIN_TOKEN_KEY, data);
   return data;
 }
 
@@ -396,13 +512,13 @@ export function getPlatformStats() {
 export async function teamSignIn(email, password) {
   try {
     const data = await apiRequest('/merchants/login', { method: 'POST', auth: false, body: { email, password } });
-    if (data?.token) setStaffToken(data.token);
+    writeSession(STAFF_TOKEN_KEY, data);
     return data;
   } catch (err) {
     if (!(err instanceof ApiError) || err.status !== 401) throw err;
   }
   const data = await apiRequest('/staff/login', { method: 'POST', auth: false, body: { email, password } });
-  if (data?.token) setStaffToken(data.token);
+  writeSession(STAFF_TOKEN_KEY, data);
   return data;
 }
 

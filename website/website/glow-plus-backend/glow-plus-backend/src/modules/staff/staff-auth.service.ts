@@ -2,8 +2,8 @@ import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/
 import * as bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
-import { sign } from '../../middleware/jwt.util';
 import { AcceptInviteDto, StaffLoginDto } from './dto';
+import { RefreshTokenService } from '../auth/refresh-token.service';
 
 const SALT_ROUNDS = 12;
 
@@ -24,7 +24,10 @@ const SALT_ROUNDS = 12;
  */
 @Injectable()
 export class StaffAuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly refreshTokens: RefreshTokenService,
+  ) {}
 
   private hashToken(raw: string) {
     return createHash('sha256').update(raw).digest('hex');
@@ -101,8 +104,11 @@ export class StaffAuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = sign({
-      sub: staff.id,
+    // T47 — additive beside `token`. The role is derived here at login and
+    // derived AGAIN from the row on every refresh (RefreshTokenService
+    // .claimsFor), so a demotion takes effect within the access token's 15
+    // minutes rather than lasting the life of the session.
+    const session = await this.refreshTokens.issueSession(staff.id, 'STAFF', {
       role: staff.role === 'OWNER' ? 'merchant_owner' : 'merchant_staff',
       merchantId: staff.merchantId,
     });
@@ -113,7 +119,7 @@ export class StaffAuthService {
     });
 
     return {
-      token,
+      ...session,
       staff: { id: staff.id, email: staff.email, name: staff.name, role: staff.role },
       merchant: {
         id: staff.merchant.id,

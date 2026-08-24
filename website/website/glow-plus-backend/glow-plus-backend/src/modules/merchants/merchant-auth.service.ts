@@ -1,12 +1,15 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
-import { sign } from '../../middleware/jwt.util';
 import { MerchantLoginDto } from './login.dto';
+import { RefreshTokenService } from '../auth/refresh-token.service';
 
 @Injectable()
 export class MerchantAuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly refreshTokens: RefreshTokenService,
+  ) {}
 
   async login(dto: MerchantLoginDto) {
     const merchant = await this.prisma.merchant.findUnique({ where: { email: dto.email } });
@@ -14,10 +17,14 @@ export class MerchantAuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = sign({ sub: merchant.id, role: 'merchant_owner', merchantId: merchant.id });
+    // T47 — additive beside `token`, which keeps its name and position.
+    const session = await this.refreshTokens.issueSession(merchant.id, 'MERCHANT', {
+      role: 'merchant_owner',
+      merchantId: merchant.id,
+    });
 
     return {
-      token,
+      ...session,
       merchant: {
         id: merchant.id,
         businessName: merchant.businessName,

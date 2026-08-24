@@ -2,7 +2,7 @@ import { Injectable, ConflictException, Logger, UnauthorizedException } from '@n
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationService } from './email-verification.service';
-import { sign } from '../../middleware/jwt.util';
+import { RefreshTokenService } from './refresh-token.service';
 import { SignupDto, LoginDto } from './dto';
 import { encodePhone } from '../../common/pii-crypto';
 
@@ -15,6 +15,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly refreshTokens: RefreshTokenService,
   ) {}
 
   /**
@@ -82,8 +83,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const token = sign({ sub: user.id, role: 'consumer' });
-    return { token, user: { id: user.id, name: user.name, emailVerified: !!user.emailVerifiedAt } };
+    // T47 — `token` keeps its name and stays first; `refreshToken` and
+    // `expiresIn` are additive, so a client that reads only `token` (the RN
+    // app does exactly that, client.js:99) is unaffected.
+    const session = await this.refreshTokens.issueSession(user.id, 'CONSUMER', { role: 'consumer' });
+    return {
+      ...session,
+      user: { id: user.id, name: user.name, emailVerified: !!user.emailVerifiedAt },
+    };
   }
 
   async verifyEmail(token: string) {

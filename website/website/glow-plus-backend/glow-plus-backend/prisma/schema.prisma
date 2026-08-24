@@ -15,26 +15,26 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
+  id               String    @id @default(cuid())
+  email            String    @unique
   // T31b — AES-256-GCM ciphertext, NOT a phone number. Never query this
   // column for equality; a random IV means the same number encrypts
   // differently every time. Look up via `phoneFingerprint` instead, and
   // decrypt with `decryptPii()` on the way out. See common/pii-crypto.ts.
-  phone             String?
+  phone            String?
   // Keyed HMAC-SHA256 blind index over the normalised number. Carries the
   // uniqueness this column used to hold, and is what makes lookup-by-phone
   // still possible. NULL when the user gave no phone — Postgres treats NULLs
   // as distinct under a unique index, so many users may have none.
-  phoneFingerprint  String?   @unique
-  name              String
-  passwordHash      String
-  emailVerifiedAt   DateTime?
-  createdAt         DateTime  @default(now())
+  phoneFingerprint String?   @unique
+  name             String
+  passwordHash     String
+  emailVerifiedAt  DateTime?
+  createdAt        DateTime  @default(now())
 
-  visits            Visit[]
-  redemptions       Redemption[]
-  bookings          Booking[]
+  visits      Visit[]
+  redemptions Redemption[]
+  bookings    Booking[]
 }
 
 // ---------------------------------------------------------------------------
@@ -42,24 +42,24 @@ model User {
 // ---------------------------------------------------------------------------
 
 model Merchant {
-  id                String            @id @default(cuid())
-  businessName      String
-  email             String            @unique
-  passwordHash      String
-  status            MerchantStatus    @default(PENDING)
-  emailVerifiedAt   DateTime?
-  stripeCustomerId  String?           @unique
-  foundingMember    Boolean           @default(false) // true for the first 50 signups — gets an extra free month
-  createdAt         DateTime          @default(now())
+  id               String         @id @default(cuid())
+  businessName     String
+  email            String         @unique
+  passwordHash     String
+  status           MerchantStatus @default(PENDING)
+  emailVerifiedAt  DateTime?
+  stripeCustomerId String?        @unique
+  foundingMember   Boolean        @default(false) // true for the first 50 signups — gets an extra free month
+  createdAt        DateTime       @default(now())
 
-  subscription      Subscription?
-  styles            Style[]
-  rewardRules       RewardRule[]
-  visits            Visit[]
-  staff             MerchantStaff[]
-  staffInvites      StaffInvite[]
-  businessHours     BusinessHours[]
-  bookings          Booking[]
+  subscription  Subscription?
+  styles        Style[]
+  rewardRules   RewardRule[]
+  visits        Visit[]
+  staff         MerchantStaff[]
+  staffInvites  StaffInvite[]
+  businessHours BusinessHours[]
+  bookings      Booking[]
 }
 
 enum MerchantStatus {
@@ -71,15 +71,15 @@ enum MerchantStatus {
 }
 
 model MerchantStaff {
-  id          String    @id @default(cuid())
-  merchantId  String
-  merchant    Merchant  @relation(fields: [merchantId], references: [id])
-  email       String    @unique
-  name        String?   // captured on the invite / when the invite is accepted (T24)
+  id           String    @id @default(cuid())
+  merchantId   String
+  merchant     Merchant  @relation(fields: [merchantId], references: [id])
+  email        String    @unique
+  name         String? // captured on the invite / when the invite is accepted (T24)
   passwordHash String
-  role        StaffRole @default(STAFF)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
+  role         StaffRole @default(STAFF)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([merchantId])
 }
@@ -89,17 +89,17 @@ model MerchantStaff {
 /// row holds a hashed, single-use, expiring token, and no staff account (and
 /// therefore no password hash) exists until the invite is accepted.
 model StaffInvite {
-  id          String    @id @default(cuid())
-  merchantId  String
-  merchant    Merchant  @relation(fields: [merchantId], references: [id])
-  email       String
-  name        String?
-  role        StaffRole @default(STAFF)
-  token       String    @unique // random, single-use, hashed at rest
-  expiresAt   DateTime  // 7d — an invite is not a live credential, unlike a password reset
-  acceptedAt  DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id])
+  email      String
+  name       String?
+  role       StaffRole @default(STAFF)
+  token      String    @unique // random, single-use, hashed at rest
+  expiresAt  DateTime // 7d — an invite is not a live credential, unlike a password reset
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   @@index([merchantId])
 }
@@ -110,19 +110,19 @@ enum StaffRole {
 }
 
 model Subscription {
-  id                    String     @id @default(cuid())
-  merchantId            String     @unique
-  merchant              Merchant   @relation(fields: [merchantId], references: [id])
-  stripeSubscriptionId  String     @unique
-  plan                  Plan       @default(MONTHLY)
-  priceCents            Int        // 4999 ($49.99/mo) or 47999 ($479.99/yr)
-  status                SubStatus
-  trialStart            DateTime?
-  trialEnd              DateTime?
-  currentPeriodStart    DateTime
-  currentPeriodEnd      DateTime
-  cancelAtPeriodEnd     Boolean    @default(false)
-  createdAt             DateTime   @default(now())
+  id                   String    @id @default(cuid())
+  merchantId           String    @unique
+  merchant             Merchant  @relation(fields: [merchantId], references: [id])
+  stripeSubscriptionId String    @unique
+  plan                 Plan      @default(MONTHLY)
+  priceCents           Int // 4999 ($49.99/mo) or 47999 ($479.99/yr)
+  status               SubStatus
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
 }
 
 enum SubStatus {
@@ -133,8 +133,8 @@ enum SubStatus {
 }
 
 enum Plan {
-  MONTHLY  // $49.99/mo
-  ANNUAL   // $479.99/yr (~20% off monthly)
+  MONTHLY // $49.99/mo
+  ANNUAL // $479.99/yr (~20% off monthly)
 }
 
 // ---------------------------------------------------------------------------
@@ -142,19 +142,19 @@ enum Plan {
 // ---------------------------------------------------------------------------
 
 model Style {
-  id             String     @id @default(cuid())
-  merchantId     String
-  merchant       Merchant   @relation(fields: [merchantId], references: [id])
-  type           StyleType
-  name           String     // "Balayage", "French Tip Gel", "Deep Tissue Massage"
-  pointsPerVisit Int
+  id              String    @id @default(cuid())
+  merchantId      String
+  merchant        Merchant  @relation(fields: [merchantId], references: [id])
+  type            StyleType
+  name            String // "Balayage", "French Tip Gel", "Deep Tissue Massage"
+  pointsPerVisit  Int
   durationMinutes Int       @default(30) // used to calculate booking time slots
-  active         Boolean    @default(true)
-  createdAt      DateTime   @default(now())
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
 
-  visits         Visit[]
-  rewardRules    RewardRule[]
-  bookings       Booking[]
+  visits      Visit[]
+  rewardRules RewardRule[]
+  bookings    Booking[]
 }
 
 enum StyleType {
@@ -169,25 +169,25 @@ enum StyleType {
 // ---------------------------------------------------------------------------
 
 model Visit {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   userId       String
-  user         User      @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
   merchantId   String
-  merchant     Merchant  @relation(fields: [merchantId], references: [id])
+  merchant     Merchant @relation(fields: [merchantId], references: [id])
   styleId      String
-  style        Style     @relation(fields: [styleId], references: [id])
-  pointsEarned Int        // snapshot of style.pointsPerVisit at time of visit
-  loggedBy     String     // staff user id
-  visitDate    DateTime  @default(now())
-  bookingId    String?   @unique // set when the visit came from a completed booking
-  booking      Booking?  @relation(fields: [bookingId], references: [id])
+  style        Style    @relation(fields: [styleId], references: [id])
+  pointsEarned Int // snapshot of style.pointsPerVisit at time of visit
+  loggedBy     String // staff user id
+  visitDate    DateTime @default(now())
+  bookingId    String?  @unique // set when the visit came from a completed booking
+  booking      Booking? @relation(fields: [bookingId], references: [id])
 
   // Points expiry (T25) [F8]. Points are not stored as a running balance —
   // they are derived from these rows — so expiring points means excluding a
   // visit from progress maths, never deleting it. The visit stays in the
   // merchant's history; only its points stop counting.
-  expired      Boolean   @default(false)
-  expiredAt    DateTime?
+  expired   Boolean   @default(false)
+  expiredAt DateTime?
 
   @@index([userId, merchantId, expired])
   @@index([expired, visitDate])
@@ -198,22 +198,22 @@ model Visit {
 // ---------------------------------------------------------------------------
 
 model RewardRule {
-  id            String       @id @default(cuid())
-  merchantId    String
-  merchant      Merchant     @relation(fields: [merchantId], references: [id])
-  name          String       // "Loyal Client Discount", "Free Gel Mani"
-  triggerType   TriggerType
-  triggerValue  Int          // e.g. 5 (visits) or 200 (points)
-  styleScopeId  String?      // optional: restrict to one style/type
-  styleScope    Style?       @relation(fields: [styleScopeId], references: [id])
-  rewardType    RewardType
-  rewardValue   Int          // 15 (%) or 2000 (cents) — or a styleId for FREE_SERVICE, stored in freeServiceStyleId
+  id                 String      @id @default(cuid())
+  merchantId         String
+  merchant           Merchant    @relation(fields: [merchantId], references: [id])
+  name               String // "Loyal Client Discount", "Free Gel Mani"
+  triggerType        TriggerType
+  triggerValue       Int // e.g. 5 (visits) or 200 (points)
+  styleScopeId       String? // optional: restrict to one style/type
+  styleScope         Style?      @relation(fields: [styleScopeId], references: [id])
+  rewardType         RewardType
+  rewardValue        Int // 15 (%) or 2000 (cents) — or a styleId for FREE_SERVICE, stored in freeServiceStyleId
   freeServiceStyleId String?
-  oneTime       Boolean      @default(false)
-  active        Boolean      @default(true)
-  createdAt     DateTime     @default(now())
+  oneTime            Boolean     @default(false)
+  active             Boolean     @default(true)
+  createdAt          DateTime    @default(now())
 
-  redemptions   Redemption[]
+  redemptions Redemption[]
 }
 
 enum TriggerType {
@@ -253,14 +253,14 @@ model Admin {
 // ---------------------------------------------------------------------------
 
 model EmailVerification {
-  id          String       @id @default(cuid())
-  accountId   String       // userId, merchantId, or adminId
+  id          String      @id @default(cuid())
+  accountId   String // userId, merchantId, or adminId
   accountType AccountType
   email       String
-  token       String       @unique // random, single-use, hashed at rest
-  expiresAt   DateTime     // typically now + 24h
+  token       String      @unique // random, single-use, hashed at rest
+  expiresAt   DateTime // typically now + 24h
   verifiedAt  DateTime?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime    @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -268,20 +268,67 @@ model EmailVerification {
 // ---------------------------------------------------------------------------
 
 model PasswordReset {
-  id          String       @id @default(cuid())
-  accountId   String       // userId or merchantId
+  id          String      @id @default(cuid())
+  accountId   String // userId or merchantId
   accountType AccountType
   email       String
-  token       String       @unique // random, single-use, hashed at rest
-  expiresAt   DateTime     // 1h — shorter than email verification, it's a live credential reset
+  token       String      @unique // random, single-use, hashed at rest
+  expiresAt   DateTime // 1h — shorter than email verification, it's a live credential reset
   usedAt      DateTime?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime    @default(now())
 }
 
 enum AccountType {
   CONSUMER
   MERCHANT
   ADMIN
+  // T47 — MerchantStaff rows are a fourth kind of account that can hold a
+  // session, and RefreshToken has to be able to name one. Additive: nothing
+  // reading EmailVerification or PasswordReset can be handed a STAFF row,
+  // because nothing writes one.
+  STAFF
+}
+
+// ---------------------------------------------------------------------------
+// Refresh tokens — T47 [F12]
+//
+// The access token is short-lived now (15 minutes, jwt.util.ts) and is not
+// stored anywhere; this table is the long-lived half, and it is the only part
+// of a session the server can actually revoke.
+//
+// Three things about the shape are deliberate:
+//
+//   `token` is the SHA-256 of the value handed to the client, never the value
+//   itself — same treatment as EmailVerification and PasswordReset. A dump of
+//   this table must not be a set of working sessions.
+//
+//   `accountId` + `accountType` are stored instead of the JWT claims. Refresh
+//   RE-DERIVES `role` and `merchantId` from the account's own row every time,
+//   so a staff member demoted from OWNER to STAFF loses the owner claims on
+//   their next refresh instead of keeping them for the life of the token.
+//   Freezing the claims here would have quietly undone T24's owner/staff split.
+//
+//   `familyId` is the rotation lineage. Each refresh mints a replacement and
+//   marks the old row `usedAt`; presenting an already-used token means the
+//   value leaked and is being replayed, so the WHOLE family is revoked rather
+//   than just that row (OAuth 2.0 Security BCP §4.14.2). The legitimate holder
+//   is logged out too — that is the intended outcome, not a side effect.
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id          String      @id @default(cuid())
+  token       String      @unique // sha256 of the raw token, hashed at rest
+  accountId   String
+  accountType AccountType
+  familyId    String // rotation lineage; reuse revokes every row sharing it
+  expiresAt   DateTime // 30 days
+  usedAt      DateTime? // set when rotated — a second use is a replay
+  revokedAt   DateTime? // logout, password reset, or a detected replay
+  createdAt   DateTime    @default(now())
+
+  @@index([accountId, accountType])
+  @@index([familyId])
+  @@index([expiresAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -294,9 +341,9 @@ model BusinessHours {
   id         String   @id @default(cuid())
   merchantId String
   merchant   Merchant @relation(fields: [merchantId], references: [id])
-  dayOfWeek  Int      // 0 (Sunday) .. 6 (Saturday)
-  openTime   String   // "09:00", 24h format
-  closeTime  String   // "17:00"
+  dayOfWeek  Int // 0 (Sunday) .. 6 (Saturday)
+  openTime   String // "09:00", 24h format
+  closeTime  String // "17:00"
   closed     Boolean  @default(false)
 
   @@unique([merchantId, dayOfWeek])
@@ -325,7 +372,7 @@ model Booking {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  visit      Visit?
+  visit Visit?
 }
 
 enum BookingStatus {
