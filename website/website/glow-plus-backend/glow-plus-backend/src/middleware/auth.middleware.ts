@@ -34,12 +34,24 @@ export interface ConsumerRequest extends AuthedRequest {
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
   use(req: AuthedRequest, res: Response, next: NextFunction) {
-    const header = req.headers.authorization;
-    if (!header?.startsWith('Bearer ')) {
+    // T46 — the ONLY place a credential enters the API. There is deliberately
+    // no cookie, no `?token=` query parameter and no second header: a React
+    // Native client has no cookie jar, and a second channel is a second thing
+    // to get wrong. `credentials` is false in the CORS config for the same
+    // reason (config/security.ts).
+    //
+    // The scheme is matched case-INSENSITIVELY because RFC 7235 §2.1 says it
+    // is ("the scheme name is case-insensitive"), and `startsWith('Bearer ')`
+    // did not. A client or proxy that normalises the header — entirely within
+    // spec — would have been 401'd by a backend we are not allowed to change
+    // from the app side, which is the precise class of rework Phase 7 exists
+    // to prevent. It widens nothing: the token itself is still verified.
+    const match = /^Bearer +(.+)$/i.exec(req.headers.authorization ?? '');
+    if (!match) {
       throw new UnauthorizedException('Missing bearer token');
     }
 
-    const token = header.slice('Bearer '.length);
+    const token = match[1].trim();
     const payload = jwt.verify(token); // throws on invalid/expired token
 
     req.accountId = payload.sub;

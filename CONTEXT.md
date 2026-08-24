@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,12 +121,34 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Next is Phase 7, starting at T46.**
+## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T47.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 22 (2026-08-25): 45 of 65 done. PHASE 6 IS CLOSED —
-> T42 ✅ T43 ✅ T44 ✅ T45 ✅. The next task is T46, the first of Phase 7.**
+> **State as of session 23 (2026-08-25): 46 of 65 done. PHASE 6 IS CLOSED and
+> PHASE 7 HAS STARTED — T46 ✅. The next task is T47 (refresh tokens).**
+>
+> **T46 is done, and it was not the no-op it looked like.** Auth *was* already
+> token-only everywhere — but the scheme was matched **case-sensitively**, and
+> **RFC 7235 §2.1 says the scheme name is case-insensitive**, so `bearer` and
+> `BEARER` were 401'd. That is a backend the RN app cannot work around, which
+> is the exact rework Phase 7 exists to prevent. It is now
+> `/^Bearer +(.+)$/i` in `auth.middleware.ts` — **do not "tidy" it back to
+> `startsWith('Bearer ')`.** It was only found by *replaying the header in a
+> case a client may legitimately send*; the code reads correctly until you try it.
+>
+> Two things from T46 worth keeping:
+> 1. **There is exactly ONE place a credential enters the API** —
+>    `auth.middleware.ts`. No cookie, no `?token=`, no second header, and
+>    `credentials: false` in `config/security.ts`. `auth.middleware.spec.ts`
+>    pins all of that with 26 specs whose negative cases each use a **valid**
+>    token, so a failure means the channel widened. Adding a second channel
+>    "for convenience" will fail those tests, which is the intent.
+> 2. **`credentials: false` is doing more than it looks like.** A
+>    `fetch(..., { credentials: 'include' })` from the SPA is **blocked by the
+>    browser at the CORS layer** — "Failed to fetch", the response never
+>    becomes readable — not merely answered 401. Verified from a real signed-in
+>    page. Turning `credentials` on would quietly undo that.
 >
 > **T44 is done: `GET /styles/public/:merchantId` is the salon menu, and the
 > path deliberately did NOT move.** Unlike T43, `client.js:157` already calls
@@ -205,9 +227,13 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > matches `.js`, and ts-jest then follows the sourcemap until it runs out of
 > memory. Session 21 lost time to this.
 >
-> **Phase 6 is closed. Phase 7 (T46–T51) is next**, and T46 may already be
-> satisfied — auth has been `Authorization: Bearer` throughout — so start by
-> verifying it rather than building it.
+> **Phase 6 is closed. Phase 7 (T46–T51) is under way — T46 ✅.** T46 was
+> indeed mostly satisfied already, but verifying it rather than assuming it is
+> what turned up the case-sensitivity defect. **T47 (refresh tokens) is next
+> and is the one Phase 7 task that CHANGES the login response** both clients
+> read, so it cannot be deferred past deployment: `client.js:99` does
+> `await saveToken(result.token)` and the web client's `api.js` does the same
+> per role. Whatever T47 returns must keep `token` present under that name.
 >
 > **T39 is done — the mobile pass found four real defects, not none.** Read
 > its TASKS.md entry before touching `global.css`. The headline: **T36's
