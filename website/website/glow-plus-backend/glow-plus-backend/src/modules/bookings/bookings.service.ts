@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { DEFAULT_PAGE_SIZE, PaginationQueryDto } from '../../common/pagination.dto';
 import { assertMerchantVisible } from '../../common/merchant-visibility';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptPii } from '../../common/pii-crypto';
@@ -63,12 +64,26 @@ export class BookingsService {
     return booking;
   }
 
-  listForConsumer(userId: string) {
-    return this.prisma.booking.findMany({
-      where: { userId },
-      include: { style: true, merchant: { select: { businessName: true } } },
-      orderBy: { startTime: 'desc' },
-    });
+  /**
+   * T50 — paginated. The RN app maps this response directly
+   * (`client.js:203`), so the body stays a bare array and the total goes in
+   * `X-Total-Count`; see common/pagination.dto.ts.
+   */
+  async listForConsumer(userId: string, query: PaginationQueryDto = {}) {
+    const where = { userId };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.booking.findMany({
+        where,
+        include: { style: true, merchant: { select: { businessName: true } } },
+        orderBy: { startTime: 'desc' },
+        skip: query.offset ?? 0,
+        take: query.limit ?? DEFAULT_PAGE_SIZE,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   /**
@@ -82,30 +97,42 @@ export class BookingsService {
    * `decryptPii` returns a pre-T31b plaintext row unchanged, so rows written
    * before the migration keep working without a backfill.
    */
-  async listForMerchant(merchantId: string, from?: Date, to?: Date) {
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        merchantId,
-        ...(from || to
-          ? {
-              startTime: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lte: to } : {}),
-              },
-            }
-          : {}),
-      },
-      include: { style: true, user: { select: { name: true, email: true, phone: true } } },
-      orderBy: { startTime: 'asc' },
-    });
+  async listForMerchant(merchantId: string, from?: Date, to?: Date, query: PaginationQueryDto = {}) {
+    const where = {
+      merchantId,
+      ...(from || to
+        ? {
+            startTime: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {}),
+    };
 
-    return bookings.map((booking) => ({
+    // T50 — counted with the SAME `where`, date filter included, so a merchant
+    // paging through "this week" is told how many are in this week and not how
+    // many they have ever taken.
+    const [bookings, total] = await this.prisma.$transaction([
+      this.prisma.booking.findMany({
+        where,
+        include: { style: true, user: { select: { name: true, email: true, phone: true } } },
+        orderBy: { startTime: 'asc' },
+        skip: query.offset ?? 0,
+        take: query.limit ?? DEFAULT_PAGE_SIZE,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    const items = bookings.map((booking) => ({
       ...booking,
       user: {
         ...booking.user,
         phone: booking.user.phone ? decryptPii(booking.user.phone) : null,
       },
     }));
+
+    return { items, total };
   }
 
   async confirm(merchantId: string, bookingId: string) {

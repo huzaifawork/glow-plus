@@ -251,3 +251,59 @@ describe('buildHelmetOptions — emitted headers', () => {
     expect(prod['strict-transport-security']).toContain('max-age=15552000');
   });
 });
+
+/**
+ * Expo web  (T51)
+ *
+ * The native app is deliberately absent from these tests, because it is
+ * absent from the problem: Expo Go and a built binary send no Origin header,
+ * CORS never engages, and `isOriginAllowed(undefined, ...)` is already true.
+ * What DOES need an entry is Expo *web*, which is an ordinary browser origin.
+ */
+describe('CORS covers Expo web (T51)', () => {
+  it.each([
+    ['http://localhost:8081', 'Expo Metro web, SDK 49+'],
+    ['http://localhost:19006', 'Expo webpack web, legacy'],
+  ])('the dev fallback includes %s (%s)', (origin) => {
+    expect(DEV_FALLBACK_ORIGINS).toContain(origin);
+  });
+
+  it('still includes the website dev server', () => {
+    expect(DEV_FALLBACK_ORIGINS).toContain('http://localhost:3000');
+  });
+
+  it('allows an Expo web origin when the fallback is in use', () => {
+    const { origins } = resolveAllowedOrigins({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
+
+    expect(isOriginAllowed('http://localhost:8081', origins)).toBe(true);
+    expect(isOriginAllowed('http://localhost:19006', origins)).toBe(true);
+  });
+
+  it('allows a native request, which carries no Origin at all', () => {
+    const { origins } = resolveAllowedOrigins({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
+
+    expect(isOriginAllowed(undefined, origins)).toBe(true);
+  });
+
+  it('does NOT hand Expo an exemption in production', () => {
+    // The fallback is development-only. A deployed Expo web build has a real
+    // origin and belongs in ALLOWED_ORIGINS like any other; baking localhost
+    // into production would be an open door that looks like configuration.
+    const { origins } = resolveAllowedOrigins({
+      NODE_ENV: 'production',
+      ALLOWED_ORIGINS: 'https://glowplusmember.com',
+    } as NodeJS.ProcessEnv);
+
+    expect(isOriginAllowed('http://localhost:8081', origins)).toBe(false);
+    expect(isOriginAllowed('https://glowplusmember.com', origins)).toBe(true);
+  });
+
+  it('reads a comma-separated list with Expo entries in it', () => {
+    const { origins } = resolveAllowedOrigins({
+      ALLOWED_ORIGINS: 'http://localhost:3000,http://localhost:8081,http://localhost:19006',
+    } as NodeJS.ProcessEnv);
+
+    expect(origins).toHaveLength(3);
+    expect(isOriginAllowed('http://localhost:8081', origins)).toBe(true);
+  });
+});

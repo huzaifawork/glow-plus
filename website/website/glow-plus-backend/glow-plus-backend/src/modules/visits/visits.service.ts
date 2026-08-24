@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { DEFAULT_PAGE_SIZE, PaginationQueryDto } from '../../common/pagination.dto';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,12 +21,27 @@ export class VisitsService {
     private readonly rewardRules: RewardRulesService,
   ) {}
 
-  list(merchantId: string) {
-    return this.prisma.visit.findMany({
-      where: { merchantId },
-      include: { style: true, user: { select: { name: true, email: true } } },
-      orderBy: { visitDate: 'desc' },
-    });
+  /**
+   * T50 — paginated. Counted with the same `where` as the page, so
+   * `X-Total-Count` is the size of the list being paged through rather than
+   * the table. Both queries go in one `$transaction` so the count cannot
+   * disagree with the page it describes.
+   */
+  async list(merchantId: string, query: PaginationQueryDto = {}) {
+    const where = { merchantId };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.visit.findMany({
+        where,
+        include: { style: true, user: { select: { name: true, email: true } } },
+        orderBy: { visitDate: 'desc' },
+        skip: query.offset ?? 0,
+        take: query.limit ?? DEFAULT_PAGE_SIZE,
+      }),
+      this.prisma.visit.count({ where }),
+    ]);
+
+    return { items, total };
   }
 
   /**
@@ -40,9 +56,12 @@ export class VisitsService {
    * `expired` visits are included on purpose (T25 [F8]): expiring points means
    * excluding a visit from reward maths, never hiding it from history.
    */
-  async listForConsumer(userId: string) {
-    const visits = await this.prisma.visit.findMany({
-      where: { userId },
+  async listForConsumer(userId: string, query: PaginationQueryDto = {}) {
+    const where = { userId };
+
+    const [visits, total] = await this.prisma.$transaction([
+      this.prisma.visit.findMany({
+      where,
       select: {
         id: true,
         merchantId: true,
@@ -55,9 +74,13 @@ export class VisitsService {
         merchant: { select: { businessName: true } },
       },
       orderBy: { visitDate: 'desc' },
-    });
+      skip: query.offset ?? 0,
+      take: query.limit ?? DEFAULT_PAGE_SIZE,
+      }),
+      this.prisma.visit.count({ where }),
+    ]);
 
-    return visits.map((v) => ({
+    const items = visits.map((v) => ({
       id: v.id,
       merchantId: v.merchantId,
       businessName: v.merchant.businessName,
@@ -69,6 +92,8 @@ export class VisitsService {
       expired: v.expired,
       expiredAt: v.expiredAt,
     }));
+
+    return { items, total };
   }
 
   /**

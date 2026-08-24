@@ -112,10 +112,27 @@ export function parseAllowedOrigins(raw: string | undefined): string[] {
 }
 
 /**
- * Where the dev server runs (`glow-plus-web`, strictPort 3000). Used ONLY when
- * `ALLOWED_ORIGINS` is unset outside production.
+ * Where the dev servers run. Used ONLY when `ALLOWED_ORIGINS` is unset outside
+ * production.
+ *
+ * T51 — the two Expo entries are for **Expo web**, and only Expo web. The
+ * native app needs nothing here: Expo Go and a built binary send **no Origin
+ * header at all**, and `isOriginAllowed` already returns true for those (see
+ * its comment — refusing an origin-less request blocks every non-browser
+ * client while stopping no attacker). CORS is a browser rule; React Native is
+ * not a browser.
+ *
+ * Two ports because Expo has two web dev servers and SDK 51 can run either:
+ * **8081** is Metro, the default since SDK 49, and **19006** is the older
+ * `@expo/webpack-config` one that plenty of tutorials and existing configs
+ * still use. Guessing one and being wrong presents as a CORS error in a
+ * console the backend developer is not looking at, so both are listed.
  */
-export const DEV_FALLBACK_ORIGINS = ['http://localhost:3000'];
+export const DEV_FALLBACK_ORIGINS = [
+  'http://localhost:3000', // glow-plus-web (Vite, strictPort)
+  'http://localhost:8081', // Expo web — Metro (SDK 49+)
+  'http://localhost:19006', // Expo web — webpack (legacy)
+];
 
 /**
  * The origin list actually used, and whether it came from a fallback.

@@ -1,4 +1,5 @@
 import { IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { PaginationQueryDto } from '../../common/pagination.dto';
 import { MAX_ID, MAX_NOTES } from '../../common/limits';
 
 export class CreateBookingDto {
@@ -44,4 +45,22 @@ export class AvailabilityQueryDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be in YYYY-MM-DD format' })
   date!: string;
+}
+
+/**
+ * Query for `GET /bookings` (merchant)  (T50)
+ *
+ * Extends the shared pagination DTO with the date window this route already
+ * accepted but never checked. `@IsISO8601()` rather than `@IsDate()`: the
+ * value arrives as text, and the handler is what turns it into a `Date` — this
+ * only has to guarantee that doing so will not produce an Invalid Date.
+ */
+export class MerchantBookingsQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
 }

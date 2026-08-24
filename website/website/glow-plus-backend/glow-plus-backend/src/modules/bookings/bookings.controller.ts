@@ -1,7 +1,9 @@
-import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
+import { PaginationQueryDto } from '../../common/pagination.dto';
 import { BookingsService } from './bookings.service';
 import { AvailabilityService } from './availability.service';
-import { AvailabilityQueryDto, CreateBookingDto } from './dto';
+import { AvailabilityQueryDto, CreateBookingDto, MerchantBookingsQueryDto } from './dto';
 import { AuthedRequest, ConsumerRequest, MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 import { RequireConsumerGuard } from '../../common/guards/require-consumer.guard';
@@ -34,10 +36,31 @@ export class BookingsController {
   }
 
   // Consumer — their own upcoming/past bookings.
+  /**
+   * T50 — paginated. The body stays a **bare array** and the total goes in
+   * `X-Total-Count`, the same contract T43 and T44 set for the public lists:
+   * both clients map the response directly, so an `{ items, total }` envelope
+   * would be a breaking change.
+   *
+   * `passthrough: true` is load-bearing — without it, injecting `@Res()` puts
+   * the handler into manual mode, Nest stops serialising the return value, and
+   * the request hangs until it times out.
+   *
+   * `X-Total-Count` is exposed to browsers once, globally, in
+   * `config/security.ts`. Do NOT add a per-route
+   * `Access-Control-Expose-Headers` here: it REPLACES rather than appends and
+   * would take the rate-limit headers down with it [F46].
+   */
   @Get('me')
   @UseGuards(RequireConsumerGuard)
-  mine(@Req() req: ConsumerRequest) {
-    return this.bookings.listForConsumer(req.accountId);
+  async mine(
+    @Req() req: ConsumerRequest,
+    @Query() query: PaginationQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { items, total } = await this.bookings.listForConsumer(req.accountId, query);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   // Either party can cancel — the service checks ownership based on role.
@@ -60,10 +83,30 @@ export class BookingsController {
   }
 
   // Merchant — their calendar, optionally filtered by date range.
+  /**
+   * T50 — paginated, and the date filter is now VALIDATED.
+   *
+   * `from`/`to` were loose `@Query('from') from?: string` params, which
+   * ValidationPipe does not look at [F38] — `new Date('banana')` is an
+   * Invalid Date, and Prisma was handed it. `MerchantBookingsQueryDto` binds
+   * the whole query object, so a bad date is a 400 that names the field
+   * instead of a 500 from the driver.
+   */
   @Get()
   @UseGuards(RequireMerchantGuard)
-  listForMerchant(@Req() req: MerchantRequest, @Query('from') from?: string, @Query('to') to?: string) {
-    return this.bookings.listForMerchant(req.merchantId, from ? new Date(from) : undefined, to ? new Date(to) : undefined);
+  async listForMerchant(
+    @Req() req: MerchantRequest,
+    @Query() query: MerchantBookingsQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { items, total } = await this.bookings.listForMerchant(
+      req.merchantId,
+      query.from ? new Date(query.from) : undefined,
+      query.to ? new Date(query.to) : undefined,
+      query,
+    );
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Patch(':id/confirm')
