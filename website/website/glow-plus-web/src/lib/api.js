@@ -121,6 +121,22 @@ export async function apiRequest(path, { method = 'GET', body, auth = true, toke
   const payload = text ? safeJson(text) : null;
 
   if (!res.ok) {
+    // A 401 on a request we DID send a token with means that token is no good
+    // — expired, tampered with, or (T30) issued by the pre-`jsonwebtoken`
+    // signer and missing the `iss`/`aud` claims the API now verifies. Drop it.
+    //
+    // Without this the page stays "logged in" holding a token the server will
+    // never accept: every render re-sends it, gets 401, and shows the API's
+    // own words ("Malformed token") as though the user had done something
+    // wrong — and there is no button anywhere that clears it. Discarding it
+    // here puts the page back in its signed-out state, which every one of
+    // these pages already knows how to render.
+    //
+    // Only on 401. A 403 is a *valid* token being refused a *specific* route
+    // (T29's role guards, T29's paywall) — throwing that session away would
+    // log a merchant out for touching one admin URL.
+    if (res.status === 401 && token) removeToken(tokenKey);
+
     throw new ApiError(
       payload?.message || `Request failed (${res.status})`,
       res.status,

@@ -67,7 +67,7 @@ Rules:
 | F9  | **The website is an artifact prototype, not an app** — 0 `fetch`, 0 password fields, data layer is `window.storage` (doesn't exist in browsers)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `Glow-Plus-Website .html` (1,932 lines)                                     |
 | F10 | **The original dev says the frontend needs "their own, much bigger buildout"**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `glow-plus-frontend/README.md`, final section                               |
 | F11 | Email provider **does** support Resend; defaults to `log`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `email.provider.ts` — set `EMAIL_PROVIDER=resend`                           |
-| F12 | JWT is hand-rolled HS256, fixed 7-day, **no refresh**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `jwt.util.ts`                                                               |
+| F12 | ✅ **RESOLVED 2026-08-24 by T30** (the refresh half remains T47). Was: JWT is hand-rolled HS256, fixed 7-day, **no refresh**. The hand-rolled part is gone — `jsonwebtoken@9`, algorithm pinned, `iss`/`aud` verified, `iat`/`jti` issued. Probing the old code before replacing it found **four live defects**, three of which let a correctly-signed token bypass expiry entirely (no `exp` claim, non-numeric `exp`, and 4+ segment tokens all returned **200**); the fourth was a non-constant-time signature compare. Expiry is still a fixed 7 days with no refresh token — **that is T47**, and T30's `jti` is the hook it needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `jwt.util.ts`                                                               |
 | F13 | No `/health` endpoint                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | no matches in `src/`                                                        |
 | F24 | **The auth-switch links never worked.** A "Go to business login" / "Go to customer login" anchor was nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation — destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `Glow-Plus-Website .html:426,466` vs `applyStaticTranslations()`            |
 | F25 | **Mobile overflows horizontally** — at a 390px viewport the document is 401px wide because the `.topnav` buttons don't wrap. Measured identically on the original, so it is pre-existing, not migration damage → **T39**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Chromium, both versions, session 3                                          |
@@ -631,7 +631,93 @@ Rules:
   surfaced because the 400 fired *before* the ownership check and masked what
   the IDOR probe was testing. Fixed; the other seven DTOs were checked and
   already correct.
-- [ ] **T30 — Consider `jsonwebtoken`** over the hand-rolled HS256 implementation. [F12]
+- [x] **T30 — Consider `jsonwebtoken`** over the hand-rolled HS256 implementation. [F12]
+
+  **Done 2026-08-24 (session 15). Verdict: adopted.** The task said "consider",
+  so it was probed before being decided — and probing the hand-rolled code
+  against the running API found **four real defects**, three of which let a
+  *correctly signed* token bypass expiry completely. Every one below was
+  reproduced live at **HTTP 200** on `GET /bookings/me` before the change:
+
+  1. **A token with NO `exp` claim never expired.** The check was
+     `if (payload.exp < now)`, and `undefined < number` is `false` — so an
+     absent claim silently meant *valid forever*.
+  2. **A token with a non-numeric `exp` never expired either.** `'never' < n`
+     and `NaN < n` are both `false`. `exp: 'abc'` and `exp: null` both got 200.
+  3. **4-, 5- and 6-segment strings were accepted as JWTs.**
+     `const [h,p,s] = token.split('.')` drops the rest, so
+     `<valid-token>.garbage` authenticated. RFC 7519 requires exactly three.
+  4. **The signature was compared with `!==`** — a non-constant-time compare
+     on a secret-derived value.
+
+  **None of 1–3 is exploitable by an outsider today** — all three still
+  require the ability to sign, and the secret held. Saying otherwise would
+  overstate it. They matter because **T47 (refresh tokens) is the next task to
+  call `sign()`**, for a second kind of token, and "forgot to pass an expiry"
+  would have produced an immortal refresh token with nothing raised anywhere.
+  That is the concrete reason to stop hand-rolling now rather than after T47.
+
+  Checked and found **not** broken, so the report stays honest: an `alg:none`
+  forgery was already refused (the old code never read the header at all and
+  always ran HMAC-SHA256 — safe by accident, not by design), and a
+  wrong-secret token was refused.
+
+  **What changed.** `src/middleware/jwt.util.ts` is now `jsonwebtoken@9`
+  with the **same exported API** (`sign`/`verify`/`TokenPayload`), so all five
+  call sites — `auth`, `merchant-auth`, `admin-auth`, `staff-auth`,
+  `auth.middleware` — are untouched. Added: `algorithms: ['HS256']` pinned at
+  verify time, `iss`/`aud` **verified** (not merely present), `iat` and `jti`
+  on every token, `clockTolerance: 5s` for serverless skew, and an explicit
+  shape check that refuses an unknown `role` — previously any string reached
+  `req.accountRole`, matched none of the four guards, and failed differently
+  in each.
+
+  `jti` is issued but **not yet checked against a store** — stated plainly
+  because it does not enable revocation on its own. Issuing it now is what
+  makes T47's revocation a one-file change instead of a forced re-login for
+  every user.
+
+  Library error strings are mapped back to this API's existing messages
+  (`Token expired` / `Invalid token signature` / `Malformed token`).
+  Deliberate: jsonwebtoken says _"jwt audience invalid. expected:
+  glow-plus-app"_, which describes **our** configuration to an
+  **unauthenticated** caller — same principle as [F31], applied to error text
+  instead of response bodies. Asserted live.
+
+  ⚠ **Pre-T30 tokens carry no `iss`/`aud` and are now refused** — a one-time
+  forced re-login. Deliberate: honouring claim-less legacy tokens for a grace
+  period means shipping the new check switched off. The API has never been
+  deployed, so the only holders were dev browsers.
+
+  **→ That exposed a real frontend defect, now fixed.** `lib/api.js` stored
+  tokens but **never cleared one the server rejected**. A page holding a stale
+  token re-sent it on every render, got 401, and displayed the API's own words
+  ("Malformed token") as if the user had mistyped something — with no button
+  anywhere to clear it. `apiRequest` now drops the token on a **401 that was
+  sent with one**. Only 401: a **403** is a *valid* token refused a *specific*
+  route (T29's role guards, T29's paywall), and throwing the session away
+  there would log a merchant out for touching one admin URL. Both directions
+  asserted in the browser.
+
+  **Tested.** **35/35 live checks** against the running API and real Postgres:
+  all three roles log in and reach their own routes; the merchant token
+  carries `merchantId` and the consumer token **omits** it ([F29]'s root
+  cause); T29's role separation still holds (403 both directions); all four
+  defects above now **401**; foreign-issuer, foreign-audience, legacy and
+  unknown-role tokens all **401**; and a real guarded write (`PATCH
+  /styles/:id`) still returns 200. **11/12 in real Chrome** (`puppeteer-core`,
+  scratchpad-only) — stale token self-clears, page falls back to its sign-in
+  state, a real login stores a T30 token, a 403 leaves the session intact, the
+  consumer page's separate token key clears **without** touching the merchant
+  session in the same browser, no overflow at 390px. The single non-pass is
+  the console-error assertion catching its own fixtures — the planted 401 and
+  a `favicon.ico` 404 — not a defect.
+
+  Suite now **161 passing** (was 146): `jwt.util.spec.ts` grew from 8 to 23,
+  and the new block mints tokens **the way the old code did** — correctly
+  signed, so each test is about claim handling rather than signatures — so
+  swapping the library back out for anything hand-rolled fails the build
+  instead of regressing invisibly. `tsc --noEmit` clean. DB untouched.
 - [ ] **T31 — Security review pass** (input validation, error leakage, dependency audit).
 - [ ] **T31b — PII at rest: phone numbers are stored in plaintext.** The Fiverr chat says _"JWT_SECRET / **ENCRYPTION_KEY** are sitting in a plaintext .env file"_ — but **there is no `ENCRYPTION_KEY`** in `.env` or `.env.example`, and **no encryption/decryption code anywhere in `src/`**. `User.phone` is a bare `String?`. So the client believes phone numbers are encrypted; they are not. Decide with the client: encrypt at rest, or rely on DB-level encryption + access control. Also relevant to the privacy policy (T66), which must describe how personal data is actually stored.
 - [!] **T32 — M-Pesa/Daraja webhook + IP allowlisting.** ⚠️ **The docx implies this exists; there is NO M-Pesa code in the repo.** This is build-from-scratch, not a fix. **Needs a client decision — biggest hidden scope item after the frontend.**
