@@ -904,7 +904,8 @@ Rules:
 
 # PHASE 5 — Website build _(the real Order 1 work)_
 
-- [!] **T33 — Confirm approach.** The existing HTML can't be wired up — it has no API calls, no password fields, and a browser-nonexistent storage layer. **Rebuild against the API, keeping the existing HTML as the design reference.** [F9][F10]
+- [x] **T33 — Confirm approach.** ✅ **CONFIRMED 2026-08-24 — go-ahead given to proceed.** The existing HTML can't be wired up — it has no API calls, no password fields, and a browser-nonexistent storage layer. **Rebuild against the API, keeping the existing HTML as the design reference.** [F9][F10]
+      **Still worth raising with the client separately** (see "MESSAGE FOR THE CLIENT" below) — this item is absent from their 23-item list, so it's an unpriced scope addition even though the technical approach is now settled and unblocked.
 
   **The design itself is a real asset and should be preserved, not redrawn.** View it any time with:
   `node "<scratchpad>/design-preview.js"` → **http://localhost:8080**
@@ -1005,7 +1006,7 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 
 - [~] **Database for local dev — DEFERRED, decide at T3.** Docker isn't installed [F17]. Leaning Neon/Supabase free tier (no install, and it's the same platform as T52). Not blocking T1/T2, which need no database.
 - [!] **T32 — Is M-Pesa in scope?** No code exists; it's a from-scratch build.
-- [!] **T33 — Website rebuild confirmed?** Biggest item; absent from the client's list.
+- [x] **T33 — Website rebuild confirmed?** ✅ **Confirmed 2026-08-24** — proceeding with rebuild-against-API. Still an unpriced scope item to flag with the client (absent from their list).
 - [!] **Vercel plan** — Hobby allows only 2 cron jobs at once-daily. This project has 4 → Pro (~$20/mo), or consolidate into one dispatcher route.
 - [!] **Rotate the Vercel token** pasted in Fiverr chat before using it.
 
