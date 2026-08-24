@@ -476,7 +476,88 @@ Rules:
   **Proven live:** compiled with `npm run build`, then booted with (1) the [F20] placeholder → refused, naming it; (2) an 8-char secret → refused, naming the length; (3) `NODE_ENV=production VERCEL=1` against the dev `.env` → refused, listing the localhost `APP_URL`, the localhost `ALLOWED_ORIGINS` **and** `TRUST_PROXY_HEADER=0` in one message. The real `.env` still boots and `POST /auth/login` still returns 201. Suite **104 passing** (was 85); `tsc --noEmit` clean.
 
   ⛔ **NOT done, and out of scope by the user's decision (2026-08-24): rotating the Stripe, Resend and Vercel credentials.** Those are account actions in each provider's dashboard, not code. The ranked list, with severity reasoning (Resend first — live, no test mode, and a leak lets anyone send mail as the client), is in `DEPLOYMENT.md` under "Still outstanding" for the client to action.
-- [ ] **T28 — Add `helmet`, tighten CORS** to real origins.
+- [x] **T28 — Add `helmet`, tighten CORS** to real origins. ✅ **Done 2026-08-24 (session 13).**
+
+  **What the live API was actually sending before this**, on every single response:
+
+  ```
+  X-Powered-By: Express
+  Access-Control-Allow-Credentials: true
+  ```
+
+  and nothing else. No `X-Content-Type-Options`, no `X-Frame-Options`, no
+  `Referrer-Policy`, no CSP, no HSTS. The `Access-Control-Allow-Credentials: true`
+  is the interesting half: it went out **even on responses to origins that were
+  refused**, and auth here is bearer-token only by contract in both clients
+  (`lib/api.js`, and the RN app has no cookie jar). It bought nothing, and it is
+  precisely the header that would have made a future "let's just use a session
+  cookie" CSRF-able on day one — silently, because the server was already
+  advertising support.
+
+  **New `src/config/security.ts`**, written as pure functions of the environment
+  so the policy is unit-testable without booting Nest; `main.ts` only wires it.
+
+  **helmet, tuned for a JSON-only API** — verified it is JSON-only first
+  (`useStaticAssets`, `sendFile`, `text/html` all return nothing across `src/`),
+  which is what makes the defaults tightenable rather than merely acceptable.
+  `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`
+  with `useDefaults: false`, `X-Frame-Options: DENY` (not helmet's SAMEORIGIN),
+  `Referrer-Policy: no-referrer`. Two deliberate departures: **`Cross-Origin-Resource-Policy`
+  is loosened to `cross-origin`**, because helmet's `same-origin` default describes
+  a deployment this project does not have — the site and the API are different
+  hosts; and **HSTS is production-only, `preload: false`**, because submitting a
+  domain to the browsers' preload list is a one-way door and is the client's call
+  about their own domain, not a default to inherit.
+
+  **Applied first in the middleware chain**, deliberately: verified the headers are
+  present on a 401 from `AuthMiddleware`, a 404, and a **429 from T26's limiter** —
+  i.e. exactly the error responses an attacker generates most, which anything
+  registered later would have left bare.
+
+  **CORS.** `credentials: false`. Explicit `methods` and `allowedHeaders`
+  (`Content-Type`, `Authorization` — grepped from both clients, not assumed)
+  instead of the `cors` default of reflecting whatever the browser asks for.
+  Origin matching is exact and case-insensitive with the trailing slash and
+  stray spaces normalised off — `https://site.com/` and `a, b` are both natural
+  things to paste into a Vercel dashboard and both silently match nothing.
+
+  **`Access-Control-Expose-Headers` is the part with a user-visible payoff:** a
+  cross-origin `fetch` can only read the CORS-safelisted response headers, so
+  every one of **T26's rate-limit headers was invisible to the website** — the
+  limiter was enforced but unreadable, and the UI could not tell a user how long
+  to wait after a 429. Proved in a real browser that `X-RateLimit-*` is now
+  readable from JS while an unexposed header (`ETag`) still is not.
+
+  **`env.validation.ts` gained two production checks (T27's file):** `ALLOWED_ORIGINS`
+  containing `*` — the standard "just make CORS work" fix reached for under deploy
+  pressure, which lets any page on the internet read authenticated responses — and
+  any entry with no scheme, which never matches a browser's `Origin` and so fails
+  CORS in production while the variable looks correctly filled in.
+
+  **The old inline `?? ['http://localhost:3000']` fallback is gone.** It survives
+  only outside production, and now *announces itself* at boot — the problem was
+  never the default, it was that nothing said it had been used. In production it
+  cannot happen at all: `ALLOWED_ORIGINS` is in T27's production-required list, so
+  the process refuses to start without it.
+
+  **Verified live, not just in tests.** 36/36 curl checks against the running API
+  (every header on 200/401/404/429; allowed vs unlisted origin; the
+  prefix/suffix/`Origin: null`/scheme-swap/port-swap near-misses that a naive
+  `startsWith` or `endsWith` check lets through; preflight 204 + `max-age`;
+  non-browser callers unaffected). **Stripe webhooks re-verified end to end** with
+  a real `stripe trigger` — 10 events, all **200** — because [F19] was a raw-body
+  regression and helmet now sits ahead of that path. **12/12 real-Chrome checks**
+  (`puppeteer-core`, scratchpad-only): the site still logs in and calls
+  `/points/me` over CORS, the rate-limit headers are readable, and a page served
+  from an origin *not* on the list cannot read the response — while the same
+  request in `no-cors` mode still returns an opaque response, proving the refusal
+  is the browser's, not a 4xx from the server.
+
+  Suite now **133 passing** (was 104): 26 in a new `security.spec.ts` — which runs
+  the real helmet middleware over a fake response and asserts on **emitted
+  headers**, not on the options object, since the options being right is not the
+  property that matters — plus 3 in `env.validation.spec.ts`. `tsc --noEmit` clean.
+  DB untouched (confirmed at exact seed state after the webhook run).
 - [ ] **T29 — Authorization audit.** ⚠️ **Scope is now known and larger than "verify" — two live defects are already proven, see [F29][F30].** Verify every merchant-scoped route checks ownership (no IDOR: merchant A reading merchant B's data).
       **Confirmed work, not speculation:**
   1. **Add a real role guard.** 19 call sites pass `req.merchantId!` / `req.accountId!` with no check that the caller holds that role. A consumer token currently reads `GET /styles` and gets **200 + every row** [F29]. The `!` assertions must go — a guard should reject before the handler, so the type is honest.

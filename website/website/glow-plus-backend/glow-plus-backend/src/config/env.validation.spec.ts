@@ -114,6 +114,28 @@ describe('collectEnvProblems — production only', () => {
     expect(collectEnvProblems(env).join()).toContain('ALLOWED_ORIGINS');
   });
 
+  it('rejects a wildcard in ALLOWED_ORIGINS — T28', () => {
+    // The standard "just make CORS work" fix under deploy pressure. It lets
+    // any page on the internet read authenticated responses from this API.
+    const env = { ...goodProd(), ALLOWED_ORIGINS: '*' };
+    expect(collectEnvProblems(env).join()).toContain('wildcard');
+  });
+
+  it('rejects an ALLOWED_ORIGINS entry with no scheme — T28', () => {
+    // A bare hostname never matches a browser's Origin header, so the site
+    // fails CORS in production while the variable looks correctly filled in.
+    const env = { ...goodProd(), ALLOWED_ORIGINS: 'glowplusmember.com' };
+    expect(collectEnvProblems(env).join()).toContain('no scheme');
+  });
+
+  it('accepts a comma-separated list of real origins — T28', () => {
+    const env = {
+      ...goodProd(),
+      ALLOWED_ORIGINS: 'https://glowplusmember.com, https://www.glowplusmember.com',
+    };
+    expect(collectEnvProblems(env)).toEqual([]);
+  });
+
   it('rejects TRUST_PROXY_HEADER left off behind Vercel — T26 would see one IP for everyone', () => {
     const env = { ...goodProd(), TRUST_PROXY_HEADER: '0' };
     expect(collectEnvProblems(env).join()).toContain('TRUST_PROXY_HEADER');

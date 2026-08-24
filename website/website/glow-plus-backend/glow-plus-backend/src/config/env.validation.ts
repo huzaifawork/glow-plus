@@ -125,6 +125,26 @@ export function collectEnvProblems(env: NodeJS.ProcessEnv): string[] {
     if (env.ALLOWED_ORIGINS && isLocalUrl(env.ALLOWED_ORIGINS)) {
       problems.push(`ALLOWED_ORIGINS still contains localhost (${env.ALLOWED_ORIGINS})`);
     }
+    // T28. `*` is the one value that makes the CORS list decorative: it lets
+    // any page on the internet read authenticated responses from this API.
+    // It is also the standard "just make CORS work" fix someone reaches for
+    // under deploy pressure, which is exactly when nobody reviews it.
+    if (env.ALLOWED_ORIGINS?.split(',').some((o) => o.trim() === '*')) {
+      problems.push(
+        'ALLOWED_ORIGINS contains "*" — list the real site origins instead; a wildcard lets any site read this API',
+      );
+    }
+    // An origin is scheme + host + port. A bare hostname never matches the
+    // browser's Origin header, so the site fails CORS in production while the
+    // variable looks correctly filled in.
+    for (const origin of env.ALLOWED_ORIGINS?.split(',') ?? []) {
+      const trimmed = origin.trim();
+      if (trimmed && trimmed !== '*' && !/^https?:\/\//i.test(trimmed)) {
+        problems.push(
+          `ALLOWED_ORIGINS entry "${trimmed}" has no scheme — it must be a full origin, e.g. https://glowplusmember.com`,
+        );
+      }
+    }
     // T26's limiter collapses to a single bucket for the entire internet
     // without this, because every request arrives from Vercel's proxy IP.
     // One abuser would then lock out every user.

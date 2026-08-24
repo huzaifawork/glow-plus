@@ -19,7 +19,7 @@ misbehaving later — see [Why boot validation](#why-boot-validation).
 | `JWT_SECRET` | 🔴 yes | 48 random bytes | **A different** 48 random bytes | A weak or shared value means anyone can mint an `admin` token — this already happened once, [F20] |
 | `PORT` | no | `4000` | set by Vercel — **do not set** | — |
 | `APP_URL` | no | `http://localhost:3000` | `https://glowplusmember.com` | Verification and password-reset emails ship dead `localhost` links to real customers |
-| `ALLOWED_ORIGINS` | no | `http://localhost:3000` | the real site origin(s), comma-separated | The website's API calls fail CORS. Must also cover Expo web for Order 2 (T51) |
+| `ALLOWED_ORIGINS` | no | `http://localhost:3000` | the real site origin(s), comma-separated — **full origins, no trailing slash** | The website's API calls fail CORS. Must also cover Expo web for Order 2 (T51). See [CORS](#cors-t28) |
 | `TRUST_PROXY_HEADER` | no | `0` | **`1`** | At `0` behind Vercel every visitor counts as one IP and T26's limiter locks out the whole platform on one abuser |
 | `STRIPE_SECRET_KEY` | 🔴 yes | `sk_test_…` | `sk_live_…` when going live | Checkout and billing fail at request time, not boot |
 | `STRIPE_WEBHOOK_SECRET` | 🔴 yes | printed by `stripe listen` | from the **production** endpoint (T61) — a different value | Every webhook 400s and subscription state silently stops syncing ([F19] was exactly this) |
@@ -73,6 +73,46 @@ placeholder strings, secrets under 32 characters, a `localhost` `APP_URL` in
 production, `EMAIL_PROVIDER=log` in production, and `TRUST_PROXY_HEADER` left
 off behind a proxy. Proven by actually booting the compiled app against bad
 values, not only in unit tests.
+
+## CORS (T28)
+
+`ALLOWED_ORIGINS` is the **only** thing that decides which websites may read
+this API from a browser. `src/config/security.ts` holds the policy.
+
+Write **full origins**, comma-separated:
+
+```
+ALLOWED_ORIGINS="https://glowplusmember.com,https://www.glowplusmember.com"
+```
+
+- `https://` and `http://` are **different origins**. List whichever the site
+  actually serves — if the site redirects http→https, only the https one is
+  needed.
+- `www.` and the bare domain are **different origins**. If both resolve, list
+  both, or the one you left out fails every API call.
+- A trailing slash and stray spaces are stripped for you (a browser's `Origin`
+  header never has a path), but a value with **no scheme** or a **`*`** is
+  rejected at boot in production — a wildcard would let any page on the
+  internet read authenticated responses from this API.
+- Matching is exact and case-insensitive. There is no prefix or suffix
+  matching, so `https://glowplusmember.com.attacker.test` does not match.
+
+Two things this API deliberately does **not** do:
+
+- **It does not send `Access-Control-Allow-Credentials`.** Auth is bearer-token
+  only in both clients; advertising cookie support is what would make a future
+  session cookie CSRF-able from day one.
+- **It does not reject a request that has no `Origin` header.** That is curl,
+  the React Native app (Order 2), server-to-server calls and Stripe's webhook.
+  CORS is a browser rule about reading a response; refusing origin-less
+  requests would break every non-browser client and stop no attacker.
+
+When Order 2's Expo web build gets a URL (T51), add its origin here. Native
+iOS/Android builds send no `Origin` and need nothing.
+
+Rate-limit headers (`X-RateLimit-*`, `Retry-After`) are on the
+`Access-Control-Expose-Headers` list, so the website can read them and show a
+real "try again in N seconds" rather than guessing after a 429.
 
 ## ⚠️ Still outstanding — needs the client, not code
 
