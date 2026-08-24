@@ -185,6 +185,33 @@ export function createCheckoutSession(plan = 'MONTHLY') {
 }
 
 /* --------------------------------------------------------------------------
+   Endpoints used by the SPA auth views (T35)
+   -------------------------------------------------------------------------- */
+export function consumerSignup({ email, password, name, phone }) {
+  return apiRequest('/auth/signup', {
+    method: 'POST',
+    auth: false,
+    body: { email, password, name, phone: phone || undefined },
+  });
+}
+
+export function merchantSignup({ businessName, email, password }) {
+  return apiRequest('/merchants/signup', {
+    method: 'POST',
+    auth: false,
+    body: { businessName, email, password },
+  });
+}
+
+/** Same retry route T31/T60's signup fix relies on — works for either role, the API looks the email up in both tables. */
+export function resendVerification(email) {
+  return apiRequest('/auth/resend-verification', { method: 'POST', auth: false, body: { email } });
+}
+
+export const logoutMerchant = clearToken;
+export const logoutConsumer = clearConsumerToken;
+
+/* --------------------------------------------------------------------------
    Endpoints used by the consumer booking page (T18)
    -------------------------------------------------------------------------- */
 export async function consumerLogin(email, password) {

@@ -1,61 +1,64 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
-import { useAsyncData } from '../lib/useAsyncData.js';
-import { getMerchants, saveMerchants } from '../lib/data.js';
-import { FOUNDING_BADGE_CAP, genId } from '../lib/helpers.js';
+import { ApiError, merchantLogin, merchantSignup, resendVerification } from '../lib/api.js';
 import T from '../components/T.jsx';
 
+/** Real auth (T35) — replaces the fake business-name-only form [F9]. */
 export default function BusinessAuth({ active }) {
-  const { showView, setCurrentMerchant, dataVersion, bumpData, toast } = useApp();
+  const { showView, setCurrentMerchant, toast } = useApp();
   const { t } = useI18n();
-  const nameRef = useRef(null);
 
-  const merchants = useAsyncData(() => getMerchants(), [dataVersion], []);
-  const quickPicks = merchants.slice(-6).reverse();
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [signupNotice, setSignupNotice] = useState(null);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
 
-  async function quickLoginBusiness(id) {
-    const list = await getMerchants();
-    const m = list.find((x) => x.id === id);
-    if (m) {
-      setCurrentMerchant(m);
-      showView('view-business-portal');
+  async function submit(ev) {
+    ev.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      if (mode === 'signup') {
+        await merchantSignup({ businessName: businessName.trim(), email: email.trim(), password });
+        setSignupNotice(email.trim());
+        setResendDone(false);
+        setMode('login');
+        setPassword('');
+      } else {
+        const data = await merchantLogin(email.trim(), password);
+        setCurrentMerchant({
+          id: data.merchant.id,
+          businessName: data.merchant.businessName,
+          status: data.merchant.status,
+          createdAt: Date.now(),
+        });
+        if (!data.merchant.emailVerified) toast(t('auth_verify_banner', { email: email.trim() }));
+        showView('view-business-portal');
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function submitBusinessAuth(ev) {
-    ev.preventDefault();
-    const name = nameRef.current.value.trim();
-    if (!name) return false;
-
-    const list = await getMerchants();
-    let existing = list.find(
-      (m) => m.businessName.toLowerCase() === name.toLowerCase()
-    );
-
-    if (!existing) {
-      const foundingCount = list.filter((m) => m.foundingBadge).length;
-      // Everyone gets the free first month — the founding badge is just an
-      // honest "you were early" honor for the first 50 and doesn't gate or
-      // limit the actual benefit for anyone who signs up after them.
-      const foundingBadge = foundingCount < FOUNDING_BADGE_CAP;
-      existing = {
-        id: genId(),
-        businessName: name,
-        status: 'PENDING',
-        foundingBadge,
-        freeFirstMonth: true,
-        createdAt: Date.now(),
-      };
-      list.push(existing);
-      await saveMerchants(list);
-      bumpData();
-      toast(foundingBadge ? t('toast_founding_welcome') : t('toast_standard_welcome'));
+  async function resend() {
+    if (!signupNotice) return;
+    setResendBusy(true);
+    try {
+      await resendVerification(signupNotice);
+      setResendDone(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setResendBusy(false);
     }
-
-    setCurrentMerchant(existing);
-    showView('view-business-portal');
-    return false;
   }
 
   return (
@@ -63,24 +66,85 @@ export default function BusinessAuth({ active }) {
       <div className="auth-shell">
         <T as="h2" k="business_auth_title" />
         <T as="div" className="sub" k="business_auth_sub" />
-        <form id="businessForm" onSubmit={submitBusinessAuth}>
-          <T as="label" htmlFor="bName" k="label_business_name" />
-          <input type="text" id="bName" ref={nameRef} placeholder="Bloom Hair Studio" required />
-          <T as="button" className="btn btn-primary auth-submit" type="submit" k="business_auth_submit" />
-        </form>
-        <div id="businessQuickWrap" style={{ display: quickPicks.length ? 'block' : 'none' }}>
-          <T as="div" className="switch-role" style={{ marginTop: '22px' }} k="quickpick_existing_salon" />
-          <div className="quickpick" id="businessQuick">
-            {quickPicks.map((m) => (
-              <button type="button" key={m.id} onClick={() => quickLoginBusiness(m.id)}>
-                {m.businessName}
-              </button>
-            ))}
+
+        {signupNotice ? (
+          <div className="notice" role="status">
+            <T as="span" k="auth_signup_success" />
+            <button type="button" className="link-btn" onClick={resend} disabled={resendBusy}>
+              {resendDone ? t('auth_resend_sent') : t('auth_resend_verification')}
+            </button>
           </div>
+        ) : null}
+
+        <form id="businessForm" onSubmit={submit}>
+          {mode === 'signup' ? (
+            <>
+              <T as="label" htmlFor="bName" k="label_business_name" />
+              <input
+                type="text"
+                id="bName"
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
+                placeholder="Bloom Hair Studio"
+                required
+              />
+            </>
+          ) : null}
+          <T as="label" htmlFor="bEmail" k="label_email" />
+          <input
+            type="email"
+            id="bEmail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@salon.com"
+            autoComplete="username"
+            required
+          />
+          <T as="label" htmlFor="bPassword" k="label_password" />
+          <input
+            type="password"
+            id="bPassword"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            required
+          />
+
+          {error ? (
+            <p className="err" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <button type="submit" className="btn btn-primary auth-submit" disabled={busy}>
+            {busy
+              ? '…'
+              : mode === 'signup'
+              ? t('business_signup_submit')
+              : t('business_login_submit')}
+          </button>
+        </form>
+
+        <div className="switch-role">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setMode(mode === 'signup' ? 'login' : 'signup');
+              setError(null);
+            }}
+          >
+            {mode === 'signup' ? t('auth_toggle_to_login') : t('auth_toggle_to_signup')}
+          </button>
         </div>
-        {/* Same pre-existing quirk as the consumer view: the inline
-            "Go to customer login" anchor was overwritten by the translation. */}
-        <T as="div" className="switch-role" k="business_auth_switch" />
+
+        <div className="switch-role">
+          <span dangerouslySetInnerHTML={{ __html: t('business_auth_switch') }} />
+          <button type="button" className="link-btn" onClick={() => showView('view-consumer-auth')}>
+            {t('customer_login_link')}
+          </button>
+        </div>
       </div>
     </section>
   );

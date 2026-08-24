@@ -1,3 +1,4 @@
+import { useApp } from '../context/AppContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { useNav } from '../lib/useNav.js';
 import T from './T.jsx';
@@ -5,6 +6,7 @@ import T from './T.jsx';
 export default function TopBar() {
   const { lang, setLanguage, LANG_NAMES } = useI18n();
   const { goHome, enterConsumerFlow, enterBusinessFlow, enterAdmin } = useNav();
+  const { currentConsumer, currentMerchant, signOutConsumer, signOutMerchant } = useApp();
 
   return (
     <div className="topbar">
@@ -36,6 +38,14 @@ export default function TopBar() {
         <T as="button" className="navbtn" id="navConsumer" onClick={enterConsumerFlow} k="nav_rewards" />
         <T as="button" className="navbtn ghost" id="navAdmin" onClick={enterAdmin} k="nav_admin" />
         <T as="button" className="navbtn primary" id="navBusiness" onClick={enterBusinessFlow} k="nav_business" />
+        {currentConsumer || currentMerchant ? (
+          <T
+            as="button"
+            className="navbtn ghost"
+            onClick={currentMerchant ? signOutMerchant : signOutConsumer}
+            k="auth_logout"
+          />
+        ) : null}
       </div>
     </div>
   );

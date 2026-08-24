@@ -90,12 +90,42 @@ export class AuthService {
     return this.emailVerification.verifyEmail(token);
   }
 
+  // T35 — was consumer-only: `prisma.user.findUnique` returns null for a
+  // merchant email, which fell straight into the account-enumeration guard
+  // below and silently reported success without ever resending anything.
+  // Mirrors PasswordResetService.forgotPassword's dual-table lookup, since
+  // this is the same "one endpoint serves both account types" shape.
   async resendVerification(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return { ok: true }; // don't leak account existence
-    if (user.emailVerifiedAt) return { ok: true };
+    const [user, merchant] = await Promise.all([
+      this.prisma.user.findUnique({ where: { email } }),
+      this.prisma.merchant.findUnique({ where: { email } }),
+    ]);
+    if (!user && !merchant) return { ok: true }; // don't leak account existence
 
-    await this.emailVerification.sendVerificationEmail(user.id, 'CONSUMER', user.email);
+    // Same failure mode as signupConsumer's send (T31/[F27]): a provider
+    // error here must not 500 a request whose only job is "try again to
+    // send the email" — that would be no more reliable than the send it's
+    // retrying. Logged and swallowed for the same reason.
+    if (user && !user.emailVerifiedAt) {
+      try {
+        await this.emailVerification.sendVerificationEmail(user.id, 'CONSUMER', user.email);
+      } catch (err) {
+        this.logger.error(
+          `resendVerification failed to send for ${user.id}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
+    }
+    if (merchant && !merchant.emailVerifiedAt) {
+      try {
+        await this.emailVerification.sendVerificationEmail(merchant.id, 'MERCHANT', merchant.email);
+      } catch (err) {
+        this.logger.error(
+          `resendVerification failed to send for ${merchant.id}`,
+          err instanceof Error ? err.stack : String(err),
+        );
+      }
+    }
     return { ok: true };
   }
 }

@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { logoutConsumer, logoutMerchant } from '../lib/api.js';
 
 const AppContext = createContext(null);
 
@@ -41,13 +42,29 @@ export function AppProvider({ children }) {
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+  // T35 — real sessions, so a real logout must drop the real token, not just
+  // the local view state (the fake data.js flow had no token to worry about).
+  const signOutConsumer = useCallback(() => {
+    logoutConsumer();
+    setCurrentConsumer(null);
+    showView('view-consumer-auth');
+  }, [showView]);
+
+  const signOutMerchant = useCallback(() => {
+    logoutMerchant();
+    setCurrentMerchant(null);
+    showView('view-business-auth');
+  }, [showView]);
+
   const value = {
     view,
     showView,
     currentConsumer,
     setCurrentConsumer,
+    signOutConsumer,
     currentMerchant,
     setCurrentMerchant,
+    signOutMerchant,
     dataVersion,
     bumpData,
     toast,

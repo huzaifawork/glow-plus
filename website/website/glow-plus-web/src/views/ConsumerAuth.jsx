@@ -1,48 +1,70 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
-import { useAsyncData } from '../lib/useAsyncData.js';
-import { getConsumers, saveConsumers } from '../lib/data.js';
-import { normPhone } from '../lib/helpers.js';
+import { useI18n } from '../i18n/I18nContext.jsx';
+import { ApiError, consumerLogin, consumerSignup, resendVerification } from '../lib/api.js';
 import T from '../components/T.jsx';
 
+/**
+ * Real auth (T35) — replaces the fake name+phone form that wrote straight to
+ * localStorage [F9]. The backend only knows email+password (`auth.service.ts`
+ * has no phone-based login), so that is the identity here; phone stays as an
+ * optional signup field, matching `SignupDto.phone?`.
+ */
 export default function ConsumerAuth({ active }) {
-  const { showView, setCurrentConsumer, dataVersion, bumpData } = useApp();
+  const { showView, setCurrentConsumer, toast } = useApp();
+  const { t } = useI18n();
 
-  const nameRef = useRef(null);
-  const phoneRef = useRef(null);
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [signupNotice, setSignupNotice] = useState(null); // email string once signup succeeds
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
 
-  // Port of enterConsumerFlow()'s quick-pick population.
-  const consumers = useAsyncData(() => getConsumers(), [dataVersion], []);
-  const quickPicks = consumers.slice(-6).reverse();
-
-  async function quickLoginConsumer(phone) {
-    const list = await getConsumers();
-    const c = list.find((x) => x.phone === phone);
-    if (c) {
-      setCurrentConsumer(c);
-      showView('view-consumer-dashboard');
+  async function submit(ev) {
+    ev.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      if (mode === 'signup') {
+        await consumerSignup({
+          email: email.trim(),
+          password,
+          name: name.trim(),
+          phone: phone.trim() || undefined,
+        });
+        setSignupNotice(email.trim());
+        setResendDone(false);
+        setMode('login');
+        setPassword('');
+      } else {
+        const data = await consumerLogin(email.trim(), password);
+        setCurrentConsumer({ id: data.user.id, name: data.user.name, phone: '', createdAt: Date.now() });
+        if (!data.user.emailVerified) toast(t('auth_verify_banner', { email: email.trim() }));
+        showView('view-consumer-dashboard');
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function submitConsumerAuth(ev) {
-    ev.preventDefault();
-    const name = nameRef.current.value.trim();
-    const phone = normPhone(phoneRef.current.value);
-    if (!name || !phone) return false;
-
-    const list = await getConsumers();
-    let existing = list.find((c) => c.phone === phone);
-    if (existing) {
-      existing.name = name;
-    } else {
-      existing = { phone, name, createdAt: Date.now() };
-      list.push(existing);
+  async function resend() {
+    if (!signupNotice) return;
+    setResendBusy(true);
+    try {
+      await resendVerification(signupNotice);
+      setResendDone(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setResendBusy(false);
     }
-    await saveConsumers(list);
-    bumpData();
-    setCurrentConsumer(existing);
-    showView('view-consumer-dashboard');
-    return false;
   }
 
   return (
@@ -50,28 +72,94 @@ export default function ConsumerAuth({ active }) {
       <div className="auth-shell">
         <T as="h2" k="consumer_auth_title" />
         <T as="div" className="sub" k="consumer_auth_sub" />
-        <form id="consumerForm" onSubmit={submitConsumerAuth}>
-          <T as="label" htmlFor="cName" k="label_your_name" />
-          <input type="text" id="cName" ref={nameRef} placeholder="Joseph Ilunga" required />
-          <T as="label" htmlFor="cPhone" k="label_phone" />
-          <input type="tel" id="cPhone" ref={phoneRef} placeholder="431 338 3939" required />
-          <T as="button" className="btn btn-primary auth-submit" type="submit" k="consumer_auth_submit" />
-        </form>
-        <div id="consumerQuickWrap" style={{ display: quickPicks.length ? 'block' : 'none' }}>
-          <T as="div" className="switch-role" style={{ marginTop: '22px' }} k="quickpick_existing_card" />
-          <div className="quickpick" id="consumerQuick">
-            {quickPicks.map((c) => (
-              <button type="button" key={c.phone} onClick={() => quickLoginConsumer(c.phone)}>
-                {c.name}
-              </button>
-            ))}
+
+        {signupNotice ? (
+          <div className="notice" role="status">
+            <T as="span" k="auth_signup_success" />
+            <button type="button" className="link-btn" onClick={resend} disabled={resendBusy}>
+              {resendDone ? t('auth_resend_sent') : t('auth_resend_verification')}
+            </button>
           </div>
+        ) : null}
+
+        <form id="consumerForm" onSubmit={submit}>
+          {mode === 'signup' ? (
+            <>
+              <T as="label" htmlFor="cName" k="label_your_name" />
+              <input
+                type="text"
+                id="cName"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Joseph Ilunga"
+                required
+              />
+              <T as="label" htmlFor="cPhone" k="label_phone" />
+              <input
+                type="tel"
+                id="cPhone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="431 338 3939"
+                autoComplete="tel"
+              />
+            </>
+          ) : null}
+          <T as="label" htmlFor="cEmail" k="label_email" />
+          <input
+            type="email"
+            id="cEmail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoComplete="username"
+            required
+          />
+          <T as="label" htmlFor="cPassword" k="label_password" />
+          <input
+            type="password"
+            id="cPassword"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            required
+          />
+
+          {error ? (
+            <p className="err" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <button type="submit" className="btn btn-primary auth-submit" disabled={busy}>
+            {busy
+              ? '…'
+              : mode === 'signup'
+              ? t('consumer_signup_submit')
+              : t('consumer_login_submit')}
+          </button>
+        </form>
+
+        <div className="switch-role">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setMode(mode === 'signup' ? 'login' : 'signup');
+              setError(null);
+            }}
+          >
+            {mode === 'signup' ? t('auth_toggle_to_login') : t('auth_toggle_to_signup')}
+          </button>
         </div>
-        {/* NOTE: the original markup nested a "Go to business login" anchor inside
-            this element, but applyStaticTranslations() overwrote the element's
-            innerHTML with the plain-text translation, so the link never survived
-            to the rendered page. Reproduced as-is; see MIGRATION.md. */}
-        <T as="div" className="switch-role" k="consumer_auth_switch" />
+
+        <div className="switch-role">
+          <span dangerouslySetInnerHTML={{ __html: t('consumer_auth_switch') }} />
+          <button type="button" className="link-btn" onClick={() => showView('view-business-auth')}>
+            {t('business_login_link')}
+          </button>
+        </div>
       </div>
     </section>
   );

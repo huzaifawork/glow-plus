@@ -25,7 +25,7 @@ function buildProgress(rule, visits) {
 }
 
 export default function ConsumerDashboard({ active }) {
-  const { currentConsumer, setCurrentConsumer, showView, dataVersion } = useApp();
+  const { currentConsumer, signOutConsumer, dataVersion } = useApp();
 
   const blocks = useAsyncData(
     async () => {
@@ -48,18 +48,13 @@ export default function ConsumerDashboard({ active }) {
     null
   );
 
-  function logoutConsumer() {
-    setCurrentConsumer(null);
-    showView('view-consumer-auth');
-  }
-
   const totalPoints = blocks ? blocks.reduce((s, b) => s + b.points, 0) : 0;
 
   return (
     <section className={'view' + (active ? ' active' : '')} id="view-consumer-dashboard">
       <div className="dash-header">
         <T as="h2" className="block-title" style={{ margin: 0 }} k="dash_title" />
-        <T as="button" className="navbtn ghost" onClick={logoutConsumer} k="switch_account" />
+        <T as="button" className="navbtn ghost" onClick={signOutConsumer} k="switch_account" />
       </div>
       <div className="id-card">
         <div className="id-left">

@@ -554,14 +554,9 @@ function LedgerPanel({ merchantId, active }) {
    Portal shell (port of renderBusinessPortal)
    ============================================================ */
 export default function BusinessPortal({ active }) {
-  const { currentMerchant, setCurrentMerchant, showView } = useApp();
+  const { currentMerchant, signOutMerchant } = useApp();
   const { t } = useI18n();
   const [tab, setTab] = useState('logvisit');
-
-  function logoutBusiness() {
-    setCurrentMerchant(null);
-    showView('view-business-auth');
-  }
 
   const merchantId = currentMerchant ? currentMerchant.id : null;
   const status = currentMerchant ? currentMerchant.status || 'ACTIVE' : 'ACTIVE';
@@ -588,7 +583,7 @@ export default function BusinessPortal({ active }) {
     <section className={'view' + (active ? ' active' : '')} id="view-business-portal">
       <div className="portal-head">
         <h2 id="portalBizName">{currentMerchant ? currentMerchant.businessName : ' '}</h2>
-        <T as="button" className="navbtn ghost" onClick={logoutBusiness} k="switch_salon" />
+        <T as="button" className="navbtn ghost" onClick={signOutMerchant} k="switch_salon" />
       </div>
 
       {bannerMsg ? (
