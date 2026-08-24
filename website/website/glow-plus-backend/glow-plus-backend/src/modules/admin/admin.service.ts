@@ -13,6 +13,17 @@ export class AdminService {
     return this.merchants.listByStatus('PENDING');
   }
 
+  /**
+   * The full merchant directory (T38). `MerchantsService.listByStatus`
+   * already accepted an optional status and already selects through
+   * MERCHANT_PUBLIC_SELECT — so the `passwordHash`/`stripeCustomerId`
+   * allow-list from T17 [F31] covers this route by construction, not by
+   * remembering to strip anything here.
+   */
+  listMerchants(status?: string) {
+    return this.merchants.listByStatus(status);
+  }
+
   approveMerchant(merchantId: string) {
     return this.merchants.approve(merchantId);
   }

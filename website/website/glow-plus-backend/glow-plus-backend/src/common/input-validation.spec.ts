@@ -13,6 +13,7 @@ import { ValidationPipe, ArgumentMetadata, BadRequestException } from '@nestjs/c
 import { MerchantSignupDto } from '../modules/merchants/signup.dto';
 import { SignupDto, LoginDto } from '../modules/auth/dto';
 import { AvailabilityQueryDto, CreateBookingDto } from '../modules/bookings/dto';
+import { AdminMerchantsQueryDto, MERCHANT_STATUSES } from '../modules/admin/merchants-query.dto';
 import { MAX_NAME, MAX_NOTES, MAX_PASSWORD } from './limits';
 
 // Must match main.ts exactly, or this tests a pipe the app does not use.
@@ -154,4 +155,43 @@ describe('AvailabilityQueryDto (T31)', () => {
       await expectRejected(AvailabilityQueryDto, { ...valid, date }, /date/i);
     },
   );
+});
+
+/**
+ * `GET /admin/merchants?status=` (T38)
+ *
+ * The interesting case is the one this DTO exists to prevent: an unknown
+ * status string reaching Prisma's enum filter, which is a
+ * PrismaClientValidationError and therefore a bare **500** for what is
+ * plainly a bad request — [F38]'s shape. The absent case is deliberately
+ * allowed: for an admin, "no filter" means "the whole platform".
+ */
+describe('AdminMerchantsQueryDto (T38)', () => {
+  it.each(MERCHANT_STATUSES)('accepts the real status %s', async (status) => {
+    await expect(run(AdminMerchantsQueryDto, { status })).resolves.toMatchObject({ status });
+  });
+
+  it('accepts an absent status — an admin may ask for every merchant', async () => {
+    await expect(run(AdminMerchantsQueryDto, {})).resolves.toEqual({});
+  });
+
+  it('refuses an unknown status (would have been a 500 from Prisma)', async () => {
+    await expectRejected(AdminMerchantsQueryDto, { status: 'BOGUS' }, /status/i);
+  });
+
+  it('refuses a lowercase status — the enum is case-sensitive in Postgres', async () => {
+    await expectRejected(AdminMerchantsQueryDto, { status: 'active' }, /status/i);
+  });
+
+  it('refuses an empty status rather than treating it as absent', async () => {
+    await expectRejected(AdminMerchantsQueryDto, { status: '' }, /status/i);
+  });
+
+  /** whitelist:true must strip anything else, so a stray param cannot ride
+   *  along into a future `where` clause. */
+  it('strips unknown query params', async () => {
+    await expect(run(AdminMerchantsQueryDto, { status: 'ACTIVE', merchantId: 'x' })).resolves.toEqual({
+      status: 'ACTIVE',
+    });
+  });
 });

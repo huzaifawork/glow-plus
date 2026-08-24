@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { logoutConsumer, logoutMerchant } from '../lib/api.js';
+import { logoutAdmin, logoutConsumer, logoutMerchant } from '../lib/api.js';
 
 const AppContext = createContext(null);
 
@@ -17,6 +17,17 @@ export function AppProvider({ children }) {
   const [view, setView] = useState('view-marketing');
   const [currentConsumer, setCurrentConsumer] = useState(null);
   const [currentMerchant, setCurrentMerchant] = useState(null);
+  // T38. Deliberately a THIRD session, not a flag on the merchant one: the
+  // admin token has its own storage key (`glowplus:token:admin`) precisely so
+  // a platform admin can be signed in alongside a salon owner in the same
+  // browser without either clobbering the other.
+  //
+  // Like the other two, it is NOT restored from the stored token on reload —
+  // `currentMerchant` and `currentConsumer` aren't either, and an admin who
+  // appeared signed in while the merchant view had signed itself out would be
+  // the odd one out in the same shell. The token survives; the session state
+  // does not. (Making all three survive a refresh is T47's territory.)
+  const [currentAdmin, setCurrentAdmin] = useState(null);
 
   // Bumped after every write. Views re-read through useAsyncData, which stands
   // in for the prototype's habit of calling render*() straight after a save.
@@ -56,6 +67,15 @@ export function AppProvider({ children }) {
     showView('view-business-auth');
   }, [showView]);
 
+  // No showView() here, unlike the other two. The consumer and merchant flows
+  // each have a separate auth *view* to fall back to; the admin sign-in form
+  // lives inside view-admin itself, so clearing the session is all that is
+  // needed — the same view re-renders as the login card.
+  const signOutAdmin = useCallback(() => {
+    logoutAdmin();
+    setCurrentAdmin(null);
+  }, []);
+
   const value = {
     view,
     showView,
@@ -65,6 +85,9 @@ export function AppProvider({ children }) {
     currentMerchant,
     setCurrentMerchant,
     signOutMerchant,
+    currentAdmin,
+    setCurrentAdmin,
+    signOutAdmin,
     dataVersion,
     bumpData,
     toast,

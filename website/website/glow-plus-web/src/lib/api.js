@@ -210,6 +210,7 @@ export function resendVerification(email) {
 
 export const logoutMerchant = clearToken;
 export const logoutConsumer = clearConsumerToken;
+export const logoutAdmin = clearAdminToken;
 
 /* --------------------------------------------------------------------------
    Endpoints used by the consumer booking page (T18)
@@ -310,6 +311,20 @@ export async function adminLogin(email, password) {
 
 export function listPendingMerchants() {
   return apiRequest('/admin/merchants/pending', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+/**
+ * The whole merchant directory (T38) — this route did not exist until T38
+ * built it. The approval queue above is only the PENDING slice; the console's
+ * "All salons" list needs everything, including SUSPENDED and CANCELLED
+ * salons, which by definition never appear in a pending queue.
+ *
+ * `status` is left off entirely rather than sent empty: the API validates it
+ * against the real MerchantStatus enum, so `?status=` would be a 400.
+ */
+export function listAllMerchants(status) {
+  const qs = status ? `?${new URLSearchParams({ status }).toString()}` : '';
+  return apiRequest(`/admin/merchants${qs}`, { tokenKey: ADMIN_TOKEN_KEY });
 }
 
 export function approveMerchant(id) {

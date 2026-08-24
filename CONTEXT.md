@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 63 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **251 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, input-validation (T31, 22), **pii-crypto (T31b, 25)**, me.service (T42, 12), **reward-rules.service (T37, 21)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **261 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,46 +121,45 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **NEXT IS T38 (admin panel)**
+## 8. EXACTLY where to resume — **NEXT IS T39 (the mobile pass)**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **Next task: T38 — admin panel.** This one **is** unblocked, unlike T37:
-> T22 already built every admin endpoint (`/admin/login`,
-> `GET /admin/merchants/pending`, `PATCH /admin/merchants/:id/{approve,suspend}`,
-> `GET /admin/metrics/{mrr,churn,platform}`, all behind `RequireAdminGuard`),
-> **and** the standalone page `glow-plus-web/admin.html` → `/admin/panel`
-> already calls all of them. T38 is largely moving that into the SPA's
-> `Admin.jsx`, the same move T37 just made for `BusinessPortal.jsx`.
-> Reuse T36/T37's `useApiError` / `usePortalData` seam rather than
-> re-deriving it, and note the admin session has its **own** token key
-> (`glowplus:token:admin`) so it can coexist with a merchant session.
->
-> **State as of session 18 (2026-08-24):** Phases 0–4 done. Phase 5 is
-> T33 ✅ T34 ✅ T35 ✅ T36 ✅ **T37 ✅** T40 ✅ T41 ✅ — leaving **T38, T39**.
-> Phase 6 is T42 ✅ T45 ✅ (built by T36), leaving T43/T44, which exist as
+> **State as of session 19 (2026-08-24): Phase 5 is finished except T39.**
+> T33 ✅ T34 ✅ T35 ✅ T36 ✅ T37 ✅ **T38 ✅** T40 ✅ T41 ✅ — leaving
+> **T39 alone**. Phase 6 is T42 ✅ T45 ✅, leaving T43/T44, which exist as
 > deliberate stopgaps from T18 and are probably reusable as-is.
-> **T39's [F25] overflow is closed** (T36); its remainder is qualitative, and
-> T37 re-measured 390px on all five portal tabs **with real rows loaded**,
-> which was the specific caveat T39 raised about empty-state measurements.
 >
-> **T37 built the reward-rules HTTP layer** (`GET/POST /reward-rules`,
-> `PATCH /:id`, `PATCH /:id/{activate,deactivate}`) — reads accept staff,
-> **every write is owner-only**, and there is deliberately **no DELETE**
-> (Redemption rows point at a rule by FK). [F30]'s paywall finally covers a
-> real `reward-rules` path. Two scoping calls were made and recorded in T37:
-> **profile is read-only** (no `PATCH /merchants/me` — a small follow-up if
-> the client wants editing), and **Team/Billing hand off** to the existing
-> `/team` and `/business/billing` pages rather than being duplicated.
+> **T39 is now purely qualitative — do not go hunting for an overflow.**
+> [F25] closed in T36, and the caveat T39 itself raised (that the portal and
+> admin views had only ever been measured *empty*) is closed too: T37
+> re-measured all five portal tabs and T38 re-measured the admin console —
+> two 4-column `.stat-row`s, a live approval queue and a full salon list —
+> with real rows loaded. Both still report **390px at a 390px viewport**.
+> What is left needs human judgement on a real device: tap-target sizes, the
+> 4-column `table.ledger` and `.stat-row` under real data, `.panel-grid`'s
+> two-column split, the language switcher, and **Arabic RTL at 390px**, which
+> nobody has ever checked (T40 verified RTL works, at desktop width only).
+>
+> **T38 also built `GET /admin/merchants`** — the ticket said "frontend-only"
+> and was almost right. The API only exposed the PENDING slice, so a
+> SUSPENDED salon was invisible and unreactivatable. Read T38's TASKS.md entry
+> before touching the admin view; two decisions there are easy to undo by
+> accident: **a 403 must not sign the admin out** (only a 401 does), and
+> **"Reactivate" is `approve`** — there is no third endpoint.
 >
 > **Also open, unrelated to the website:** **T32** (M-Pesa — needs a client
 > decision, do not start without one) and **T31c** (Nest 11 / Vite 8 majors,
-> which should land before the client runs their own `npm audit`).
+> which should land before the client runs their own `npm audit`). New
+> finding **[F42]**: the landing page's founding-spots counter is the last
+> `localStorage` read left in the SPA — it belongs to T43, not T39.
 >
 > ⚠️ **`@ThrottleCredentials()` will block you if you hammer login** while
-> debugging — 20 attempts / 5 min, then a **15-minute** block (T26 [F3],
-> working as designed). The throttler store is in-memory, so **restarting the
-> backend clears it**; don't mistake the 429 for a broken login.
+> debugging — 20 attempts / 5 min per IP, then a **15-minute** block, and only
+> **5 per email** (T26 [F3], working as designed). Session 19 hit the per-email
+> tier on its third browser run. The throttler store is in-memory, so
+> **restarting the backend clears it**; don't mistake the 429 for a broken
+> login.
 >
 > Everything is committed and pushed; the working tree is clean and the DB is
 > at seed state. Dev servers may still be running from the last session — see
@@ -336,7 +335,7 @@ Wired at the only two places a phone number moves through the API: `auth.service
 
 ✅ **F24 (auth-switch links unclickable) — confirmed live 2026-08-24, user-reported independently of any task list, and it was a real gap: recorded as a finding since session 3 with no task ever attached to it.** Reproduced in a driven browser and it's worse than first written down: `view-business-auth` renders *"Go to customer login"* as text with **zero `<a>` elements** in the view — plain dead text; `view-consumer-auth` doesn't even keep the text, only *"Run a salon instead?"* survives. The whole landing page has exactly **one** anchor total (the logo). Now explicitly called out as T35's starting point, the same way F25 already anchors T39. **Not fixed yet** — T35 needs a design call on where those links should actually go once real auth exists, so this is scoped, not resolved.
 
-➡️ **NEXT: T37 (merchant portal against the real API), then T38 (admin panel) and T39 (mobile).** T36 is done — see the session-17 entry below. Also still open: T32 (M-Pesa — needs a client decision; do not start without one).
+➡️ **Was NEXT as of session 16 — superseded, see §8:** T37, T38 and T39. T37 and T38 are done; only **T39** is left. T36 is done — see the session-17 entry below. Also still open: T32 (M-Pesa — needs a client decision; do not start without one).
 
 ➡️ **Previously: T32 or Phase 5 (T33+, the website build).** Check `TASKS.md` for the next unticked item, and see its new **"Message for the client"** section at the end for exactly what to say about T32 and the now-resolved T31b. **T31c** (Nest 11 / Vite 8 majors) is still open and should land before the client runs their own `npm audit`.
 
@@ -408,6 +407,26 @@ Also: `input[type=email|password|date]` were missing from the CSS rule that styl
 ⚠️ **Two things that will waste time on the next browser-driven task:**
 - **T26's credential throttle is 20 attempts / 15 min** (`identity` tier). Repeated test runs hit it and login starts returning **429** — that is the rate limiter working, not a bug. Space the runs out, or restart the API (the throttler store is in-memory) to reset the counter.
 - `${D}#ctab-x` is **two IDs on one element** and matches nothing. The panels are children of the view: `${D} #ctab-x`.
+
+✅ **T38 — done 2026-08-24 (session 19), the admin half of the SPA. Phase 5 is now finished except T39.**
+
+The ticket said "frontend-only" and was almost right — **one endpoint was missing**. T22 built admin login, the pending queue, approve/suspend and the three metrics routes. The gap was the **"All salons" list**: the API only ever exposed the PENDING slice, and a SUSPENDED or CANCELLED salon by definition never appears in a pending queue — so there was no way to *see* a suspended salon, let alone reactivate one. New `GET /admin/merchants?status=`, reusing `MerchantsService.listByStatus()`, which already selected through `MERCHANT_PUBLIC_SELECT` — so T17's `passwordHash`/`stripeCustomerId` allow-list [F31] covers the new route **by construction**, confirmed live.
+
+**The admin view was the most misleading of the three dashboards, not merely the fakest.** "Approve" wrote `status:'ACTIVE'` **to the operator's own browser** [F9] — the salon stayed PENDING on the server, its owner saw no change, and the admin had no way to tell. Est. MRR was `activeSalons × 4999`, a number invented in the browser. And the topbar's Admin button opened all of it with **no sign-in at all**. It now has a real `POST /admin/login` gate, eight tiles from the three metrics endpoints, and live approve/suspend/reactivate against Postgres.
+
+**Four decisions worth not undoing by accident:**
+1. **`currentAdmin` is a third session**, beside `currentConsumer`/`currentMerchant`, on T22's separate `glowplus:token:admin` key — so an admin and a salon owner coexist in one browser. The T22 standalone `/admin/panel` page picks the SPA's session straight up with **no second sign-in**; verified.
+2. **A 403 does NOT sign the admin out** — a deliberate divergence from `/admin/panel`, which reloads on 401 *or* 403. A 403 is a valid token refused *one* route; treating it as a dead session is how one unlucky endpoint logs an admin out of everything. Only 401 signs out, and by then `lib/api.js` has already dropped the token.
+3. **"Reactivate" is `approve`** — the API has exactly two transitions; only the label differs, because only the admin's intent does. There is no third endpoint to go looking for.
+4. **Suspend appears in the pending queue too** — it is how an application gets *rejected*. Without it the queue's only exit is promotion.
+
+**Also fixed:** the prototype knew three merchant statuses; the schema has five, so **PAST_DUE and CANCELLED rendered the raw enum name** in the badge — invisible until now because no status was real.
+
+**47/47 checks in driven Chrome** against real servers and real Postgres, with **every 4xx the run produced accounted for by name** (the cosmetic favicon 404, the test's own wrong-password 401, a deliberate 403 guard probe — nothing else). All eight tiles cross-checked field-by-field against the API's own JSON; approve/suspend/reactivate/reject each confirmed **in the database**, not in a response body; Est. MRR proved **$0.00 against the untouched seed and $49.99** after inserting one real 4999-cent subscription — which is the point of it being real; and **no overflow at 390px with real rows loaded**, closing T39's own caveat about the admin view having only been measured empty. Suite **261 passing** (was 251). Fixtures created **directly in Postgres**, not via `POST /merchants/signup` (which also creates a Stripe customer — T20 left three orphans that way), and fully deleted afterwards.
+
+⚠️ **Correction to the note above, learned the hard way this session:** the credential throttle's per-email tier is **5 attempts / 15 min**, not 20 — 20/5min is the per-IP tier. A browser run that tests a wrong password *and* a right one costs 2, so the **third run of the session got blocked**. Restarting the backend clears the in-memory store.
+
+→ **New finding [F42]:** the landing page's founding-spots counter (`Marketing.jsx`, `FoundingSpots`) is the **last `localStorage` read left in the SPA** — it reports 50 spots left on every fresh browser, forever. It needs a genuinely *public* count, so it belongs to **T43**, not T39.
 
 ## 9. RISK REGISTER — things that could cause trouble
 
@@ -565,7 +584,7 @@ returns break.
 - ✅ **T41** (keep verify-email + billing-result working) — verified in every state
 - ✅ **T35** (auth UI) — done 2026-08-24 · ✅ **T36** (consumer flow) — done 2026-08-24
 - ✅ **T37** (merchant portal against the **real API**) — done 2026-08-24; it also built the reward-rules HTTP layer the portal needed
-- ⬜ **T38** (admin panel against the **real API**) — still open
+- ✅ **T38** (admin panel against the **real API**) — done 2026-08-24; it also built `GET /admin/merchants`, the one endpoint the ticket assumed already existed
 - ⬜ **T39** (mobile-friendly) — still open, but **[F25] is closed** (T36): every view now measures 390px at a 390px viewport. What remains is the qualitative pass, not the overflow.
 - ⚠️ **Blocked on missing endpoints** — `GET /me/rewards` (**T42**) and
   `GET /visits/me` (**T45**) were the consumer half of this and both now exist
