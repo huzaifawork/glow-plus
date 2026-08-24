@@ -1,6 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
@@ -19,11 +21,17 @@ import { BusinessHoursModule } from './modules/business-hours/business-hours.mod
 import { JobsModule } from './jobs/jobs.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
 import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveSubscription';
+import { GlobalRateLimitMiddleware } from './middleware/globalRateLimit.middleware';
+import { throttlerOptions } from './common/throttling';
+import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    // T26 [F3] — until now nothing in this API was rate limited at all.
+    // See common/throttling.ts for the three tiers and why they differ.
+    ThrottlerModule.forRoot(throttlerOptions),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -40,9 +48,24 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     BusinessHoursModule,
     JobsModule,
   ],
+  // Registered globally rather than per-controller: "API-wide" has to mean
+  // every route, including ones added later by someone who never reads this
+  // file. Exemptions are explicit, in throttling.ts.
+  providers: [
+    { provide: APP_GUARD, useClass: ApiThrottlerGuard },
+    // Middleware is instantiated through the module injector, so it has to be
+    // a provider here to receive the throttler's storage service.
+    GlobalRateLimitMiddleware,
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // BEFORE AuthMiddleware, deliberately. Nest runs middleware in the order
+    // it is applied and always ahead of guards, so this is the only place the
+    // API-wide ceiling can see an anonymous request to a protected route —
+    // AuthMiddleware would 401 it first and the guard would never count it.
+    consumer.apply(GlobalRateLimitMiddleware).forRoutes('*');
+
     consumer
       .apply(AuthMiddleware)
       .exclude(

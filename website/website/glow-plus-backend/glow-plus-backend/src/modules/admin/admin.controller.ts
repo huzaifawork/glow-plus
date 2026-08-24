@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './login.dto';
@@ -14,6 +15,7 @@ export class AdminController {
     private readonly adminAuth: AdminAuthService,
   ) {}
 
+  @ThrottleCredentials()
   @Post('login')
   login(@Body() dto: AdminLoginDto) {
     return this.adminAuth.login(dto);

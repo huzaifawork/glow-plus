@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
 import { OnboardingService, MerchantSignupInput } from './onboarding.service';
 import { MerchantAuthService } from './merchant-auth.service';
@@ -13,11 +14,13 @@ export class MerchantsController {
     private readonly merchantAuth: MerchantAuthService,
   ) {}
 
+  @ThrottleCredentials()
   @Post('signup')
   signup(@Body() dto: MerchantSignupInput) {
     return this.onboarding.signup(dto);
   }
 
+  @ThrottleCredentials()
   @Post('login')
   login(@Body() dto: MerchantLoginDto) {
     return this.merchantAuth.login(dto);

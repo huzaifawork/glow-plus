@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { ThrottleCredentials, ThrottleEmailSend } from '../../common/throttling';
 import { StaffService } from './staff.service';
 import { StaffAuthService } from './staff-auth.service';
 import { AcceptInviteDto, InviteStaffDto, StaffLoginDto, UpdateStaffRoleDto } from './dto';
@@ -29,16 +30,19 @@ export class StaffController {
 
   // --- public -------------------------------------------------------------
 
+  @ThrottleCredentials()
   @Post('login')
   login(@Body() dto: StaffLoginDto) {
     return this.staffAuth.login(dto);
   }
 
+  @ThrottleCredentials()
   @Get('invites/:token')
   previewInvite(@Param('token') token: string) {
     return this.staffAuth.previewInvite(token);
   }
 
+  @ThrottleCredentials()
   @Post('accept-invite')
   acceptInvite(@Body() dto: AcceptInviteDto) {
     return this.staffAuth.acceptInvite(dto);
@@ -60,6 +64,7 @@ export class StaffController {
     return this.staff.list(req.merchantId!);
   }
 
+  @ThrottleEmailSend()
   @Post('invites')
   @UseGuards(RequireMerchantOwnerGuard)
   invite(@Req() req: AuthedRequest, @Body() dto: InviteStaffDto) {
