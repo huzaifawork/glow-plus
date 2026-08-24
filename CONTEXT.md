@@ -121,15 +121,37 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **PHASE 1 IS COMPLETE. START PHASE 2 AT T17**
+## 8. EXACTLY where to resume — **NEXT IS T37 (merchant portal)**
 
-> **Session 3 note (2026-08-23):** the user asked, out of task order, for the
-> HTML website to be converted to React + Vite. That is **done and verified** —
-> see §11. It covers **T34 structurally** and satisfies **T40** and **T41**.
-> It does **not** wire the site to the API, so T35–T38 remain open.
-> The user's instruction for the next session was explicit:
-> **"we will start from phase 0 things once starting"** — i.e. resume the
-> numbered tasks in order from T15, treating the migration as banked work.
+> ### ⬇️ Start here. Everything below this box is a historical log, newest last.
+>
+> **Next task: T37 — merchant portal.** Read **T37 in `TASKS.md` before
+> writing anything**: it is not unblocked the way T36 was. The
+> `reward-rules` module has **no controller and no service CRUD** — only
+> `evaluate()` — so T37 means building the reward-rules HTTP layer *first*,
+> then wiring the portal. T37 also carries a scoping call to settle up
+> front (does "profile" mean editable? no `PATCH /merchants/me` exists).
+>
+> **State as of session 17 (2026-08-24):** Phases 0–4 done. Phase 5 is
+> T33 ✅ T34 ✅ T35 ✅ **T36 ✅** T40 ✅ T41 ✅ — leaving **T37, T38, T39**.
+> Phase 6 is T42 ✅ T45 ✅ (built by T36), leaving T43/T44, which exist as
+> deliberate stopgaps from T18 and are probably reusable as-is.
+> **T38 is frontend-only** (T22 already built every admin endpoint).
+> **T39's [F25] overflow is closed** (T36); its remainder is qualitative.
+>
+> **Also open, unrelated to the website:** **T32** (M-Pesa — needs a client
+> decision, do not start without one) and **T31c** (Nest 11 / Vite 8 majors,
+> which should land before the client runs their own `npm audit`).
+>
+> Everything is committed and pushed; the working tree is clean and the DB is
+> at seed state. Dev servers may still be running from the last session — see
+> §4 for how to check and restart them.
+
+> **Session 3 note (2026-08-23), kept for context:** the user asked, out of
+> task order, for the HTML website to be converted to React + Vite. That is
+> **done and verified** — see §11. It covers **T34 structurally** and satisfies
+> **T40** and **T41**. It did not wire the site to the API; T35 and T36 have
+> since done that for auth and the consumer flow, leaving T37–T38.
 
 **Session 2 (2026-08-23) finished Phase 0 and the first half of Phase 1.**
 
