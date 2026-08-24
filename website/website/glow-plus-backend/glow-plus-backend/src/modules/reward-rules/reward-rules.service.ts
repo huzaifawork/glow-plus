@@ -18,6 +18,8 @@ export class RewardRulesService {
       where: {
         userId,
         merchantId,
+        // T25: expired points no longer count toward a reward trigger.
+        expired: false,
         ...(rule.styleScopeId ? { styleId: rule.styleScopeId } : {}),
       },
     });

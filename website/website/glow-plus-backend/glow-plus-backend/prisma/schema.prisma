@@ -172,6 +172,16 @@ model Visit {
   visitDate    DateTime  @default(now())
   bookingId    String?   @unique // set when the visit came from a completed booking
   booking      Booking?  @relation(fields: [bookingId], references: [id])
+
+  // Points expiry (T25) [F8]. Points are not stored as a running balance —
+  // they are derived from these rows — so expiring points means excluding a
+  // visit from progress maths, never deleting it. The visit stays in the
+  // merchant's history; only its points stop counting.
+  expired      Boolean   @default(false)
+  expiredAt    DateTime?
+
+  @@index([userId, merchantId, expired])
+  @@index([expired, visitDate])
 }
 
 // ---------------------------------------------------------------------------

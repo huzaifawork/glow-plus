@@ -225,6 +225,11 @@ export function redeemReward(rewardRuleId) {
   });
 }
 
+/** Points balance + expiry, per salon (T25). */
+export function getMyPoints() {
+  return apiRequest('/points/me', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
 export function listMyRedemptions() {
   return apiRequest('/redemptions/me', { tokenKey: CONSUMER_TOKEN_KEY });
 }

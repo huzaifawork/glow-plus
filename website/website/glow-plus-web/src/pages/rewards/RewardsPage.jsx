@@ -13,6 +13,7 @@ import {
   clearConsumerToken,
   consumerLogin,
   getConsumerToken,
+  getMyPoints,
   listAvailableRewards,
   listMyRedemptions,
   listPublicMerchants,
@@ -27,6 +28,10 @@ function formatReward(rewardType, rewardValue) {
   if (rewardType === 'PERCENT_OFF') return `${rewardValue}% off`;
   if (rewardType === 'FLAT_DISCOUNT') return `$${(rewardValue / 100).toFixed(2)} off`;
   return 'Free service';
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatDateTime(iso) {
@@ -65,6 +70,7 @@ export default function RewardsPage() {
           Log out
         </button>
       </div>
+      <PointsBalance />
       <RewardsList />
       <RedemptionHistory />
     </div>
@@ -127,6 +133,83 @@ function LoginCard({ onSuccess }) {
         </button>
       </form>
     </>
+  );
+}
+
+/**
+ * Points balance + expiry — T25.
+ *
+ * Points have no balance column; they are the sum of a consumer's non-expired
+ * Visit rows, which is why this reads from GET /points/me rather than being
+ * derived in the browser. The expiry line is the part that matters to a
+ * customer: a visit's expiry date is knowable the day it happens, so this
+ * warns BEFORE the nightly job runs rather than reporting the loss after.
+ */
+function PointsBalance() {
+  const [balances, setBalances] = useState(null);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setBalances(await getMyPoints());
+      setError(null);
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearConsumerToken();
+        window.location.reload();
+        return;
+      }
+      setError(err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    // Redeeming doesn't spend points in this model, but a visit logged in
+    // another tab does change the balance — reuse the same event the history
+    // list listens for so the two panels never disagree.
+    window.addEventListener('glowplus:reward-redeemed', load);
+    return () => window.removeEventListener('glowplus:reward-redeemed', load);
+  }, [load]);
+
+  return (
+    <div className="card" data-testid="points-card">
+      <h2>Your points</h2>
+      {error ? <p className="err">{error}</p> : null}
+      {!balances ? (
+        <p>Loading…</p>
+      ) : balances.length === 0 ? (
+        <p className="empty-note" data-testid="no-points">No visits logged yet — your points will show up here.</p>
+      ) : (
+        <div className="points-list">
+          {balances.map((b) => (
+            <div className="points-row" key={b.merchantId} data-testid="points-row">
+              <div className="points-info">
+                <div className="points-salon">{b.businessName}</div>
+                <div className="points-sub">
+                  {b.activeVisits} visit{b.activeVisits === 1 ? '' : 's'} counting
+                  {b.expiredPoints > 0 ? ` · ${b.expiredPoints} pts expired` : ''}
+                </div>
+                {b.expiringSoon.points > 0 ? (
+                  <div className="points-warning" data-testid="expiring-soon">
+                    {b.expiringSoon.points} pts expire within {b.expiringSoon.withinDays} days
+                  </div>
+                ) : b.nextExpiry ? (
+                  <div className="points-sub" data-testid="next-expiry">
+                    Next {b.nextExpiry.points} pts expire {formatDate(b.nextExpiry.date)}
+                  </div>
+                ) : null}
+              </div>
+              <div className="points-value" data-testid="points-value">
+                {b.activePoints}
+                <span className="points-unit">pts</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="points-foot">Points expire {balances?.[0]?.expiresAfterDays ?? 365} days after the visit that earned them.</p>
+    </div>
   );
 }
 

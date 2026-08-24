@@ -44,7 +44,9 @@ export class RedemptionsService {
       if (!rule || !rule.active) throw new NotFoundException('Reward rule not found');
 
       const visits = await tx.visit.findMany({
-        where: { userId, merchantId: rule.merchantId, ...(rule.styleScopeId ? { styleId: rule.styleScopeId } : {}) },
+        // `expired: false` — T25. Expired visits stay in history but stop
+        // counting toward rewards, so every progress query filters them out.
+        where: { userId, merchantId: rule.merchantId, expired: false, ...(rule.styleScopeId ? { styleId: rule.styleScopeId } : {}) },
       });
       const progress =
         rule.triggerType === 'VISIT_COUNT' ? visits.length : visits.reduce((sum, v) => sum + v.pointsEarned, 0);
@@ -68,7 +70,9 @@ export class RedemptionsService {
 
   private async progressFor(userId: string, rule: { id: string; merchantId: string; triggerType: string; triggerValue: number; styleScopeId: string | null; oneTime: boolean; name: string; rewardType: string; rewardValue: number }) {
     const visits = await this.prisma.visit.findMany({
-      where: { userId, merchantId: rule.merchantId, ...(rule.styleScopeId ? { styleId: rule.styleScopeId } : {}) },
+      // `expired: false` — T25. Expired visits stay in history but stop
+        // counting toward rewards, so every progress query filters them out.
+        where: { userId, merchantId: rule.merchantId, expired: false, ...(rule.styleScopeId ? { styleId: rule.styleScopeId } : {}) },
     });
     const progress =
       rule.triggerType === 'VISIT_COUNT' ? visits.length : visits.reduce((sum, v) => sum + v.pointsEarned, 0);

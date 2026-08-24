@@ -10,6 +10,7 @@ import { StylesModule } from './modules/styles/styles.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
 import { RedemptionsModule } from './modules/redemptions/redemptions.module';
+import { PointsModule } from './modules/points/points.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -31,6 +32,7 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     VisitsModule,
     RewardRulesModule,
     RedemptionsModule,
+    PointsModule,
     BillingModule,
     AdminModule,
     StaffModule,
