@@ -21,6 +21,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
+import { withVersion } from './config/version';
 import { GlobalRateLimitMiddleware } from './middleware/globalRateLimit.middleware';
 import { throttlerOptions } from './common/throttling';
 import { validateEnv } from './config/env.validation';
@@ -71,25 +72,37 @@ export class AppModule implements NestModule {
     // AuthMiddleware would 401 it first and the guard would never count it.
     consumer.apply(GlobalRateLimitMiddleware).forRoutes('*');
 
+    // T49 — these paths are matched against the RAW URL, which now carries the
+    // /v1 prefix, so every entry has to be built with withVersion(). Middleware
+    // runs at the Express layer and knows nothing about Nest's versioning: an
+    // un-prefixed 'merchants' here silently stops matching /v1/merchants, and
+    // the public salon directory starts demanding a bearer token.
     consumer
       .apply(AuthMiddleware)
       .exclude(
         // Deploy/uptime probes carry no bearer token; without this every
         // health check would 401 and read as "the API is down".
+        //
+        // T49 — these two are the ONLY entries here WITHOUT withVersion(), and
+        // that is not an oversight: HealthController is VERSION_NEUTRAL, so it
+        // is served at `/health`, not `/v1/health`. Prefixing the exclusion to
+        // match the others made every uptime probe 401 — caught by probing the
+        // route rather than by reading the diff, which is the entire reason
+        // the T48 audit gets re-run after a change like this one.
         { path: 'health', method: RequestMethod.GET },
         { path: 'health/(.*)', method: RequestMethod.GET },
-        { path: 'auth/(.*)', method: RequestMethod.ALL },
-        { path: 'merchants/signup', method: RequestMethod.POST },
-        { path: 'merchants/login', method: RequestMethod.POST },
-        { path: 'admin/login', method: RequestMethod.POST },
-        { path: 'billing/webhook', method: RequestMethod.POST },
+        { path: withVersion('auth/(.*)'), method: RequestMethod.ALL },
+        { path: withVersion('merchants/signup'), method: RequestMethod.POST },
+        { path: withVersion('merchants/login'), method: RequestMethod.POST },
+        { path: withVersion('admin/login'), method: RequestMethod.POST },
+        { path: withVersion('billing/webhook'), method: RequestMethod.POST },
         // Public by design — a consumer browses times and opening hours
         // before creating an account. Both controllers document these as
         // public; AuthMiddleware throws 401 without a bearer token, so they
         // must be excluded here or they are not actually public.
         // GET only: PUT /business-hours (merchant-only) stays protected.
-        { path: 'bookings/availability', method: RequestMethod.GET },
-        { path: 'business-hours/(.*)', method: RequestMethod.GET },
+        { path: withVersion('bookings/availability'), method: RequestMethod.GET },
+        { path: withVersion('business-hours/(.*)'), method: RequestMethod.GET },
         // Public salon directory + style list — a consumer picks a merchant
         // and a style before booking, both before creating an account.
         // GET only: the merchant-scoped GET /merchants/me and GET /styles
@@ -98,17 +111,17 @@ export class AppModule implements NestModule {
         // T43 moved the directory from 'merchants/public' to 'merchants' —
         // the path the RN app calls — and added the founding-spots counter,
         // which is on the landing page above the fold [F42].
-        { path: 'merchants', method: RequestMethod.GET },
-        { path: 'merchants/founding-spots', method: RequestMethod.GET },
-        { path: 'styles/public/(.*)', method: RequestMethod.GET },
+        { path: withVersion('merchants'), method: RequestMethod.GET },
+        { path: withVersion('merchants/founding-spots'), method: RequestMethod.GET },
+        { path: withVersion('styles/public/(.*)'), method: RequestMethod.GET },
         // Staff invite acceptance + staff login (T24). An invitee has no
         // account yet, so they cannot hold a token — these must be reachable
         // without one, exactly like merchants/login and admin/login.
         // Only the single-invite preview is public: GET /staff (the roster)
         // is owner-only and deliberately NOT matched by this pattern.
-        { path: 'staff/login', method: RequestMethod.POST },
-        { path: 'staff/accept-invite', method: RequestMethod.POST },
-        { path: 'staff/invites/(.*)', method: RequestMethod.GET },
+        { path: withVersion('staff/login'), method: RequestMethod.POST },
+        { path: withVersion('staff/accept-invite'), method: RequestMethod.POST },
+        { path: withVersion('staff/invites/(.*)'), method: RequestMethod.GET },
       )
       .forRoutes('*');
 

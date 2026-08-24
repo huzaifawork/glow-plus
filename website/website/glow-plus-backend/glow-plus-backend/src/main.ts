@@ -1,10 +1,11 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { buildCorsOptions, buildHelmetOptions, resolveAllowedOrigins } from './config/security';
+import { API_PREFIX, API_VERSION } from './config/version';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -40,6 +41,13 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // T49 — every route moves under /v1. `defaultVersion` means no controller
+  // needs a `version:` of its own; the one route that opts OUT is /health,
+  // which declares VERSION_NEUTRAL because uptime probes must not 404 the day
+  // the API goes to /v2. See config/version.ts for why this is not
+  // dual-served alongside the unversioned paths.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION });
 
   // T28 — see config/security.ts.
   app.enableCors(buildCorsOptions());

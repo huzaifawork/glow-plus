@@ -18,7 +18,7 @@ self-serve cancellation), and the admin approval/metrics endpoints.
 ```bash
 cp .env.example .env
 # fill in STRIPE_SECRET_KEY / STRIPE_PRICE_ID / STRIPE_WEBHOOK_SECRET
-# (use `stripe listen --forward-to localhost:4000/billing/webhook` in dev)
+# (use `stripe listen --forward-to localhost:4000/v1/billing/webhook` in dev)
 
 docker compose -f docker/docker-compose.yml up -d postgres
 
@@ -27,7 +27,10 @@ npx prisma migrate dev --name init
 npm run start:dev
 
 
-The API listens on `http://localhost:4000` by default.
+The API listens on `http://localhost:4000` by default, and every route is served
+under **`/v1`** (T49) — e.g. `http://localhost:4000/v1/merchants`. The one
+exception is the health probe, which is version-neutral and stays at
+`/health` and `/health/ready` so an uptime check never 404s on a version bump.
 
 ## Folder structure
 

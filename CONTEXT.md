@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25; **`RefreshToken` added T47**, and `AccountType` gained a fourth value `STAFF`) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **396 passing** (`npm test`) — 25 suites (T49 added `config/version.spec.ts`, 13): jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -53,11 +53,11 @@ npm run start:dev
 # Website  (from website/website/glow-plus-web)   ← React + Vite as of session 3
 npm run dev
 # Stripe   (from website/website)
-./stripe.exe listen --api-key <STRIPE_SECRET_KEY from .env> --forward-to localhost:4000/billing/webhook
+./stripe.exe listen --api-key <STRIPE_SECRET_KEY from .env> --forward-to localhost:4000/v1/billing/webhook   # T49: /v1
 ```
 
 **Test credentials** (`npm run seed`): `merchant@glowplus.test / Merchant123!` · `consumer@glowplus.test / Consumer123!`
-**Helper:** `./scripts/api.sh merchant GET /bookings` · `./scripts/api.sh consumer GET /bookings/me` · `./scripts/api.sh reset`
+**Helper:** (T49 — its `API_BASE` already carries `/v1`, so paths stay bare) `./scripts/api.sh merchant GET /bookings` · `./scripts/api.sh consumer GET /bookings/me` · `./scripts/api.sh reset`
 
 ⚠️ **`nest start --watch` does not reload `.env`.** After changing it, kill whatever holds :4000 and restart — stopping the npm wrapper can orphan the node child (`EADDRINUSE`):
 ```
@@ -121,15 +121,44 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5–6 DONE. Phase 7 is one task from done; next is T49.**
+## 8. EXACTLY where to resume — **Phases 5–7 DONE. Next is PHASE 8 (deployment), starting at T52.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 23 (2026-08-25): 50 of 65 done. PHASE 6 IS CLOSED and
-> PHASE 7 IS NEARLY DONE — T46 ✅ T47 ✅ T48 ✅ T50 ✅ T51 ✅. Only T49
-> (API versioning) is left in Phase 7; after it, everything remaining is
-> Phase 8 deployment plus T64–T66.**
+> **State as of session 24 (2026-08-25): 51 of 65 done. PHASE 7 IS CLOSED —
+> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. Everything remaining is Phase 8
+> deployment (T52–T59) plus T64–T66.** Backend suite **396 passing**, 25 suites.
 >
+> ⚠️ **T49: EVERY ROUTE IS NOW UNDER `/v1`, except `/health`.** This is the
+> single most important thing to know before touching anything — it changes
+> every URL you will type this session.
+>
+> - **`http://localhost:4000/v1/...`** for everything. `./scripts/api.sh` was
+>   updated to match, so the paths you pass IT stay bare (`/bookings/me`).
+> - **`/health` and `/health/ready` are `VERSION_NEUTRAL` and stay unversioned.**
+>   A probe answers "is this process alive", which outlives any API version.
+>   Prefixing their two AuthMiddleware exclusions **401'd every uptime probe** —
+>   caught by probing, not by reading the diff. Leave those two entries bare.
+> - **`stripe listen --forward-to localhost:4000/v1/billing/webhook`** now.
+> - **The old tree is GONE, not aliased** (T43 precedent). With a valid token
+>   the unversioned paths are **404**. ⚠️ **Without** one they are **401**, not
+>   404, because AuthMiddleware runs on `forRoutes('*')` ahead of the router —
+>   do not read that 401 as "the route still exists".
+> - **Four places compare the RAW URL and must know the prefix**, which is why
+>   `config/version.ts` exists: the AuthMiddleware exclusions, `EXEMPT_PATHS`
+>   in `throttling.ts`, the `express.raw()` mount in `billing.module.ts`
+>   (**[F19]** — miss it and every Stripe event 400s), and the health
+>   controller. Nest's versioning does **not** reach the Express layer. Build
+>   every new matcher with `withVersion()`.
+> - **The version segment is OPTIONAL in `EXEMPT_PATHS`** on purpose — health
+>   is un-prefixed while the webhook is versioned, and one pattern that accepts
+>   either survives the bump to `/v2`. Do not "tidy" it to a fixed `v1/`.
+> - **Both clients keep the version in ONE constant** — `config.js` for the
+>   website, `expoConfig.extra.apiBaseUrl` for the RN app. That is what makes
+>   `/v1` a **config change** for Order 2 rather than a code change; not one
+>   line of `client.js` moves. Never write `/v1` into a call site.
+>
+
 > **T50: every list route paginates, and the body is still a BARE ARRAY** —
 > `?limit=`/`?offset=` with the total in `X-Total-Count`, the same contract as
 > T43/T44. Do not "tidy" any of them into `{ items, total }`: `client.js` maps
@@ -382,8 +411,12 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > the node child**, which keeps holding :4000 — see §4 for the kill-by-port
 > command.
 >
-> Everything is committed and pushed; the working tree is clean and the DB is
-> at seed state. Dev servers may still be running from the last session — see
+> Everything is committed and pushed; the working tree is clean. The DB is at
+> seed state apart from bookings for the seeded consumer: 4 pre-existing rows
+> (2026-08-23/24) plus **2 PENDING rows created by the T49 browser runs**,
+> both at 2026-08-31. Deleting them was blocked by a permission prompt this
+> session, so they are recorded here rather than silently left — they are
+> harmless test data, but a booking count is not at seed baseline. Dev servers may still be running from the last session — see
 > §4 for how to check and restart them.
 
 > **Session 3 note (2026-08-23), kept for context:** the user asked, out of

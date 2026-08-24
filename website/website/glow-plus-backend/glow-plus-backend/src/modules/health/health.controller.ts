@@ -1,4 +1,4 @@
-import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -21,7 +21,13 @@ const startedAt = Date.now();
  * probe that opened a DB connection every time would burn the connection
  * budget that T55's pooling exists to protect.
  */
-@Controller('health')
+/**
+ * T49 — VERSION_NEUTRAL, so these stay at `/health` and `/health/ready` while
+ * every other route moved under `/v1`. A liveness probe answers "is this
+ * process alive", a question that outlives any API version; a health check
+ * that 404s the day the API goes to `/v2` is an outage that is not one.
+ */
+@Controller({ path: 'health', version: VERSION_NEUTRAL })
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 

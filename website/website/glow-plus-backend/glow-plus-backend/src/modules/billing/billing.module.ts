@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { withVersion } from '../../config/version';
 import * as express from 'express';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
@@ -15,6 +16,10 @@ export class BillingModule implements NestModule {
     // would otherwise consume it.
     consumer
       .apply(express.raw({ type: 'application/json' }))
-      .forRoutes({ path: 'billing/webhook', method: RequestMethod.POST });
+      // T49 — express.raw() is mounted by raw URL, so it needs the /v1 prefix
+      // too. Without it the parser never runs, req.rawBody is never set, and
+      // every Stripe event fails constructEvent() with a 400 — the exact
+      // failure mode [F19] already cost a session once.
+      .forRoutes({ path: withVersion('billing/webhook'), method: RequestMethod.POST });
   }
 }

@@ -124,7 +124,16 @@ export const ThrottleEmailSend = () =>
  * - `health` is polled by uptime probes and by Vercel. Answering 429 there
  *   reads as an outage. Same reasoning as AuthMiddleware's own exclusion.
  */
-const EXEMPT_PATHS = [/^\/?billing\/webhook\/?$/i, /^\/?health(\/.*)?$/i];
+// T49 — the version segment is OPTIONAL in both patterns, and deliberately so.
+// `/health` is VERSION_NEUTRAL and therefore genuinely un-prefixed, while
+// `/v1/billing/webhook` is versioned; writing one pattern that accepts either
+// keeps this correct through the next version bump instead of turning a missed
+// prefix into Stripe receiving 429s — which makes Stripe RETRY, manufacturing
+// exactly the load the limiter was meant to shed.
+const EXEMPT_PATHS = [
+  /^\/?(v\d+\/)?billing\/webhook\/?$/i,
+  /^\/?(v\d+\/)?health(\/.*)?$/i,
+];
 
 export function isExemptPath(path: string): boolean {
   return EXEMPT_PATHS.some((re) => re.test(path));

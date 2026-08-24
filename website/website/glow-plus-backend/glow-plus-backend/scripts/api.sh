@@ -14,7 +14,11 @@
 # Accounts come from `npm run seed`. Requires the API running on $API_BASE.
 set -euo pipefail
 
-API_BASE="${API_BASE:-http://localhost:4000}"
+# T49 — the version lives in the base URL, so the paths passed to this script
+# stay bare (`/bookings/me`, not `/v1/bookings/me`), matching how both real
+# clients are built. `/health` is VERSION_NEUTRAL and is not reachable through
+# this helper's base — curl it directly at http://localhost:4000/health.
+API_BASE="${API_BASE:-http://localhost:4000/v1}"
 CACHE_DIR="${TMPDIR:-/tmp}/glow-tokens"
 mkdir -p "$CACHE_DIR"
 
