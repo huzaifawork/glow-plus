@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,12 +121,28 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T48.**
+## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Phase 7 is under way; next is T49.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 23 (2026-08-25): 47 of 65 done. PHASE 6 IS CLOSED and
-> PHASE 7 IS UNDER WAY — T46 ✅ T47 ✅. The next task is T48.**
+> **State as of session 23 (2026-08-25): 48 of 65 done. PHASE 6 IS CLOSED and
+> PHASE 7 IS UNDER WAY — T46 ✅ T47 ✅ T48 ✅. The next task is T49.**
+>
+> **T48 found [F47], the sharpest bug of the session: `POST /bookings`
+> accepted bookings at SUSPENDED, PENDING and CANCELLED salons**, and
+> `/bookings/availability` and `/business-hours/:id` served them too — while
+> `/styles/public/:id` correctly 404'd. A salon suspended for non-payment kept
+> taking appointments. **The rule now lives in ONE place,
+> `common/merchant-visibility.ts`, and is called FIRST in all four public
+> salon-scoped routes** — first matters, because a check placed after the
+> style lookup leaks the salon's catalogue to the caller it is hidden from.
+> Do not inline a copy of it; four copies is four chances to disagree.
+>
+> The exclusion-list audit itself came back **clean, 74/74** — all 22 routes
+> that must be public are, all 44 others 401. The near-misses
+> (`/merchants/me`, `/styles`, `/staff`, `PUT /business-hours`) are checked by
+> name; the exclusions are **exact paths, not prefixes**, and that is what
+> keeps them apart.
 >
 > **T47 is done and it is the biggest behavioural change in the backend so
 > far: the access token is now 15 MINUTES, not 7 days.** Read its TASKS.md
@@ -222,6 +238,17 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > replayed **with an `Origin:` header** — a bare curl cannot see it. Replay
 > cross-origin requests properly when testing anything CORS-adjacent.
 >
+> ⚠️ **[F48], and it wasted time twice this session: a stray `.ts` in the
+> backend ROOT silently breaks `nest start --watch`.** `rootDir` is `./src`,
+> so a sibling file fails the build with **TS6059** and the watcher keeps
+> serving the **last good build** — your edit looks like it did nothing, and a
+> mutation test looks like it passed. Same cause as [F23] (`jest.setup.ts` and
+> `prisma/` are in `exclude` for exactly this). **Put throwaway scripts in
+> `prisma/`** — it is already excluded and `@prisma/client` resolves there —
+> and delete the emitted `.js`/`.js.map` afterwards, or you hit the *other*
+> trap where jest OOMs on them. Run `npx tsc --noEmit` if a change seems not
+> to take.
+>
 > ⚠️ **Session 22 found ~25 orphaned backend processes** — 13 stacked
 > `npm run start:dev` + `nest` watcher pairs from previous sessions, all
 > fighting over :4000, which is why an edited source file kept serving stale
@@ -278,15 +305,10 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > task that changes the login response both clients read, and it is done with
 > `token` preserved under that name.
 >
-> **T48 (public endpoints truly public) is next**, and like T46 it may already
-> be largely satisfied — `app.module.ts` carries an explicit AuthMiddleware
-> exclusion list, and T43/T44 both verified their own routes are reachable
-> without a token. **Start by auditing that list against what the RN app
-> actually calls before signing up** (`client.js`: `/merchants`,
-> `/styles/public/:id`, `/bookings/availability`), rather than assuming either
-> that it is complete or that it is broken. Note the exclusions are matched as
-> **exact paths, not prefixes**, on purpose — `merchants` and not
-> `merchants/(.*)`, or `GET /merchants/me` goes public with it.
+> **T49–T51 are next and are the small ones** — API versioning (`/v1`),
+> pagination on visits/bookings, and CORS for Expo web. All three are
+> contract-shape changes that are cheap now and breaking later, which is the
+> only reason they sit in Phase 7 at all.
 >
 > **T39 is done — the mobile pass found four real defects, not none.** Read
 > its TASKS.md entry before touching `global.css`. The headline: **T36's

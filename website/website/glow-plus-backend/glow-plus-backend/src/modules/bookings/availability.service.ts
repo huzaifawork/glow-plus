@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { assertMerchantVisible } from '../../common/merchant-visibility';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const SLOT_GRANULARITY_MINUTES = 15; // candidate slots start every 15 min
@@ -24,6 +25,13 @@ export class AvailabilityService {
    * bookings.service.ts's createBooking() for where that would plug in.
    */
   async getAvailableSlots(merchantId: string, styleId: string, dateISO: string): Promise<AvailableSlot[]> {
+    // T48 [F47] — checked FIRST, before anything about the style. This route
+    // is public, and without it a salon that is suspended, cancelled or still
+    // waiting for approval kept offering free appointment times to anyone
+    // holding its id, while its own menu 404'd. Same rule, same 404, as
+    // `GET /styles/public/:merchantId`.
+    await assertMerchantVisible(this.prisma, merchantId, 'This salon is not currently accepting bookings');
+
     const style = await this.prisma.style.findUnique({ where: { id: styleId } });
     if (!style || style.merchantId !== merchantId) {
       throw new NotFoundException('Style not found for this merchant');

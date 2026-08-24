@@ -1,4 +1,5 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { assertMerchantVisible } from '../../common/merchant-visibility';
 import { Prisma, StyleType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateStyleDto, UpdateStyleDto } from './dto';
@@ -75,13 +76,12 @@ export class StylesService {
     // not-yet-approved salon must 404 rather than return an empty menu, or
     // "this salon has no services yet" and "this salon is not open to
     // customers" become indistinguishable to the caller.
-    const merchant = await this.prisma.merchant.findUnique({
-      where: { id: merchantId },
-      select: { status: true },
-    });
-    if (!merchant || merchant.status !== 'ACTIVE') {
-      throw new NotFoundException('Merchant not found');
-    }
+    //
+    // T48 moved this rule into common/merchant-visibility.ts unchanged. It was
+    // the only route enforcing it, and availability, booking and business
+    // hours all needed the same answer [F47] — four copies of a visibility
+    // rule is four chances for them to disagree about which salons exist.
+    await assertMerchantVisible(this.prisma, merchantId);
 
     const where: Prisma.StyleWhereInput = { merchantId, active: true };
 

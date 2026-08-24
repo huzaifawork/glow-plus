@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { assertMerchantVisible } from '../../common/merchant-visibility';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptPii } from '../../common/pii-crypto';
 import { AvailabilityService } from './availability.service';
@@ -15,6 +16,14 @@ export class BookingsService {
   ) {}
 
   async create(userId: string, dto: CreateBookingDto) {
+    // T48 [F47] — this check did not exist, and its absence was the sharpest
+    // edge of that finding: a customer could complete a booking at a salon
+    // that was SUSPENDED for non-payment, PENDING approval, or CANCELLED. The
+    // row was written, the salon owed a service it had not paid to sell, and
+    // nothing anywhere refused it. Re-checked here and not merely on the
+    // availability route, because a client can POST straight to this one.
+    await assertMerchantVisible(this.prisma, dto.merchantId, 'This salon is not currently accepting bookings');
+
     const style = await this.prisma.style.findUnique({ where: { id: dto.styleId } });
     if (!style || style.merchantId !== dto.merchantId) {
       throw new NotFoundException('Style not found for this merchant');
