@@ -1,4 +1,10 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { MAX_NAME } from '../../common/limits';
+
+// A style is worth at most this many points per visit. Unbounded before
+// (T31) — nothing stopped a merchant setting 2^31 points and every reward
+// unlocking on one visit.
+const MAX_POINTS_PER_VISIT = 10_000;
 
 export enum StyleTypeDto {
   HAIR = 'HAIR',
@@ -10,6 +16,7 @@ export enum StyleTypeDto {
 export class CreateStyleDto {
   @IsString()
   @MinLength(1)
+  @MaxLength(MAX_NAME)
   name!: string;
 
   @IsEnum(StyleTypeDto)
@@ -17,6 +24,7 @@ export class CreateStyleDto {
 
   @IsInt()
   @Min(1)
+  @Max(MAX_POINTS_PER_VISIT)
   pointsPerVisit!: number;
 }
 
@@ -29,10 +37,12 @@ export class UpdateStyleDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(MAX_NAME)
   name?: string;
 
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(MAX_POINTS_PER_VISIT)
   pointsPerVisit?: number;
 }

@@ -136,6 +136,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
+    // body-parser's errors (T31). These are plain Errors carrying an HTTP
+    // `status`, NOT HttpExceptions, so they fell through to a blank 500 —
+    // verified live: a 500KB body to POST /auth/login answered
+    // `{"statusCode":500,"message":"Internal server error"}`. The limit
+    // itself was working; only the reporting was wrong, which is the worst
+    // combination, because a client is told to retry something that will
+    // never succeed. A 413 says "smaller", a 400 says "malformed", and both
+    // are the caller's to fix.
+    const bodyParserError = asBodyParserError(exception);
+    if (bodyParserError) return bodyParserError;
+
     const code = (exception as { code?: unknown })?.code;
     if (typeof code === 'string' && PRISMA_CODE.test(code)) {
       const mapped = mapPrismaError(code, (exception as { meta?: unknown }).meta);
@@ -154,6 +165,42 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error: reasonPhrase(HttpStatus.INTERNAL_SERVER_ERROR),
     };
   }
+}
+
+/**
+ * Recognise the errors express's body parser throws  (T31)
+ *
+ * They are `Error`s with an HTTP `status`/`statusCode` and a `type` such as
+ * `entity.too.large` or `entity.parse.failed` — not `HttpException`s, so
+ * without this they reached the generic 500 branch below.
+ *
+ * The status is taken from the error rather than hardcoded so a parser error
+ * this list doesn't name still reports its own status instead of a 500. The
+ * message is ours, never the parser's: body-parser's text includes the
+ * configured byte limit, and there is no reason to publish that.
+ */
+function asBodyParserError(exception: unknown): (MappedError & { error: string }) | null {
+  const err = exception as { type?: unknown; status?: unknown; statusCode?: unknown; expose?: unknown };
+  if (typeof err?.type !== 'string') return null;
+
+  const status = typeof err.status === 'number' ? err.status : typeof err.statusCode === 'number' ? err.statusCode : null;
+  if (status === null || status < 400 || status > 599) return null;
+
+  const messages: Record<string, string> = {
+    'entity.too.large': 'Request body is too large',
+    'entity.parse.failed': 'Request body is not valid JSON',
+    'entity.verify.failed': 'Request body could not be verified',
+    'request.aborted': 'The request was aborted',
+    'request.size.invalid': 'Request body size did not match the Content-Length header',
+    'parameters.too.many': 'Too many parameters in the request body',
+    'charset.unsupported': 'Unsupported charset in the request body',
+    'encoding.unsupported': 'Unsupported content encoding in the request body',
+  };
+
+  const message = messages[err.type];
+  if (!message) return null;
+
+  return { status, message, error: reasonPhrase(status) };
 }
 
 /**

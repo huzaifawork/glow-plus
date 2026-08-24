@@ -1,11 +1,14 @@
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { MAX_EMAIL, MAX_NAME, MAX_PASSWORD, MAX_TOKEN, MIN_PASSWORD } from '../../common/limits';
 
 export class InviteStaffDto {
   @IsEmail()
+  @MaxLength(MAX_EMAIL)
   email!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NAME)
   name?: string;
 
   // OWNER is invitable on purpose — a salon can have a co-owner or a manager
@@ -19,23 +22,29 @@ export class InviteStaffDto {
 export class AcceptInviteDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(MAX_TOKEN)
   token!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(MIN_PASSWORD)
+  @MaxLength(MAX_PASSWORD)
   password!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_NAME)
   name?: string;
 }
 
 export class StaffLoginDto {
   @IsEmail()
+  @MaxLength(MAX_EMAIL)
   email!: string;
 
+  // No MinLength on a login — see LoginDto in modules/auth/dto.ts.
   @IsString()
   @IsNotEmpty()
+  @MaxLength(MAX_PASSWORD)
   password!: string;
 }
 

@@ -1,7 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { BookingsService } from './bookings.service';
 import { AvailabilityService } from './availability.service';
-import { CreateBookingDto } from './dto';
+import { AvailabilityQueryDto, CreateBookingDto } from './dto';
 import { AuthedRequest, ConsumerRequest, MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 import { RequireConsumerGuard } from '../../common/guards/require-consumer.guard';
@@ -14,13 +14,16 @@ export class BookingsController {
   ) {}
 
   // Public — browsing available times shouldn't require an account yet.
+  //
+  // T31 — this took three loose `@Query('x') x: string` params, which
+  // ValidationPipe does not validate. A missing merchantId/styleId arrived as
+  // `undefined`, reached `findUnique({ where: { id: undefined } })` and came
+  // back as a bare 500. `AvailabilityQueryDto` already existed in ./dto and
+  // was simply never wired up; binding the whole query object to it is what
+  // makes the pipe run. Now 400 with a message naming the missing field.
   @Get('availability')
-  getAvailability(
-    @Query('merchantId') merchantId: string,
-    @Query('styleId') styleId: string,
-    @Query('date') date: string,
-  ) {
-    return this.availability.getAvailableSlots(merchantId, styleId, date);
+  getAvailability(@Query() query: AvailabilityQueryDto) {
+    return this.availability.getAvailableSlots(query.merchantId, query.styleId, query.date);
   }
 
   // Consumer — book an appointment.

@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
-import { OnboardingService, MerchantSignupInput } from './onboarding.service';
+import { OnboardingService } from './onboarding.service';
 import { MerchantAuthService } from './merchant-auth.service';
 import { MerchantLoginDto } from './login.dto';
+import { MerchantSignupDto } from './signup.dto';
 import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 
@@ -15,9 +16,13 @@ export class MerchantsController {
     private readonly merchantAuth: MerchantAuthService,
   ) {}
 
+  // T31 — this bound `MerchantSignupInput`, a TypeScript INTERFACE. Interfaces
+  // are erased at compile time, so ValidationPipe had no metatype to read and
+  // silently validated nothing: `password: ""` created a real salon account
+  // whose empty password logged in. See signup.dto.ts.
   @ThrottleCredentials()
   @Post('signup')
-  signup(@Body() dto: MerchantSignupInput) {
+  signup(@Body() dto: MerchantSignupDto) {
     return this.onboarding.signup(dto);
   }
 

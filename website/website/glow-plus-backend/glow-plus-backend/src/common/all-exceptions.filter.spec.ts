@@ -163,4 +163,68 @@ describe('AllExceptionsFilter', () => {
       );
     });
   });
+  /**
+   * body-parser errors  (T31)
+   *
+   * These are plain `Error`s carrying an HTTP `status` and a `type`, NOT
+   * HttpExceptions, so they fell through to the generic 500 branch. Verified
+   * live before the fix: a 500KB body to POST /auth/login answered
+   * `{"statusCode":500,"message":"Internal server error"}`. The 100kb limit
+   * was working the whole time; only the reporting was wrong — which is the
+   * worst combination, because the client is told to retry something that
+   * can never succeed.
+   */
+  describe('body-parser errors (T31)', () => {
+    const bodyParserError = (type: string, status: number, message = 'raw parser text') =>
+      Object.assign(new Error(message), { type, status, statusCode: status, expose: true });
+
+    it('maps entity.too.large to 413, not 500', () => {
+      const { status, body } = run(bodyParserError('entity.too.large', 413));
+
+      expect(status).toBe(413);
+      expect(body.statusCode).toBe(413);
+      expect(body.message).toBe('Request body is too large');
+      expect(body.error).toBe('Payload Too Large');
+    });
+
+    it('maps entity.parse.failed to 400', () => {
+      const { status, body } = run(bodyParserError('entity.parse.failed', 400));
+
+      expect(status).toBe(400);
+      expect(body.message).toBe('Request body is not valid JSON');
+      expect(body.error).toBe('Bad Request');
+    });
+
+    it('never returns the raw parser text, which names the byte limit', () => {
+      const { body } = run(
+        bodyParserError('entity.too.large', 413, 'request entity too large: limit 102400'),
+      );
+
+      expect(JSON.stringify(body)).not.toContain('102400');
+      expect(JSON.stringify(body)).not.toContain('limit');
+    });
+
+    it('falls through to 500 for a parser error type it does not know', () => {
+      // Deliberate: an unrecognised type is our bug to investigate, and the
+      // raw message could carry request content.
+      const { status, body } = run(bodyParserError('something.unheard.of', 400));
+
+      expect(status).toBe(500);
+      expect(body.message).toBe('Internal server error');
+    });
+
+    it('ignores a non-parser error that happens to have a `type` field', () => {
+      const { status } = run(Object.assign(new Error('boom'), { type: 'entity.too.large' }));
+
+      expect(status).toBe(500); // no usable status on the error
+    });
+
+    it('still returns the standard envelope', () => {
+      const { body } = run(bodyParserError('entity.too.large', 413));
+
+      expect(typeof body.statusCode).toBe('number');
+      expect(typeof body.message).toBe('string');
+      expect(body.error).toBeDefined();
+    });
+  });
 });
