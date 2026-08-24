@@ -17,7 +17,16 @@ datasource db {
 model User {
   id                String    @id @default(cuid())
   email             String    @unique
-  phone             String?   @unique
+  // T31b — AES-256-GCM ciphertext, NOT a phone number. Never query this
+  // column for equality; a random IV means the same number encrypts
+  // differently every time. Look up via `phoneFingerprint` instead, and
+  // decrypt with `decryptPii()` on the way out. See common/pii-crypto.ts.
+  phone             String?
+  // Keyed HMAC-SHA256 blind index over the normalised number. Carries the
+  // uniqueness this column used to hold, and is what makes lookup-by-phone
+  // still possible. NULL when the user gave no phone — Postgres treats NULLs
+  // as distinct under a unique index, so many users may have none.
+  phoneFingerprint  String?   @unique
   name              String
   passwordHash      String
   emailVerifiedAt   DateTime?

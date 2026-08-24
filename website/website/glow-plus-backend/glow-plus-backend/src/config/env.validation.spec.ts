@@ -6,12 +6,17 @@ import { collectEnvProblems, isProductionEnv, validateEnv } from './env.validati
  */
 
 const REAL_SECRET = 'B9x2Qk7ZtL4vRw8pYc1JmN6sHd3FgU0aEoTiXbVzKrQ=';
+// T31b — a real, distinct 32-byte key. Distinct from REAL_SECRET on purpose:
+// collectEnvProblems now rejects ENCRYPTION_KEY === JWT_SECRET, and a fixture
+// that happened to reuse one value would hide that rule everywhere else.
+const REAL_ENCRYPTION_KEY = 'dc93eb62f49e8f9a1af862100623c1108ddcb3935152b71fdc689a2afed4f084';
 
 const goodProd = (): NodeJS.ProcessEnv =>
   ({
     NODE_ENV: 'production',
     DATABASE_URL: 'postgresql://user:pw@db.example.com:5432/glowplus?pgbouncer=true',
     JWT_SECRET: REAL_SECRET,
+    ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
     APP_URL: 'https://glowplusmember.com',
     ALLOWED_ORIGINS: 'https://glowplusmember.com',
     STRIPE_SECRET_KEY: 'sk_live_abc123',
@@ -46,14 +51,52 @@ describe('collectEnvProblems — always required', () => {
 
   it('accepts a minimal local environment', () => {
     expect(
-      collectEnvProblems({ DATABASE_URL: 'postgresql://localhost:5433/glowplus', JWT_SECRET: REAL_SECRET } as NodeJS.ProcessEnv),
+      collectEnvProblems({
+        DATABASE_URL: 'postgresql://localhost:5433/glowplus',
+        JWT_SECRET: REAL_SECRET,
+        ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
+      } as NodeJS.ProcessEnv),
     ).toEqual([]);
   });
 
   it('rejects a missing JWT_SECRET even locally', () => {
-    const problems = collectEnvProblems({ DATABASE_URL: 'postgresql://x' } as NodeJS.ProcessEnv);
+    const problems = collectEnvProblems({
+      DATABASE_URL: 'postgresql://x',
+      ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
+    } as NodeJS.ProcessEnv);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('JWT_SECRET');
+  });
+
+  it('rejects a missing ENCRYPTION_KEY even locally', () => {
+    // T31b — this is ALWAYS_REQUIRED, not production-only: encryption runs
+    // on every write in every environment, so a missing key must fail at
+    // boot rather than at the first customer who enters a phone number.
+    const problems = collectEnvProblems({
+      DATABASE_URL: 'postgresql://x',
+      JWT_SECRET: REAL_SECRET,
+    } as NodeJS.ProcessEnv);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('ENCRYPTION_KEY');
+  });
+
+  it('rejects an ENCRYPTION_KEY that is not 32 bytes, not just a missing one', () => {
+    const env = { DATABASE_URL: 'postgresql://x', JWT_SECRET: REAL_SECRET, ENCRYPTION_KEY: 'too-short' } as NodeJS.ProcessEnv;
+    expect(collectEnvProblems(env).join()).toContain('32 bytes');
+  });
+
+  it('accepts a base64 ENCRYPTION_KEY, not only hex', () => {
+    const env = {
+      DATABASE_URL: 'postgresql://x',
+      JWT_SECRET: REAL_SECRET,
+      ENCRYPTION_KEY: Buffer.alloc(32, 9).toString('base64'),
+    } as NodeJS.ProcessEnv;
+    expect(collectEnvProblems(env)).toEqual([]);
+  });
+
+  it('rejects ENCRYPTION_KEY reusing JWT_SECRET — they must rotate independently', () => {
+    const env = { DATABASE_URL: 'postgresql://x', JWT_SECRET: REAL_SECRET, ENCRYPTION_KEY: REAL_SECRET } as NodeJS.ProcessEnv;
+    expect(collectEnvProblems(env).join()).toContain('must not be the same value as JWT_SECRET');
   });
 
   it('rejects the exact placeholder that was once live-exploitable [F20]', () => {
@@ -84,7 +127,11 @@ describe('collectEnvProblems — always required', () => {
 
 describe('collectEnvProblems — production only', () => {
   it('does not demand production vars locally', () => {
-    const env = { DATABASE_URL: 'postgresql://localhost/x', JWT_SECRET: REAL_SECRET } as NodeJS.ProcessEnv;
+    const env = {
+      DATABASE_URL: 'postgresql://localhost/x',
+      JWT_SECRET: REAL_SECRET,
+      ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
+    } as NodeJS.ProcessEnv;
     expect(collectEnvProblems(env)).toEqual([]);
   });
 
@@ -93,6 +140,7 @@ describe('collectEnvProblems — production only', () => {
       NODE_ENV: 'production',
       DATABASE_URL: 'postgresql://x',
       JWT_SECRET: REAL_SECRET,
+      ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
     } as NodeJS.ProcessEnv);
     for (const key of ['APP_URL', 'ALLOWED_ORIGINS', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'EMAIL_FROM']) {
       expect(problems.join()).toContain(key);
@@ -150,6 +198,7 @@ describe('collectEnvProblems — production only', () => {
     const env = {
       DATABASE_URL: 'postgresql://x',
       JWT_SECRET: REAL_SECRET,
+      ENCRYPTION_KEY: REAL_ENCRYPTION_KEY,
       EMAIL_PROVIDER: 'resend',
     } as NodeJS.ProcessEnv;
     expect(collectEnvProblems(env).join()).toContain('RESEND_API_KEY');

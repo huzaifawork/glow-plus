@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { decryptPii } from '../../common/pii-crypto';
 import { AvailabilityService } from './availability.service';
 import { RewardRulesService } from '../reward-rules/reward-rules.service';
 import { sendEmail } from '../notifications/email.provider';
@@ -61,8 +62,19 @@ export class BookingsService {
     });
   }
 
-  listForMerchant(merchantId: string, from?: Date, to?: Date) {
-    return this.prisma.booking.findMany({
+  /**
+   * T31b — the only route in the API that reads a customer's phone number.
+   *
+   * `User.phone` is now AES-256-GCM ciphertext, so it has to be decrypted on
+   * the way out or the merchant sees `v1:AbC...` where a phone number should
+   * be. The merchant is a legitimate reader here — it is their own customer's
+   * booking — so this decrypts rather than redacts.
+   *
+   * `decryptPii` returns a pre-T31b plaintext row unchanged, so rows written
+   * before the migration keep working without a backfill.
+   */
+  async listForMerchant(merchantId: string, from?: Date, to?: Date) {
+    const bookings = await this.prisma.booking.findMany({
       where: {
         merchantId,
         ...(from || to
@@ -77,6 +89,14 @@ export class BookingsService {
       include: { style: true, user: { select: { name: true, email: true, phone: true } } },
       orderBy: { startTime: 'asc' },
     });
+
+    return bookings.map((booking) => ({
+      ...booking,
+      user: {
+        ...booking.user,
+        phone: booking.user.phone ? decryptPii(booking.user.phone) : null,
+      },
+    }));
   }
 
   async confirm(merchantId: string, bookingId: string) {

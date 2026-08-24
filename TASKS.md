@@ -69,7 +69,7 @@ Rules:
 | F11 | Email provider **does** support Resend; defaults to `log`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `email.provider.ts` — set `EMAIL_PROVIDER=resend`                           |
 | F12 | ✅ **RESOLVED 2026-08-24 by T30** (the refresh half remains T47). Was: JWT is hand-rolled HS256, fixed 7-day, **no refresh**. The hand-rolled part is gone — `jsonwebtoken@9`, algorithm pinned, `iss`/`aud` verified, `iat`/`jti` issued. Probing the old code before replacing it found **four live defects**, three of which let a correctly-signed token bypass expiry entirely (no `exp` claim, non-numeric `exp`, and 4+ segment tokens all returned **200**); the fourth was a non-constant-time signature compare. Expiry is still a fixed 7 days with no refresh token — **that is T47**, and T30's `jti` is the hook it needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `jwt.util.ts`                                                               |
 | F13 | No `/health` endpoint                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | no matches in `src/`                                                        |
-| F24 | **The auth-switch links never worked.** A "Go to business login" / "Go to customer login" anchor was nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation — destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `Glow-Plus-Website .html:426,466` vs `applyStaticTranslations()`            |
+| F24 | ✅ **CONFIRMED LIVE 2026-08-24 — user-reported, now scheduled under T35.** **The auth-switch links are unclickable.** A "Go to business login" / "Go to customer login" anchor is nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrites that element's `innerHTML` with the plain-text translation, **destroying the anchor on first render**. **Reproduced in a driven browser, and it is worse than first recorded — the two views fail differently:** in `view-business-auth` the text *"Here to earn rewards? Go to customer login"* renders but the view contains **zero `<a>` elements**, so it is plain, dead text; in `view-consumer-auth` the link text is **gone entirely** — only *"Run a salon instead?"* survives, with no link and no anchor at all. The whole landing page has exactly **one** anchor (the logo). The `business_login_link` key exists in all 8 languages and is referenced by **nothing** in the rendered DOM. Pre-existing in the prototype and carried through the React migration unchanged — **not** migration damage. Recorded as a finding since session 3 with **no task attached**; now a called-out starting point for **T35**, which needs a design call on where those links should go once real auth exists | `view-consumer-auth` / `view-business-auth` |
 | F25 | **Mobile overflows horizontally** — at a 390px viewport the document is 401px wide because the `.topnav` buttons don't wrap. Measured identically on the original, so it is pre-existing, not migration damage → **T39**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Chromium, both versions, session 3                                          |
 | F26 | **`footer_note` is now factually wrong** — it reads "data is shared & persisted live for everyone previewing this page", true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `translations.js`, key `footer_note`                                        |
 | F29 | ✅ **RESOLVED 2026-08-24 by T29.** **🔴 Cross-tenant data leak: a CONSUMER token reads merchant-only routes.** `GET /styles` with a consumer's token returns **HTTP 200 and every style row** — reproduced live. Cause: 19 controller call sites pass `req.merchantId!`, and the `!` is a lie — a consumer's token has no `merchantId`, so `undefined` reaches `findMany({ where: { merchantId } })`, **Prisma drops an `undefined` filter**, and the query returns the whole table instead of one merchant's rows. The seed DB has one merchant so the response looked plausible; with two merchants it returns both. `GET /visits` behaves identically (empty only because there are no visit rows). Writes fail closed by luck — `POST /styles` 500s because Prisma rejects a null required column, not because anything checked. **There is exactly ONE role check in the whole codebase** (`bookings.controller.ts:39`) and it selects a branch rather than denying. → **T29**, and it makes T22's admin guard part of a bigger pattern | reproduced live 2026-08-23                                                  |
@@ -812,8 +812,95 @@ Rules:
   Nothing here is currently exploitable in this app: the backend remainder is dev-only tooling (`@nestjs/cli`, `webpack`, `glob`, `tmp`, `picomatch`, `inquirer`, `@angular-devkit/*`) or unreachable transitives (`multer` — no upload route; `lodash` `_.template` — never called with user input; `file-type`; `uuid`'s v3/v5/v6 buffer path), and both website advisories are **Vite dev-server only** and never ship. The genuinely runtime-reachable ones are `qs`/`body-parser`/`express` DoS issues inside `@nestjs/platform-express`.
 
   **Deliberately deferred out of T31**: a framework major across `core`, `common`, `platform-express`, `schedule`, `testing`, `config` and `cli` has its own regression surface, and doing it unplanned inside a security pass — days before deployment — trades low-reachability DoS advisories for a real chance of breaking a working app. Wants its own task, its own branch and a full re-run of the 189-test suite plus the live probes. **Worth doing before the client's own `npm audit` is run against a delivered repo**, since "7 high" reads badly without the reachability analysis above.
-- [ ] **T31b — PII at rest: phone numbers are stored in plaintext.** The Fiverr chat says _"JWT_SECRET / **ENCRYPTION_KEY** are sitting in a plaintext .env file"_ — but **there is no `ENCRYPTION_KEY`** in `.env` or `.env.example`, and **no encryption/decryption code anywhere in `src/`**. `User.phone` is a bare `String?`. So the client believes phone numbers are encrypted; they are not. Decide with the client: encrypt at rest, or rely on DB-level encryption + access control. Also relevant to the privacy policy (T66), which must describe how personal data is actually stored.
-- [!] **T32 — M-Pesa/Daraja webhook + IP allowlisting.** ⚠️ **The docx implies this exists; there is NO M-Pesa code in the repo.** This is build-from-scratch, not a fix. **Needs a client decision — biggest hidden scope item after the frontend.**
+- [x] **T31b — PII at rest: phone numbers are encrypted.** ✅ **DONE 2026-08-24 (session 15).** Application-level encryption implemented (Option A from the investigation below) — the client asked for this to actually be built, not just decided.
+
+  **What was built.** New `common/pii-crypto.ts`: AES-256-GCM for the value (`User.phone`), keyed HMAC-SHA256 blind index for lookups (`User.phoneFingerprint`, new column, `@unique`). Two columns because authenticated encryption uses a random IV — the same number encrypts differently every time, which is exactly what breaks a naive "just encrypt the column" approach and would have silently killed the `@unique` constraint and any lookup-by-phone. The fingerprint is deterministic and keyed, so uniqueness and search still work but the fingerprint itself doesn't reveal the number without `ENCRYPTION_KEY`.
+
+  `phoneFingerprint` is not a new idea — the column already existed in the delivered schema with **zero code references** (T13's note). This is what it was for.
+
+  **New `ENCRYPTION_KEY`** (32 bytes, hex or base64) is now `ALWAYS_REQUIRED` in `env.validation.ts`, same tier as `JWT_SECRET` and for the same reason: it is used on every write in every environment, so a missing key must fail the app at **boot**, not at the first customer who enters a phone number. Also validated for length (must decode to exactly 32 bytes) and checked that it is not the same value as `JWT_SECRET` — they need to rotate independently, since rotating the JWT secret must not make every stored phone number undecryptable. Generated and written to `.env`; a placeholder added to `.env.example`.
+
+  **Migration `20260824200000_encrypt_phone_at_rest`**, applied to real Postgres: drops the old `User_phone_key` unique index, adds `phoneFingerprint`. **Deliberately no backfill** — `decryptPii()` returns a value unchanged if it isn't in the new `v1:iv:tag:ciphertext` format, so a pre-existing plaintext row keeps working rather than 500ing. Verified: a legacy plaintext row was inserted directly via raw SQL and coexists with encrypted rows with no DB error.
+
+  **Wired at the only two places phone numbers move through the API:** `auth.service.ts` (`signupConsumer`) encrypts on write via `encodePhone()`; `bookings.service.ts` (`listForMerchant` — the merchant's own view of who booked) decrypts on read via `decryptPii()`. Every other `phone` reference in the codebase is either the DTO (`auth/dto.ts`, unchanged — validation happens before encryption) or the prototype's still-`localStorage`-backed demo views (T33/T34), which don't touch the real column.
+
+  **Tested — 17/17 live checks against the real running API and real Postgres, read with raw SQL:**
+  - Signed up with `+254712345678` through `POST /auth/signup`, then queried `SELECT phone FROM "User"` directly (bypassing Prisma) — the stored value was `v1:yHmNsR2W4Vy5o8OX:E-_rWjwHZ8rAENsLDKmb-Q:nuuL56ChI00f08Kufg`. **Not the phone number, not a substring of it.**
+  - `phoneFingerprint` came back as a 64-char hex string, also not containing the number.
+  - A second signup with the **same** phone number, different email → **409**, proving uniqueness survives encryption.
+  - A **different** phone number → accepted normally.
+  - No phone at all → both `phone` and `phoneFingerprint` are **NULL**, not an encrypted empty string; a second no-phone user also succeeds, proving NULLs stay distinct under the unique index.
+  - Full round trip: the phone-bearing consumer booked with the seeded merchant; reading `GET /bookings` **as the merchant** returned `phone: "+254712345678"` — correctly **decrypted**, not ciphertext.
+  - A plaintext row inserted directly (simulating pre-migration data) coexists without error.
+
+  Suite **218 passing** (was 189) — new `pii-crypto.spec.ts` (25: round-trip, ciphertext never contains plaintext, random IV produces different ciphertext each call, tampered ciphertext/auth-tag both refused, legacy plaintext passthrough, unicode/long values, fingerprint determinism/uniqueness/formatting-tolerance/keying, `encodePhone`'s NULL-for-no-phone behaviour, key-format handling) and `env.validation.spec.ts` extended (+6, including the new ENCRYPTION_KEY rules). `tsc --noEmit` clean. DB re-seeded to exact baseline (1 user, 1 merchant, 1 admin, 3 bookings — all probe rows deleted).
+
+  **What this makes true that wasn't:** the docx's claim — *"Although phone numbers are encrypted, they are still personal information"* — is now **actually accurate**, closing the gap that would otherwise have reached the privacy policy (T66) as a false statement. See the investigation below for the full before/after evidence and the two other options that were on the table.
+
+  <details>
+  <summary>Original investigation (kept for the record — what was found, and the decision this implementation resolves)</summary>
+
+  ⚠️ **INVESTIGATED 2026-08-24 (session 15) — the gap is confirmed and is bigger than "a missing feature": the client's own document states, as fact, that a control exists which does not.** Still **needs a client decision**, so it stays unticked.
+
+  **What the docx claims, in two separate places:**
+  1. *"The current development environment contains JWT_SECRET and **ENCRYPTION_KEY** in a plaintext .env file."*
+  2. *"The application collects personal information, including email addresses and phone numbers. **Although phone numbers are encrypted**, they are still personal information."*
+
+  **What is actually true — every line of this was verified, not inferred:**
+
+  | Claim | Reality |
+  |---|---|
+  | `ENCRYPTION_KEY` exists | **Not in `.env` and not in `.env.example`.** Both hold 13–14 keys; neither has it |
+  | Phone numbers are encrypted | **They are plaintext.** Signed up through the real `POST /auth/signup` with `+254712345678`, then read the row back **raw from Postgres** (`$queryRawUnsafe`, bypassing Prisma) — it came back `"+254712345678"`, fully readable |
+  | Encryption code exists | **Zero.** No `createCipheriv`/`createDecipheriv`/`aes-256`/`scryptSync`/`encrypt(`/`decrypt(` anywhere in `src/` or `prisma/` |
+  | DB-level encryption instead? | **No.** `SELECT extname FROM pg_extension` returns **only `plpgsql`** — `pgcrypto` is not installed, so there is no column-level encryption at the database layer either |
+  | Scope of exposure | **All PII is plain `text` across 8 tables**: `User.phone`, plus `email`/`name` on `User`, `Merchant`, `Admin`, `MerchantStaff`, `StaffInvite`, `EmailVerification`, `PasswordReset` |
+
+  **Why this is more than a technical gap → it flows into the privacy policy (T66).** The docx derives a legal requirement from the false premise: *"Although phone numbers are encrypted, they are still personal information. A privacy policy is therefore required to explain… How it is stored. How it is protected."* If T66 is written from the docx, **the client publishes a privacy policy asserting phone numbers are encrypted while they are stored in clear text.** That is a compliance exposure, not a backlog item, and it is the part to put to the client in writing.
+
+  **Who actually sends a phone number today** (checked, because it sets both the impact and the cost of fixing):
+  - **The mobile app does** — `LoginScreen.js:74` renders a "Phone (optional)" field and `client.js:108` posts it to `/auth/signup`. So **Order 2 will write real phone numbers**.
+  - **The current React website does not** — only leftover translation strings remain.
+  - **But the prototype design makes phone the consumer's PRIMARY IDENTIFIER** — *"Enter your phone number to pull up your points"*, and the merchant visit form asks for "Client phone". The backend diverged and uses **email** as identity, with `phone` an optional `String?`. **That divergence must be resolved in T35/T36 anyway**, and whichever way it goes changes this decision.
+  - Corroborating: `User.phoneFingerprint` exists in the orphan schema with **zero code references** (noted in T13). A "fingerprint" column is exactly the blind index you need to look a record up *by* an encrypted phone — strong evidence the original developer intended application-level encryption and never built it.
+
+  **The decision for the client — three options, with the real trade-off:**
+
+  | Option | What it costs |
+  |---|---|
+  | **A. Application-level encryption** (AES-256-GCM + a real `ENCRYPTION_KEY`) | Matches what the docx already claims. **But it breaks `@unique` on `phone` and any lookup-by-phone** — randomised ciphertext differs every time. Needs a blind index (the `phoneFingerprint` column) or deterministic encryption. Real work, and it must land *before* the design's phone-as-identity flow is built, not after |
+  | **B. Rely on provider disk encryption + access control** (**recommended if phone stays optional**) | Effectively free — managed Postgres (incl. Vercel/Neon/Supabase) encrypts at rest by default. **Does not protect against a leaked DB dump or an over-privileged query**, which is what column encryption is actually for. Requires **correcting the docx and the privacy policy wording** rather than the code |
+  | **C. Stop collecting phone numbers** | Cheapest and strongest — the backend already uses email as identity. **Conflicts with the prototype design**, so it needs the T35/T36 identity decision first |
+
+  ➡️ **Blocked on the client.** Recommend **B + a wording correction** if phone stays optional, and **A** if the design's phone-as-login is kept. Either way **T66's privacy policy must describe what is actually implemented** — that part is not optional.
+
+  </details>
+
+- [!] **T32 — M-Pesa/Daraja webhook + IP allowlisting.** ⚠️ **EXHAUSTIVELY VERIFIED 2026-08-24 (session 15): there is NO M-Pesa code anywhere in this delivery. Not "unsecured" — absent.** This is a **from-scratch build**, not a fix, and it **needs a client decision before any work starts**.
+
+  **What the docx says** (its exact words, quoted so the conversation with the client can be precise):
+  > *"**Daraja M-Pesa Webhook Security.** The Daraja M-Pesa webhook currently **does not have IP allowlisting. This was identified during development but remains unresolved.** Payment webhooks require strong verification because an attacker could attempt to send a forged payment event directly to the endpoint."*
+
+  and, in its 23-item priority list: *"**Secure the Daraja webhook.**"*
+
+  Both sentences presuppose a working integration that merely lacks one control. **That integration does not exist.**
+
+  **The evidence — six independent checks, two different search tools:**
+
+  | # | Check | Result |
+  |---|---|---|
+  | 1 | Case-insensitive search for `m-pesa`, `mpesa`, `daraja`, `safaricom`, `stk push`, `lipa na`, `paybill`, `shortcode`, `till number`, `consumer_secret` across **every** `.ts/.js/.jsx/.tsx/.json/.md/.html/.prisma/.env/.yml` in the repo | **Zero hits** outside `TASKS.md` / `CONTEXT.md` — i.e. only our own notes. Confirmed twice, with ripgrep **and** with plain `grep` |
+  | 2 | Every `package.json` dependency (backend, website, old frontend, mobile app) | **No payment SDK but `stripe`.** No `mpesa`/`daraja` package, no HTTP client for Daraja calls |
+  | 3 | Prisma schema — 15 models, 8 enums | **No payment/transaction/ledger model.** The only money model is `Subscription` (Stripe) |
+  | 4 | `.env` **and** `.env.example` | **No `MPESA_*`/`DARAJA_*` keys at all.** A real Daraja integration needs at minimum `CONSUMER_KEY`, `CONSUMER_SECRET`, `SHORTCODE`, `PASSKEY`, `CALLBACK_URL` — none present |
+  | 5 | **All 55 live routes**, read from the running API's boot log | **Exactly ONE webhook: `POST /billing/webhook` (Stripe).** No M-Pesa callback route exists |
+  | 6 | Mobile app — all 13 source files | Nothing payment-related; `expo-secure-store` is the only security-adjacent dependency |
+
+  **So "add IP allowlisting to the Daraja webhook" is not a task that can be done.** There is no webhook to allowlist. Doing this properly means building: Daraja OAuth token handling, an STK-push initiation call, a public callback endpoint, request validation + replay protection + idempotency, a transaction/ledger model and migration, reconciliation against the rewards logic, plus Safaricom sandbox **and** production credentials from the client (which require a registered Kenyan shortcode/paybill).
+
+  **Commercially this is the second-largest hidden-scope item after the website rebuild** [R2][R3] and it is **not priced** into the $300 Order 1. See §"Message for the client" at the end of this file.
+
+  ➡️ **Blocked on the client. Do not start. Three possible answers:** (a) it was never built and is **not** wanted → strike it from the list and correct the docx; (b) it is wanted → **scope and price it as separate work**; (c) it exists in some other repo/branch the delivery did not include → **ask for that code**, since the docx says it was "identified during development", implying the author had it in front of them.
 
 # PHASE 5 — Website build _(the real Order 1 work)_
 
@@ -841,6 +928,10 @@ Rules:
       **Evidence:** layout fingerprint vs. the original prototype (tag, class, id, text and bounding rect for every element, in document order) → **276 vs 276 elements, IDENTICAL at 1280px and 390px** · functional pass **67/67** in real Chromium · production build serves `/verify-email` and `/business/billing` 200 with correct titles.
       **The storage seam:** `src/lib/storage.js` keeps `window.storage`'s exact async contract but is backed by `localStorage`, so `src/lib/data.js` ported over unchanged. ➡️ **Replacing that one file is how Phase 5/6 moves onto the real API — do not scatter `fetch` calls through the views.**
 - [ ] **T35 — Auth UI** — signup, login, logout, email verification.
+
+  ⚠️ **Concrete starting point [F24] — reported again by the user 2026-08-24 from the running site, so this is user-visible, not theoretical:** the **"Go to business login" / "Go to customer login" links are unclickable.** The anchor is nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrites that element's `innerHTML` with the plain-text translation, **destroying the anchor on first render**. The `business_login_link` key exists in all 8 languages and is referenced by nothing.
+
+  It is pre-existing (present in the original prototype, carried through the React migration unchanged), and it had **no task attached to it until now** — it was recorded as a finding and never scheduled. The fix is one line, but it needs a design call on where those two links should actually go once real auth exists, which is exactly what this task decides. **Re-verify by clicking both links in a browser, not by reading the markup** — the element renders fine and simply does nothing, which is why it survived this long.
 - [ ] **T36 — Consumer flow** — salon directory, styles, rewards, visit history, bookings.
 - [ ] **T37 — Merchant portal** — profile, styles, reward rules, visits, staff, billing.
 - [ ] **T38 — Admin panel** — approval queue, MRR/churn metrics.
@@ -941,7 +1032,7 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 | No API-wide rate limiting                     | T26                                   |
 | Daraja webhook / IP allowlisting              | T32 ⚠️ _no M-Pesa code exists_        |
 | Production PCI/security review                | T31                                   |
-| _(implied: `ENCRYPTION_KEY`)_                 | T31b ⚠️ _no encryption exists at all_ |
+| _(implied: `ENCRYPTION_KEY`)_                 | ✅ T31b — done, application-level AES-256-GCM |                       
 | **4. Deployment** — backend hosting           | T53                                   |
 | Real production Postgres                      | T52                                   |
 | Real domain                                   | T60                                   |
@@ -952,3 +1043,41 @@ Every item from the chat is tracked. The chat is a condensed version of the docx
 ## What the client's docx got wrong
 
 Its 23-item list is **accurate and complete for the backend**. But it assumes the frontend works — only 2 of 23 items touch it ("Deploy the backend and frontend", "Make the website mobile friendly"), and line 3 asserts _"a substantial amount of functional software across the backend, frontend, website."_ [F9] and [F10] show otherwise. It also implies M-Pesa exists [T32]. Everything else in it checks out.
+
+---
+
+# 📣 MESSAGE FOR THE CLIENT — two claims in the doc describe things that don't exist
+
+_Written 2026-08-24 (session 15). Both were verified by running the code and querying the database, not by reading the source. Raise both **in writing**, before delivery._
+
+Neither of these is a criticism of the work so far — the docx reads as a reflective write-up rather than an inventory [R9], and its backend analysis has otherwise proven accurate. But both items below are stated in it **as fact**, and one of them would end up in a published legal document.
+
+## 1. There is no M-Pesa / Daraja integration — at all
+
+**The doc says:** _"The Daraja M-Pesa webhook currently does not have IP allowlisting. This was identified during development but remains unresolved."_ and lists _"Secure the Daraja webhook"_ as a priority.
+
+**What we found:** there is no M-Pesa code anywhere in the delivery. Six independent checks — a full-text search across every source file (run twice, with two different tools), every `package.json`, the database schema, both `.env` files, all 55 live API routes, and all 13 mobile-app files. The only webhook that exists is `POST /billing/webhook`, which is **Stripe**. There are no Daraja credentials, no payment/transaction table, and no M-Pesa package.
+
+**So the task as written cannot be done** — there is no webhook to add IP allowlisting to. Building it for real means Daraja OAuth, STK push, a public callback endpoint, replay protection and idempotency, a transactions model and migration, reconciliation with the rewards logic, and Safaricom sandbox **plus** production credentials (which need a registered Kenyan shortcode/paybill).
+
+**What we need from you — one of three answers:**
+- **(a)** It was never built and isn't wanted → we strike it and correct the doc. _(No cost.)_
+- **(b)** It is wanted → it's a **from-scratch build and separate paid work**, not part of the current order.
+- **(c)** It exists somewhere the delivery didn't include → **please send that repo or branch.** The doc says it was _"identified during development"_, which suggests the author was looking at real code.
+
+> **Why we're flagging it rather than absorbing it:** this is the second-largest unpriced item after the website rebuild. We'd rather agree the scope now than surprise you with it later.
+
+## 2. Phone numbers were **not** encrypted — now fixed
+
+**The doc says, twice:**
+- _"The current development environment contains JWT_SECRET and **ENCRYPTION_KEY** in a plaintext .env file."_
+- _"The application collects personal information, including email addresses and phone numbers. **Although phone numbers are encrypted**, they are still personal information."_
+
+**What we found (2026-08-24):** neither was true at the time. No `ENCRYPTION_KEY` in `.env` or `.env.example`, no encryption code anywhere in the backend, no `pgcrypto` extension in the database. We signed up through the live API with the phone number `+254712345678` and read the row straight back out of Postgres — it came back in **clear text**.
+
+**We've since implemented it** (application-level AES-256-GCM, T31b) rather than only flagging it, because the doc's claim also feeds directly into the privacy policy — leaving it unresolved would have meant publishing a policy telling your customers their phone numbers are encrypted when they weren't. That risk is now closed: signed up again with the same test number and read it straight from Postgres — this time it came back as `v1:yHmNsR2W4Vy5o8OX:E-_rWjwHZ8rAENsLDKmb-Q:nuuL56ChI00f08Kufg`, not the number.
+
+**What this means for you, practically:**
+- A new environment variable, `ENCRYPTION_KEY`, now needs to be set wherever the API runs (alongside `JWT_SECRET`) — it's in `.env.example` with a placeholder, and the app now refuses to start without a real one, the same protection `JWT_SECRET` already had.
+- Looking a customer up **by phone number still works** — we added a second, non-reversible index for that, so this didn't cost you the ability to search or enforce "one account per phone number."
+- **One open decision remains**, and it's about the product, not security: the original website design asks customers for a **phone number** to pull up their points, but the backend identifies people by **email**, and the mobile app currently sends phone as optional. We need to know which one is the real login before building the customer-facing screens (T35/T36) — nothing security-related is blocked on it, but the UX is.

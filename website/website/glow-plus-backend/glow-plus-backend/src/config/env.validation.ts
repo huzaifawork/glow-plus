@@ -28,7 +28,12 @@
  */
 
 /** Vars the API cannot do anything useful without, in any environment. */
-const ALWAYS_REQUIRED = ['DATABASE_URL', 'JWT_SECRET'] as const;
+// T31b — ENCRYPTION_KEY is ALWAYS required, not production-only. Personal
+// data is encrypted on every write in every environment, so a missing key is
+// not a config nicety that can wait for deploy: signup would throw at the
+// point it tries to encrypt a phone number. Failing at boot names the cause;
+// failing at signup names a stack frame.
+const ALWAYS_REQUIRED = ['DATABASE_URL', 'JWT_SECRET', 'ENCRYPTION_KEY'] as const;
 
 /**
  * Vars that only *have* to be right once real users and real money are
@@ -109,6 +114,29 @@ export function collectEnvProblems(env: NodeJS.ProcessEnv): string[] {
     problems.push(
       `JWT_SECRET is only ${secret.length} characters — use at least 32 (openssl rand -base64 48)`,
     );
+  }
+
+  // T31b — the same "length, not just presence" rule as JWT_SECRET above,
+  // for the same reason. AES-256 needs exactly 32 bytes; anything else either
+  // throws at the first encrypt or, worse, silently weakens every row written
+  // from that moment on. Checked here so it is caught at boot rather than by
+  // the first customer who enters a phone number.
+  const encryptionKey = env.ENCRYPTION_KEY?.trim();
+  if (encryptionKey && !looksLikePlaceholder(encryptionKey)) {
+    const decoded = /^[0-9a-f]{64}$/i.test(encryptionKey)
+      ? Buffer.from(encryptionKey, 'hex')
+      : Buffer.from(encryptionKey, 'base64');
+    if (decoded.length !== 32) {
+      problems.push(
+        `ENCRYPTION_KEY must decode to 32 bytes for AES-256 (got ${decoded.length}) — generate one with: openssl rand -hex 32`,
+      );
+    }
+    if (encryptionKey === env.JWT_SECRET?.trim()) {
+      // Different jobs, different blast radius: JWT_SECRET is rotated
+      // whenever a token leaks, and rotating it must not make every stored
+      // phone number undecryptable.
+      problems.push('ENCRYPTION_KEY must not be the same value as JWT_SECRET — they rotate independently');
+    }
   }
 
   if (env.EMAIL_PROVIDER === 'resend' && !env.RESEND_API_KEY?.trim()) {

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationService } from './email-verification.service';
 import { sign } from '../../middleware/jwt.util';
 import { SignupDto, LoginDto } from './dto';
+import { encodePhone } from '../../common/pii-crypto';
 
 const SALT_ROUNDS = 12;
 
@@ -50,7 +51,11 @@ export class AuthService {
     let user;
     try {
       user = await this.prisma.user.create({
-        data: { email: dto.email, passwordHash, name: dto.name, phone: dto.phone },
+        // T31b — `phone` is written as AES-256-GCM ciphertext and
+        // `phoneFingerprint` as a keyed blind index, so the number stays
+        // unique and findable without being readable in the database.
+        // Both are omitted entirely when no phone was given.
+        data: { email: dto.email, passwordHash, name: dto.name, ...encodePhone(dto.phone) },
       });
     } catch (err) {
       if ((err as { code?: string })?.code === 'P2002') {
