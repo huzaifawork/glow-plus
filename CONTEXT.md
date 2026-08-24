@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped (T24 added 9, T25 added 1), Prisma connected |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped, Prisma connected. **T27: it now refuses to boot on a missing/placeholder secret** — that is intended, read the error, it names every problem at once |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **67 passing** (`npm test`) — 10 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, **require-merchant-owner guard (T24)**, trialEndingReminder job, **expirePoints job (T25)** |
+| Tests | ✅ Jest configured, **104 passing** (`npm test`) — 10 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, **require-merchant-owner guard (T24)**, trialEndingReminder job, **expirePoints job (T25)**, **throttling (T26, 18)**, **env.validation (T27, 19)**. ⚠️ `jest.setup.ts` now supplies `JWT_SECRET` — jwt.util no longer has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -99,7 +99,7 @@ joziilunga-attachments/
 | **F15** | `bookings/` and `business-hours/` exist ONLY at `src/modules/booking/src/modules/…` — an unzipped delivery dumped in with its full path preserved, so every relative import resolves to nothing. There is **no** top-level `src/modules/bookings/`. |
 | **F1** | `BookingsModule` / `BusinessHoursModule` are **never imported** in `app.module.ts` — confirmed at runtime, zero booking routes registered. |
 | **F2** | **Booking/BusinessHours tables don't exist in the DB.** The schema is split across two files; the only migration creates 9 tables, none of them Booking. **This is why the client says booking "was never run against real Postgres" — it could not have worked.** |
-| **F3** | **Rate limiting is applied to nothing.** `rateLimit.middleware.ts` has zero references. The client believes `/auth/login` is protected; it is not. |
+| **F3** | ✅ **RESOLVED 2026-08-24 by T26.** ~~Rate limiting is applied to nothing.~~ Three tiers now run on every request; the dead middleware (which could not have been applied — Nest DI cannot resolve its constructor params) was deleted. |
 | **F4** | ✅ **RESOLVED 2026-08-24 by T23.** ~~Nothing writes to the `Redemption` table.~~ `src/modules/redemptions/` now writes to it, with double-redemption blocked inside a transaction. |
 | **F5** | No password-reset code exists at all. |
 | **F6** | ✅ **RESOLVED 2026-08-24 by T24.** ~~`MerchantStaff` table exists in schema + migration, but **zero code uses it**.~~ `src/modules/staff/` now writes to it, with an invite flow and an owner/staff split enforced by `RequireMerchantOwnerGuard`. |
@@ -224,9 +224,28 @@ Every management method filters by the caller's `merchantId`, never by staff id 
 
 Suite now **67 passing** (was 55). `tsc --noEmit` clean. Test data fully cleaned up after both tasks — DB back at exact seed state (1 merchant, 5 visits, 0 expired, 0 staff, 0 invites).
 
-➡️ **NEXT: T26 onward in Phase 2** — check `TASKS.md` for the next unticked item. Note that **T29 (authorization audit) is now partly pre-paid**: T17, T18, T23, T24 and T25 each added their guards at build time, so [F29]/[F30] remain open only for the older controllers — `styles`, `visits` and `reward-rules` still read `req.merchantId!` with no role check, and `RequireActiveSubscriptionMiddleware` still matches no real path.
+✅ **T26 — done 2026-08-24 (session 12).** [F3] closed. `rateLimit.middleware.ts` had zero references **and could not have been wired up**: Nest DI cannot resolve its `windowMs`/`max`/`keyOf` constructor params, so `consumer.apply()` would have failed at boot. Deleted; replaced with `@nestjs/throttler` v6.5 in three tiers (`src/common/throttling.ts`): `global` 300/min per IP in **one bucket for the whole API**, `default` 120/min per IP per handler, and `identity` keyed by the **email in the request body** — the credential-stuffing defence the deleted middleware's own comment described and never implemented. Credential routes 20/5min per IP but only **5/15min per email**: a salon is one NAT'd office and must not lock itself out, so the brute-force defence lives in the per-email tier.
+
+**Two real bugs found in my own first implementation, by testing rather than reading:**
+1. **A guard-only limiter leaves every protected route floodable by anonymous traffic.** Nest runs middleware before guards and `AuthMiddleware` throws 401 first, so `ThrottlerGuard` never saw those requests. Spotted because `GET /styles` came back with **no** `X-RateLimit-*` headers while `GET /merchants/public` (excluded from AuthMiddleware) had them. Fixed by moving the `global` tier into `src/middleware/globalRateLimit.middleware.ts`, applied **before** `AuthMiddleware`, sharing the throttler's storage service. That tier is deliberately **absent** from the guard's list — in both, it would double-count every authenticated request and halve the real limit. → **[F32]**
+2. **Every exemption silently missed.** `req.path` inside `forRoutes('*')` middleware is `/`, not the real path — Express strips the matched mount prefix and with a `*` mount the whole path *is* the prefix. `/health` and the Stripe webhook were both being throttled while the unit tests (which pass a path string) stayed green. Fixed with `requestPath()` reading `originalUrl`. → **[F33]**
+
+Exempt: the Stripe webhook (it **retries harder** on a 429, so throttling manufactures the load it was meant to shed), `/health*` (a throttled probe reads as an outage), and `OPTIONS` preflight. New **`TRUST_PROXY_HEADER`** (default `0`): `X-Forwarded-For` is caller-supplied, so trusting it on a directly-exposed server is a free bypass — but it **must be `1` on Vercel** or every visitor shares the proxy's IP. **26/26 live checks**, including the route ceiling firing at request #120 of 120 and a rotating forged `X-Forwarded-For` failing to bypass a block.
+
+✅ **T27 — done 2026-08-24 (session 12), except key rotation** (a client account action; the user ruled it out of scope). The blocker to moving secrets to Vercel was never the move — it was that **nothing would notice a secret going missing**. Every secret had a silent fallback, and `jwt.util.ts`'s was `?? 'dev-secret-change-me'` — a constant published in this repo. A var forgotten in the Vercel dashboard would boot green and sign `role:'admin'` tokens with it: **[F20] reproduced exactly**, and [F20] was already proven exploitable.
+
+New `src/config/env.validation.ts` on `ConfigModule.forRoot({ validate })` refuses to boot on missing/placeholder secrets (including the two real historical strings), a `JWT_SECRET` under 32 chars, and — production only — a `localhost` `APP_URL`/`ALLOWED_ORIGINS`, `EMAIL_PROVIDER=log`, or `TRUST_PROXY_HEADER` off (which would collapse T26's limiter to one bucket for the internet). It lists **every** problem at once, and treats `VERCEL=1` as production even with `NODE_ENV` unset. `jwt.util.ts`'s fallback is gone; `jest.setup.ts` supplies a test key. New **`glow-plus-backend/DEPLOYMENT.md`** — 15 vars, grepped not remembered, with what breaks when each is wrong. Boot refusal proven against the **compiled** app for three bad configs. `.env` confirmed gitignored and never committed.
+
+➡️ **NEXT: T28 (helmet + tighten CORS), then T29.** Check `TASKS.md` for the next unticked item. Note that **T29 (authorization audit) is now partly pre-paid**: T17, T18, T23, T24 and T25 each added their guards at build time, so [F29]/[F30] remain open only for the older controllers — `styles`, `visits` and `reward-rules` still read `req.merchantId!` with no role check, and `RequireActiveSubscriptionMiddleware` still matches no real path.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
+
+**New findings from session 12** (both found by running the code, not reading it):
+
+| # | Finding |
+|---|---|
+| **F32** | **Guards cannot rate-limit unauthenticated traffic in this app.** Nest runs middleware before guards, and `AuthMiddleware` throws 401 first, so a `ThrottlerGuard`-based limiter never sees an anonymous request to a protected route — every one stayed floodable. Visible in the headers: a 401 from `GET /styles` carried no `X-RateLimit-*` at all. Fixed in T26 by moving the API-wide tier into middleware applied ahead of `AuthMiddleware`. **Anything else that must apply to every request has the same constraint.** |
+| **F33** | **`req.path` is `/` inside `forRoutes('*')` middleware.** Express strips the matched mount prefix from `req.url`, and with a `*` mount the whole path is the prefix. Every path-based exemption missed — `/health` and the Stripe webhook were both being throttled — while unit tests passing a path string stayed green. Use `req.originalUrl`. Relevant to **T29**, since `RequireActiveSubscriptionMiddleware` is also path-matched and also matches nothing [F30]. |
 
 **New findings from session 4** (all reproduced against the running API):
 
