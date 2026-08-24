@@ -55,7 +55,13 @@
      an entire nav row to itself. Inherited verbatim from the prototype (same
      markup, same rule) and wrong at every width, not just on mobile — `.navbtn`
      overrides the rule's colours and radius but never declares a width. */
-  .topnav select{width:auto;flex:0 0 auto;}
+  /* `padding` was an inline style on the element until T39b; it lives here now
+     so the mobile panel can widen it without fighting inline specificity. */
+  .topnav select{width:auto;flex:0 0 auto;padding:8px 10px;}
+  /* T39b — the hamburger. Hidden here and shown only in the ≤700px block at the
+     bottom of this file; above that width the nav is a single row and the
+     toggle would be noise. */
+  .navtoggle{display:none;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0 12px;border-radius:980px;border:1px solid var(--ink-faint);background:transparent;font-size:17px;line-height:1;color:var(--ink);}
   .navbtn{padding:9px 16px;border-radius:980px;border:1px solid transparent;background:transparent;font-weight:500;font-size:12.5px;color:var(--ink);}
   .navbtn:hover{color:var(--ink-soft);}
   .navbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:8px 16px;}
@@ -310,6 +316,45 @@
        42px wide. `min-width` widens just those — the strip wraps a little
        sooner and nothing else moves. */
     .ptab{min-height:44px;min-width:44px;}
+  }
+
+  /* ---------- T39b: nav collapses behind a toggle on phones ----------
+     T39 stopped the wrapped nav spilling out of the bar, but containing it made
+     the header 103px of a 844px viewport, sticky, with the rows breaking
+     wherever the width ran out. Below 700px — the width at which the seven
+     controls stop fitting one row at a 44px tap target — the nav becomes a
+     drop panel instead and the bar returns to its designed 52px.
+     700px, not the 860px used above, is deliberate: between the two the nav
+     still fits on one row, and hiding a nav that fits would be a regression. */
+  @media (max-width:700px){
+    .navtoggle{display:inline-flex;}
+    .topnav{
+      position:absolute;top:100%;left:0;right:0;
+      display:none;flex-direction:column;align-items:stretch;justify-content:flex-start;
+      gap:6px;padding:12px 14px 16px;
+      background:var(--white);border-bottom:1px solid var(--line);
+      box-shadow:0 14px 28px rgba(0,0,0,0.10);
+    }
+    .topnav.open{display:flex;}
+    /* In a column panel every control is the same full-width row, which is what
+       makes the wrap point stop looking accidental. This deliberately overrides
+       the `width:auto` above — that fix was for the switcher sitting *inline*
+       in the bar, which below this width it no longer does. */
+    .topnav.open .navbtn{width:100%;text-align:center;}
+    /* The buttons centre, but the switcher must not: a <select> paints its
+       caret against the inline-end edge, so centred text left the label
+       stranded in the middle with the arrow floating away from it. `start`
+       keeps label and caret together and flips correctly under `dir=rtl`. */
+    /* `select.navbtn`, not bare `select`: the switcher carries `.navbtn` too, so
+       the centring rule above outranks a plain element selector and the caret
+       stayed stranded from its label. */
+    .topnav.open select.navbtn{width:100%;text-align:start;padding-inline:14px;}
+    /* The prototype's plain `.navbtn` is borderless — only `.ghost` draws an
+       outline. That reads fine as one inline row, but stacked it makes "My
+       rewards" look like a gap between two pills rather than a row of its own,
+       so every row gets the outline here. `.primary` keeps its blue fill. */
+    .topnav.open .navbtn{border-color:var(--ink-faint);}
+    .topnav.open .navbtn.primary{border-color:transparent;}
   }
 
 /* --- Migration shim (the only rule not lifted verbatim from the original) ---

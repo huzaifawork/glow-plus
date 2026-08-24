@@ -6,7 +6,7 @@ export const LANG_NAMES = {en:'English',es:'Español',fr:'Français',de:'Deutsch
 export const I18N = {
 en: {
   promo_bar: '🎉 <b>First 50 salons &amp; spas</b> get a Founding Member badge — plus every new salon gets their first month free.',
-  nav_home:'Home', nav_rewards:'My rewards', nav_admin:'Admin', nav_business:'For salons',
+  nav_home:'Home', nav_rewards:'My rewards', nav_admin:'Admin', nav_business:'For salons', nav_menu:'Menu',
   hero_eyebrow:'Loyalty, digitized.',
   hero_headline:'Every visit gets you<br><em>closer</em> to something.',
   hero_sub:'Glow+ turns your favorite hair, nail, and spa visits into a real punch card — digitized. No spreadsheets, no stamps to lose. Just progress, visit by visit.',
@@ -107,7 +107,7 @@ en: {
 },
 es: {
   promo_bar:'🎉 <b>Los primeros 50 salones y spas</b> reciben una insignia de Miembro Fundador — además, todo salón nuevo obtiene su primer mes gratis.',
-  nav_home:'Inicio', nav_rewards:'Mis recompensas', nav_admin:'Administración', nav_business:'Para salones',
+  nav_home:'Inicio', nav_rewards:'Mis recompensas', nav_admin:'Administración', nav_business:'Para salones', nav_menu:'Menú',
   hero_eyebrow:'Fidelidad, digitalizada.',
   hero_headline:'Cada visita te acerca<br><em>más</em> a algo.',
   hero_sub:'Glow+ convierte tus visitas favoritas de peluquería, uñas y spa en una tarjeta de sellos real — digitalizada. Sin hojas de cálculo, sin sellos que perder. Solo progreso, visita a visita.',
@@ -197,7 +197,7 @@ es: {
 },
 fr: {
   promo_bar:'🎉 <b>Les 50 premiers salons et spas</b> reçoivent un badge Membre Fondateur — et chaque nouveau salon obtient son premier mois gratuit.',
-  nav_home:'Accueil', nav_rewards:'Mes récompenses', nav_admin:'Administration', nav_business:'Pour les salons',
+  nav_home:'Accueil', nav_rewards:'Mes récompenses', nav_admin:'Administration', nav_business:'Pour les salons', nav_menu:'Menu',
   hero_eyebrow:'La fidélité, numérisée.',
   hero_headline:'Chaque visite vous<br>rapproche <em>un peu plus</em>.',
   hero_sub:'Glow+ transforme vos visites préférées en coiffure, ongles et spa en une véritable carte de fidélité — numérisée. Plus de tableurs, plus de cartes perdues. Juste votre progression, visite après visite.',
@@ -287,7 +287,7 @@ fr: {
 },
 de: {
   promo_bar:'🎉 <b>Die ersten 50 Salons &amp; Spas</b> erhalten ein Gründungsmitglied-Abzeichen — und jeder neue Salon bekommt den ersten Monat gratis.',
-  nav_home:'Start', nav_rewards:'Meine Prämien', nav_admin:'Verwaltung', nav_business:'Für Salons',
+  nav_home:'Start', nav_rewards:'Meine Prämien', nav_admin:'Verwaltung', nav_business:'Für Salons', nav_menu:'Menü',
   hero_eyebrow:'Treue, digitalisiert.',
   hero_headline:'Jeder Besuch bringt dich<br><em>näher</em> an etwas heran.',
   hero_sub:'Glow+ verwandelt deine liebsten Friseur-, Nagel- und Spa-Besuche in eine echte Stempelkarte — digitalisiert. Keine Tabellen, keine verlorenen Stempel. Nur Fortschritt, Besuch für Besuch.',
@@ -377,7 +377,7 @@ de: {
 },
 pt: {
   promo_bar:'🎉 <b>Os primeiros 50 salões e spas</b> ganham um selo de Membro Fundador — além disso, todo novo salão recebe o primeiro mês grátis.',
-  nav_home:'Início', nav_rewards:'Minhas recompensas', nav_admin:'Administração', nav_business:'Para salões',
+  nav_home:'Início', nav_rewards:'Minhas recompensas', nav_admin:'Administração', nav_business:'Para salões', nav_menu:'Menu',
   hero_eyebrow:'Fidelidade, digitalizada.',
   hero_headline:'Cada visita te deixa<br><em>mais perto</em> de algo.',
   hero_sub:'O Glow+ transforma suas visitas favoritas de cabelo, unhas e spa em um cartão fidelidade real — digitalizado. Sem planilhas, sem carimbos perdidos. Apenas progresso, visita a visita.',
@@ -467,7 +467,7 @@ pt: {
 },
 zh: {
   promo_bar:'🎉 <b>前50家沙龙和水疗中心</b>将获得创始会员徽章——而且每家新沙龙都将获得首月免费。',
-  nav_home:'首页', nav_rewards:'我的奖励', nav_admin:'管理后台', nav_business:'商家入口',
+  nav_home:'首页', nav_rewards:'我的奖励', nav_admin:'管理后台', nav_business:'商家入口', nav_menu:'菜单',
   hero_eyebrow:'忠诚度，数字化。',
   hero_headline:'每一次光顾都让你<br><em>更接近</em>心愿。',
   hero_sub:'Glow+ 将你喜爱的美发、美甲和美容水疗体验变成真正的数字化集章卡。无需表格，不怕盖章丢失，只有清晰的进度，一次光顾接一次。',
@@ -557,7 +557,7 @@ zh: {
 },
 ja: {
   promo_bar:'🎉 <b>先着50店舗のサロン&amp;スパ</b>に創業メンバーバッジを進呈——さらに新規登録のサロンは全店、初月無料。',
-  nav_home:'ホーム', nav_rewards:'マイリワード', nav_admin:'管理画面', nav_business:'サロン向け',
+  nav_home:'ホーム', nav_rewards:'マイリワード', nav_admin:'管理画面', nav_business:'サロン向け', nav_menu:'メニュー',
   hero_eyebrow:'ロイヤルティを、デジタルに。',
   hero_headline:'来店するたびに<br>目標に<em>もっと近づく</em>。',
   hero_sub:'Glow+は、お気に入りのヘア・ネイル・スパでの来店を本物のスタンプカードにします——デジタルで。表計算も、紛失するスタンプもなし。ただ、来店するたびに進んでいく進捗だけ。',
@@ -647,7 +647,7 @@ ja: {
 },
 ar: {
   promo_bar:'🎉 <b>أول 50 صالونًا ومركز سبا</b> يحصلون على شارة عضو مؤسس — بالإضافة إلى أن كل صالون جديد يحصل على شهره الأول مجانًا.',
-  nav_home:'الرئيسية', nav_rewards:'مكافآتي', nav_admin:'الإدارة', nav_business:'للصالونات',
+  nav_home:'الرئيسية', nav_rewards:'مكافآتي', nav_admin:'الإدارة', nav_business:'للصالونات', nav_menu:'القائمة',
   hero_eyebrow:'الولاء، بشكل رقمي.',
   hero_headline:'كل زيارة تقربك<br><em>أكثر</em> من شيء ما.',
   hero_sub:'يحوّل Glow+ زياراتك المفضلة لصالونات الشعر والأظافر والسبا إلى بطاقة ختم حقيقية — رقمية بالكامل. لا جداول بيانات، ولا أختام تُفقد. فقط تقدم مستمر مع كل زيارة.',

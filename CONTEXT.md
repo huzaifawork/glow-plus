@@ -37,7 +37,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 63 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
-| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths** |
+| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
 | Tests | ✅ Jest configured, **261 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
@@ -148,11 +148,14 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > **Arabic RTL at 390px is verified** — the one thing nobody had ever checked.
 > 18 surfaces, `dir=rtl`, correct mirroring, zero overflow. Closed.
 >
-> ⚠️ **The mobile header is now 103px of a 844px viewport and sticky**, because
-> seven controls at 44px cannot fit one row at 390px. That is a knowing
-> trade-off (containment over height); shortening it means a hamburger, which
-> would be the first real departure from the prototype's shell. Don't "fix" it
-> silently — it's a design decision for the user/client.
+> **T39b: below 700px the nav collapses behind a hamburger** and the bar is
+> **57px**. T39 as first delivered contained the nav but cost height — 103px,
+> sticky — and the user asked for the mobile side to be made properly good, so
+> that trade-off was taken rather than left standing. **700px, not 860px:**
+> between the two the nav still fits one row, and hiding a nav that fits would
+> be a regression. **Above 700px nothing changed** — the desktop header is a
+> single 52px row and is deliberately untouched. The panel closes on selection,
+> Escape and click-outside; `nav_menu` was added to **all 8** language blocks.
 >
 > **New finding [F43] — belongs to T40, not T39.** **18 i18n keys exist only in
 > the `en` block**, so 7 of 8 languages fall back to English across the entire
@@ -467,6 +470,16 @@ The ticket said "frontend-only" and was almost right — **one endpoint was miss
 **Evidence:** real Chrome (`puppeteer-core`, scratchpad-only, not added to the repo), real dev servers, real Postgres, signed in as all three roles, every surface measured in **both** English and Arabic. Before → after at 390px: WCAG `<24px` failures **2 → 0**, sub-44px targets **6–11 per surface → 0**, overflow **0 → 0** (already clean). Desktop re-measured at 1280px to prove nothing regressed: bar still exactly **52px**, nav now inside it (was spilling 72px out of 52px), select 453.9 → 104px. `npm run build` clean, `tsc --noEmit` clean, **261 passing** (unchanged — CSS only, one file, 39 lines). DB untouched, at exact seed state.
 
 ⚠️ **Knowing trade-off:** the mobile header is now **103px of a 844px viewport, and sticky**, because seven controls at 44px cannot fit one row at 390px. Containment was the fix; making it *short* means collapsing to a hamburger, which would be the first real departure from the prototype's shell — a design call for the user/client, not something to change silently. Dropping `flex-wrap` from `.topbar` itself (keeping it only on `.topnav`) already cut this from 153px to 103px by keeping the brand on the nav's first row.
+
+✅ **T39b — the mobile nav, made good rather than merely correct (same session).** T39 shipped a header that was *contained but ugly*: 103px of a 844px viewport, sticky, with the nav wrapping wherever the width ran out. Shown the result, the user said to make the mobile side properly good — so the trade-off T39 had recorded was taken instead of left standing.
+
+**Below 700px the nav is now a drop panel behind a toggle; the bar is back to 57px.** Above 700px **nothing changed** — desktop re-measured at 1280px: bar exactly 52px, nav inside it, switcher 104px. The breakpoint is 700px and not the 860px the rest of the mobile query uses, because between the two the seven controls still fit one row at a 44px tap target and hiding a nav that fits would be a regression.
+
+`TopBar.jsx` holds the toggle and its `open` state. **The panel closes on selection, on Escape, and on a click outside** — each covers a real failure: without the first, tapping "Home" leaves the panel covering the page it just navigated to; without the last, the only exit from an accidentally-opened menu is the toggle. `aria-expanded`/`aria-controls`/`aria-label` are wired, and **`nav_menu` was added to all 8 language blocks** — a string this change introduced, so translating it is doing the new work properly, not paying down [F43].
+
+**Two defects only a human eye caught, worth remembering because no measurement would have flagged either.** (1) The prototype's plain `.navbtn` is borderless — only `.ghost` outlines — which reads fine as one inline row but made "My rewards" look like a *gap between two pills* once stacked. (2) The switcher's centred label left its caret stranded at the far edge, because a `<select>` paints its caret against the inline-end edge regardless of `text-align`. The fix needs `select.navbtn`, **not** bare `select`: the switcher carries `.navbtn`, so the panel's centring rule outranks a plain element selector. Its `padding` moved out of an inline style into the stylesheet for the same specificity reason.
+
+**Evidence:** 8/8 behavioural checks in real Chrome at 390px (starts closed · toggle opens · toggle closes · Escape · click-outside · selection closes *and* navigates · bar 103 → **57px**); toggle 44×44 with `aria-label` "Menu"; geometry swept at **390/430/600/700/760/900/1280** with the toggle appearing at ≤700 and gone above, the panel always below the bar, and `scrollWidth` equal to the viewport at every width. Both full audits re-run: 18 surfaces each in English and Arabic, **0** WCAG failures, **0** sub-44px targets, **0** overflow, 18/18 `dir=rtl`. Build clean, **261 passing**, DB untouched.
 
 → **New finding [F43], recorded not fixed — it belongs to T40.** With Arabic selected the page mirrors perfectly and the login form stays in **English**. **18 keys exist only in the `en` block** of `translations.js` (`label_email`, `label_password`, `auth_logout`, `auth_continue`, `auth_signup_success`, `auth_verify_banner`, `auth_toggle_to_login`/`_signup`, `auth_resend_verification`/`_sent`, `consumer_login_submit`/`_signup_submit`, `business_login_submit`/`_signup_submit`, `added`, `card`, `salon`, `unlocked`), so **7 of 8 languages fall back to English**. T35 added them *after* T40 was signed off — T40 was correct when ticked; this is drift. Separately, the consumer dashboard's four tab labels and the portal's `Profile`/`Team`/`Billing` are hardcoded English literals, not keys at all. It is a translation task, not a layout one, and folding it into T39 would have mixed two concerns in one commit.
 
