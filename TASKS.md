@@ -72,8 +72,9 @@ Rules:
 | F24 | **The auth-switch links never worked.** A "Go to business login" / "Go to customer login" anchor was nested inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation — destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `Glow-Plus-Website .html:426,466` vs `applyStaticTranslations()`            |
 | F25 | **Mobile overflows horizontally** — at a 390px viewport the document is 401px wide because the `.topnav` buttons don't wrap. Measured identically on the original, so it is pre-existing, not migration damage → **T39**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Chromium, both versions, session 3                                          |
 | F26 | **`footer_note` is now factually wrong** — it reads "data is shared & persisted live for everyone previewing this page", true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `translations.js`, key `footer_note`                                        |
-| F29 | **🔴 Cross-tenant data leak: a CONSUMER token reads merchant-only routes.** `GET /styles` with a consumer's token returns **HTTP 200 and every style row** — reproduced live. Cause: 19 controller call sites pass `req.merchantId!`, and the `!` is a lie — a consumer's token has no `merchantId`, so `undefined` reaches `findMany({ where: { merchantId } })`, **Prisma drops an `undefined` filter**, and the query returns the whole table instead of one merchant's rows. The seed DB has one merchant so the response looked plausible; with two merchants it returns both. `GET /visits` behaves identically (empty only because there are no visit rows). Writes fail closed by luck — `POST /styles` 500s because Prisma rejects a null required column, not because anything checked. **There is exactly ONE role check in the whole codebase** (`bookings.controller.ts:39`) and it selects a branch rather than denying. → **T29**, and it makes T22's admin guard part of a bigger pattern | reproduced live 2026-08-23                                                  |
-| F30 | **🔴 The subscription paywall does not work — `RequireActiveSubscriptionMiddleware` never runs.** Registered in `app.module.ts` for `styles/(.*)`, `visits/(.*)`, `reward-rules/(.*)`, it matches **none** of the real paths — not `/styles`, not `/styles/`, not `/styles/abc`. Proved commercially, not just structurally: with the merchant set to **`SUSPENDED`**, `GET /styles` still returned **200** and `POST /styles` still returned **201 and created the row**. So a cancelled or suspended merchant keeps full use of the product. This is the same class of defect as [F3] (rate limiting applied to nothing) — middleware that exists, reads correctly, and is wired to nothing. Note the middleware's own `if (!req.merchantId) throw ForbiddenException` **would have caught [F29]** had it ever executed. → **T29** (+ revisit the note under T14 about booking routes deliberately not being behind it)                                                                                 | reproduced live 2026-08-23                                                  |
+| F29 | ✅ **RESOLVED 2026-08-24 by T29.** **🔴 Cross-tenant data leak: a CONSUMER token reads merchant-only routes.** `GET /styles` with a consumer's token returns **HTTP 200 and every style row** — reproduced live. Cause: 19 controller call sites pass `req.merchantId!`, and the `!` is a lie — a consumer's token has no `merchantId`, so `undefined` reaches `findMany({ where: { merchantId } })`, **Prisma drops an `undefined` filter**, and the query returns the whole table instead of one merchant's rows. The seed DB has one merchant so the response looked plausible; with two merchants it returns both. `GET /visits` behaves identically (empty only because there are no visit rows). Writes fail closed by luck — `POST /styles` 500s because Prisma rejects a null required column, not because anything checked. **There is exactly ONE role check in the whole codebase** (`bookings.controller.ts:39`) and it selects a branch rather than denying. → **T29**, and it makes T22's admin guard part of a bigger pattern | reproduced live 2026-08-23                                                  |
+| F30 | ✅ **RESOLVED 2026-08-24 by T29.** **🔴 The subscription paywall does not work — `RequireActiveSubscriptionMiddleware` never runs.** Registered in `app.module.ts` for `styles/(.*)`, `visits/(.*)`, `reward-rules/(.*)`, it matches **none** of the real paths — not `/styles`, not `/styles/`, not `/styles/abc`. Proved commercially, not just structurally: with the merchant set to **`SUSPENDED`**, `GET /styles` still returned **200** and `POST /styles` still returned **201 and created the row**. So a cancelled or suspended merchant keeps full use of the product. This is the same class of defect as [F3] (rate limiting applied to nothing) — middleware that exists, reads correctly, and is wired to nothing. Note the middleware's own `if (!req.merchantId) throw ForbiddenException` **would have caught [F29]** had it ever executed. → **T29** (+ revisit the note under T14 about booking routes deliberately not being behind it)                                                                                 | reproduced live 2026-08-23                                                  |
+| F34 | ✅ **RESOLVED 2026-08-24 by T29 (found by it, in the same pass).** **[F29]'s `undefined`-filter trap survives in a query param, on a route that was guarded from birth.** `GET /redemptions/available` takes `merchantId` as a **query** param, so it can simply be absent — `undefined` reached `rewardRule.findMany({ where: { merchantId } })`, Prisma dropped the filter, and the route returned the active reward rules of **every merchant on the platform**. T23 role-guarded this route on day one and it leaked anyway: **a guard fixes _who_ is asking, never _what they may scope the question to_.** Route params can't do this (always a string); query params, optional DTO fields and anything defaulted can. Now **400** | reproduced live 2026-08-24, then fixed |
 | F31 | ✅ **RESOLVED 2026-08-24 by T17.** ~~`GET /merchants/me` and `GET /admin/merchants/pending` returned the merchant's bcrypt `passwordHash` in the JSON body.~~ Reproduced live: a **consumer** token pulled a pending merchant's password hash off the unguarded `/admin/merchants/pending` [F7]. Fixed with an explicit `MERCHANT_PUBLIC_SELECT` field allow-list in `merchants.service.ts` — chosen over `omit`/delete so a schema field added later is excluded by default, not opt-out.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | reproduced + fixed live 2026-08-24                                          |
 | F27 | ✅ **RESOLVED 2026-08-24 by T60.** ~~**`POST /auth/signup` returns 500 _after_ creating the account.**~~ Re-tested after domain verification: signup returns **201** and the email is delivered. Original text: **`POST /auth/signup` returned 500 after creating the account.** `signupConsumer` creates the user and then awaits `sendVerificationEmail`, which throws when Resend refuses the recipient — `403 "You can only send testing emails to your own email address"` [R6]. The row is committed, so the client sees a failure, cannot retry (409), and never receives a verification email. **Pre-existing, not introduced by T16** — before the filter it was the same 500, just without the `error` key. The email send should not be able to fail the signup: queue it, or catch and surface via `POST /auth/resend-verification`. → **T19/T21/T60**                                                                                                                                        | reproduced live 2026-08-23, backend log                                     |
 | F28 | **Signup's duplicate check is a check-then-create race.** `findUnique` then `create` with no transaction or constraint handling. Four concurrent signups on one fresh email: 1 succeeded, **3 raised Prisma `P2002`** — which before T16 were bare 500s. T16 now maps them to a correct 409, so the race degrades safely, but the real fix is to drop the pre-check and rely on the unique constraint. → **T31**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | reproduced live 2026-08-23                                                  |
@@ -558,12 +559,78 @@ Rules:
   headers**, not on the options object, since the options being right is not the
   property that matters — plus 3 in `env.validation.spec.ts`. `tsc --noEmit` clean.
   DB untouched (confirmed at exact seed state after the webhook run).
-- [ ] **T29 — Authorization audit.** ⚠️ **Scope is now known and larger than "verify" — two live defects are already proven, see [F29][F30].** Verify every merchant-scoped route checks ownership (no IDOR: merchant A reading merchant B's data).
+- [x] **T29 — Authorization audit.** ⚠️ **Scope is now known and larger than "verify" — two live defects are already proven, see [F29][F30].** Verify every merchant-scoped route checks ownership (no IDOR: merchant A reading merchant B's data).
       **Confirmed work, not speculation:**
   1. **Add a real role guard.** 19 call sites pass `req.merchantId!` / `req.accountId!` with no check that the caller holds that role. A consumer token currently reads `GET /styles` and gets **200 + every row** [F29]. The `!` assertions must go — a guard should reject before the handler, so the type is honest.
   2. **Fix `RequireActiveSubscriptionMiddleware`'s route patterns.** They match nothing, so the paywall is inert: a `SUSPENDED` merchant still reads _and writes_ [F30]. Re-test with the merchant forced to `SUSPENDED` / `CANCELLED` / `PAST_DUE`, and assert `req.readOnly` is actually honoured by the write handlers (nothing checks it today).
   3. **Audit for the `undefined`-filter trap generally.** `findMany({ where: { merchantId: undefined } })` returns the entire table rather than nothing. Grep every merchant-scoped query for a filter that can go `undefined`.
   4. Only then do the original IDOR sweep (merchant A vs merchant B) with two seeded merchants — the seed has one, which is why this stayed invisible.
+
+  **Done 2026-08-24 (session 14). 51/51 live checks, 146 unit tests passing (was 133), `tsc --noEmit` clean, DB re-seeded to exact baseline.**
+
+  **1. The role guard.** `RequireMerchantGuard` (T17) now covers the last three
+  unguarded controllers — `styles` (5 routes), `visits` (2) and
+  `GET /merchants/me` — plus `PUT /business-hours`, which the original ticket
+  missed: it read `req.merchantId!` too. Reproduced [F29] first, live: a
+  consumer token on `GET /styles` returned **200 and every style row**, and on
+  `GET /visits` **200 and every visit row**. Both are **403** now. `GET
+  /merchants/me` and `PUT /business-hours` were bare **500s** (Prisma rejecting
+  an undefined id) — also 403 now, so the caller is told what is wrong.
+
+  **The `!` assertions are gone from every controller in the codebase**, not
+  just the ones this task touched. Two new types, `MerchantRequest` and
+  `ConsumerRequest` (`middleware/auth.middleware.ts`), declare `merchantId` /
+  `accountId` non-optional; guarded handlers take those instead of asserting.
+  Deleting a guard now fails the build rather than silently widening a query —
+  the compiler enforces what was previously a convention. `RequireMerchantGuard`
+  also gained an `accountId` check, which is what makes that type honest
+  (`visits.logVisit` writes it to `Visit.loggedBy`).
+
+  **2. The paywall [F30].** Reproduced commercially first: with the merchant
+  forced **SUSPENDED**, `GET /styles` returned **200** and `POST /styles`
+  returned **201 and created the row**. `RequireActiveSubscriptionMiddleware`
+  is **deleted**, replaced by `RequireActiveSubscriptionGuard`
+  (`common/guards/require-active-subscription.guard.ts`) applied with
+  `@UseGuards` on the real routes. Path-matched middleware has now silently
+  missed its target three times here ([F3], [F33], [F30]); a guard cannot be
+  aimed at a path that doesn't exist. Note the old registration also listed
+  `reward-rules/(.*)` — **that module has no controller at all**, so a third of
+  the paywall was pointed at nothing regardless of the pattern bug.
+
+  **PAST_DUE's "read-only" was fiction.** The middleware set `req.readOnly` and
+  left it to "the route handlers themselves" — **no handler ever checked it**,
+  so PAST_DUE was full access. The guard now refuses POST/PUT/PATCH/DELETE
+  itself and still sets the flag. Verified across all three states:
+  SUSPENDED/CANCELLED refuse reads and writes; PAST_DUE reads 200, writes 403;
+  ACTIVE restored and writing again. **`GET /merchants/me` is deliberately NOT
+  paywalled** — a suspended merchant must still reach their profile and billing
+  to fix exactly that.
+
+  **3. The `undefined`-filter sweep found a live second instance → [F34].**
+  `GET /redemptions/available` takes `merchantId` as a **query** param, which
+  can simply be absent — so `undefined` reached
+  `rewardRule.findMany({ where: { merchantId } })` and the route returned the
+  active reward rules of **every merchant on the platform**. Guarded from birth
+  (T23) and still leaking, because a guard fixes *who* is asking, never *what
+  they may scope the question to*. Now **400**. Every other multi-row query was
+  checked: all take their scoping id from a guard-verified non-optional field,
+  a route param (never undefined), or a DB row.
+
+  **4. IDOR sweep, two tenants.** A second merchant was created directly in
+  Postgres (not via `POST /merchants/signup`, which also creates a Stripe
+  customer — T20 left three orphans that way) with its own style and reward
+  rule. Each merchant's `GET /styles` and `GET /visits` return only their own
+  rows; B patching A's style → **403**; B deactivating A's style → **403**; B
+  logging a visit against A's style → **404**; B's redemption history empty.
+
+  **A real bug found by the audit, unrelated to auth:** `UpdateStyleDto` marked
+  `name` and `pointsPerVisit` optional with TypeScript's `?` but no
+  `@IsOptional()`, so class-validator ran every decorator against `undefined`
+  and **`PATCH /styles/:id` rejected any partial body** — a merchant could not
+  rename their own style ("pointsPerVisit must be an integer number"). It
+  surfaced because the 400 fired *before* the ownership check and masked what
+  the IDOR probe was testing. Fixed; the other seven DTOs were checked and
+  already correct.
 - [ ] **T30 — Consider `jsonwebtoken`** over the hand-rolled HS256 implementation. [F12]
 - [ ] **T31 — Security review pass** (input validation, error leakage, dependency audit).
 - [ ] **T31b — PII at rest: phone numbers are stored in plaintext.** The Fiverr chat says _"JWT_SECRET / **ENCRYPTION_KEY** are sitting in a plaintext .env file"_ — but **there is no `ENCRYPTION_KEY`** in `.env` or `.env.example`, and **no encryption/decryption code anywhere in `src/`**. `User.phone` is a bare `String?`. So the client believes phone numbers are encrypted; they are not. Decide with the client: encrypt at rest, or rely on DB-level encryption + access control. Also relevant to the privacy policy (T66), which must describe how personal data is actually stored.

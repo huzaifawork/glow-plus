@@ -8,6 +8,15 @@ export class RedemptionsService {
   /** Active reward rules at one merchant, with this consumer's progress and
    *  whether a redeemable milestone is currently available. */
   async available(userId: string, merchantId: string) {
+    // T29 [F34] — `merchantId` is a *query* param, so it can simply be absent.
+    // Without this it arrived as `undefined`, Prisma dropped the filter, and
+    // `GET /redemptions/available` with no query string returned the active
+    // reward rules of **every merchant on the platform** — [F29]'s trap in a
+    // route that was guarded from birth. A guard fixes *who* is asking; only
+    // this fixes *what* they are allowed to scope the question to.
+    if (!merchantId) {
+      throw new BadRequestException('merchantId is required');
+    }
     const rules = await this.prisma.rewardRule.findMany({ where: { merchantId, active: true } });
     return Promise.all(rules.map((rule) => this.progressFor(userId, rule)));
   }

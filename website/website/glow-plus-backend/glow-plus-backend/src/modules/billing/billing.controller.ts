@@ -1,7 +1,7 @@
 import { Controller, Post, Req, Res, Headers, Body, UseGuards, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { BillingService } from './billing.service';
-import { AuthedRequest } from '../../middleware/auth.middleware';
+import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantOwnerGuard } from '../../common/guards/require-merchant-owner.guard';
 
 // T24 narrowed these three from RequireMerchantGuard to
@@ -16,20 +16,20 @@ export class BillingController {
 
   @Post('checkout')
   @UseGuards(RequireMerchantOwnerGuard)
-  checkout(@Req() req: AuthedRequest, @Body('plan') plan?: 'MONTHLY' | 'ANNUAL') {
-    return this.billing.createCheckoutSession(req.merchantId!, plan);
+  checkout(@Req() req: MerchantRequest, @Body('plan') plan?: 'MONTHLY' | 'ANNUAL') {
+    return this.billing.createCheckoutSession(req.merchantId, plan);
   }
 
   @Post('cancel')
   @UseGuards(RequireMerchantOwnerGuard)
-  cancel(@Req() req: AuthedRequest) {
-    return this.billing.cancelSubscription(req.merchantId!);
+  cancel(@Req() req: MerchantRequest) {
+    return this.billing.cancelSubscription(req.merchantId);
   }
 
   @Post('resume')
   @UseGuards(RequireMerchantOwnerGuard)
-  resume(@Req() req: AuthedRequest) {
-    return this.billing.resumeSubscription(req.merchantId!);
+  resume(@Req() req: MerchantRequest) {
+    return this.billing.resumeSubscription(req.merchantId);
   }
 
   /**
@@ -39,7 +39,7 @@ export class BillingController {
    * re-serialized JSON object.
    */
   @Post('webhook')
-  webhook(@Req() req: AuthedRequest & { rawBody: Buffer }, @Headers('stripe-signature') signature: string, @Res() res: Response) {
+  webhook(@Req() req: MerchantRequest & { rawBody: Buffer }, @Headers('stripe-signature') signature: string, @Res() res: Response) {
     return this.billing.handleWebhook(req.rawBody, signature).then(
       (result) => res.status(200).json(result),
       (err) => {

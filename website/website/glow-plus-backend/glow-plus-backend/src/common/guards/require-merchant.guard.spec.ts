@@ -16,11 +16,11 @@ describe('RequireMerchantGuard', () => {
   const guard = new RequireMerchantGuard();
 
   it('allows a merchant owner', () => {
-    expect(guard.canActivate(ctx({ accountRole: 'merchant_owner', merchantId: 'm_1' }))).toBe(true);
+    expect(guard.canActivate(ctx({ accountRole: 'merchant_owner', merchantId: 'm_1', accountId: 's_1' }))).toBe(true);
   });
 
   it('allows merchant staff', () => {
-    expect(guard.canActivate(ctx({ accountRole: 'merchant_staff', merchantId: 'm_1' }))).toBe(true);
+    expect(guard.canActivate(ctx({ accountRole: 'merchant_staff', merchantId: 'm_1', accountId: 's_1' }))).toBe(true);
   });
 
   it('refuses a consumer — this is the bug T17 reproduces', () => {
@@ -38,6 +38,17 @@ describe('RequireMerchantGuard', () => {
   it('refuses a merchant role carrying NO merchantId', () => {
     // Should be impossible, but an undefined merchantId silently widens every
     // downstream `where` clause to the whole table rather than failing [F29].
-    expect(() => guard.canActivate(ctx({ accountRole: 'merchant_owner' }))).toThrow(/No merchant context/);
+    expect(() => guard.canActivate(ctx({ accountRole: 'merchant_owner', accountId: 's_1' }))).toThrow(
+      /No merchant context/,
+    );
+  });
+
+  it('refuses a merchant token carrying NO accountId (T29)', () => {
+    // visits.logVisit writes this to Visit.loggedBy. Undefined here would be a
+    // null in the audit trail rather than a refused request, and it is what
+    // makes MerchantRequest.accountId honest as a non-optional type.
+    expect(() => guard.canActivate(ctx({ accountRole: 'merchant_owner', merchantId: 'm_1' }))).toThrow(
+      /No account context/,
+    );
   });
 });

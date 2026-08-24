@@ -3,7 +3,7 @@ import { ThrottleCredentials, ThrottleEmailSend } from '../../common/throttling'
 import { StaffService } from './staff.service';
 import { StaffAuthService } from './staff-auth.service';
 import { AcceptInviteDto, InviteStaffDto, StaffLoginDto, UpdateStaffRoleDto } from './dto';
-import { AuthedRequest } from '../../middleware/auth.middleware';
+import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 import { RequireMerchantOwnerGuard } from '../../common/guards/require-merchant-owner.guard';
 
@@ -52,40 +52,40 @@ export class StaffController {
 
   @Get('me')
   @UseGuards(RequireMerchantGuard)
-  me(@Req() req: AuthedRequest) {
-    return this.staffAuth.me(req.accountId!, req.merchantId!);
+  me(@Req() req: MerchantRequest) {
+    return this.staffAuth.me(req.accountId, req.merchantId);
   }
 
   // --- owner only ---------------------------------------------------------
 
   @Get()
   @UseGuards(RequireMerchantOwnerGuard)
-  list(@Req() req: AuthedRequest) {
-    return this.staff.list(req.merchantId!);
+  list(@Req() req: MerchantRequest) {
+    return this.staff.list(req.merchantId);
   }
 
   @ThrottleEmailSend()
   @Post('invites')
   @UseGuards(RequireMerchantOwnerGuard)
-  invite(@Req() req: AuthedRequest, @Body() dto: InviteStaffDto) {
-    return this.staff.invite(req.merchantId!, dto);
+  invite(@Req() req: MerchantRequest, @Body() dto: InviteStaffDto) {
+    return this.staff.invite(req.merchantId, dto);
   }
 
   @Delete('invites/:id')
   @UseGuards(RequireMerchantOwnerGuard)
-  revokeInvite(@Req() req: AuthedRequest, @Param('id') id: string) {
-    return this.staff.revokeInvite(req.merchantId!, id);
+  revokeInvite(@Req() req: MerchantRequest, @Param('id') id: string) {
+    return this.staff.revokeInvite(req.merchantId, id);
   }
 
   @Patch(':id/role')
   @UseGuards(RequireMerchantOwnerGuard)
-  updateRole(@Req() req: AuthedRequest, @Param('id') id: string, @Body() dto: UpdateStaffRoleDto) {
-    return this.staff.updateRole(req.merchantId!, id, dto.role);
+  updateRole(@Req() req: MerchantRequest, @Param('id') id: string, @Body() dto: UpdateStaffRoleDto) {
+    return this.staff.updateRole(req.merchantId, id, dto.role);
   }
 
   @Delete(':id')
   @UseGuards(RequireMerchantOwnerGuard)
-  remove(@Req() req: AuthedRequest, @Param('id') id: string) {
-    return this.staff.remove(req.merchantId!, id);
+  remove(@Req() req: MerchantRequest, @Param('id') id: string) {
+    return this.staff.remove(req.merchantId, id);
   }
 }

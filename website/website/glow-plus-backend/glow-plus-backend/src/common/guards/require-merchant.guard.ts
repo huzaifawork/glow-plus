@@ -19,8 +19,10 @@ import { AuthedRequest } from '../../middleware/auth.middleware';
  * cross-tenant read on another. Failing closed here, before the handler
  * runs, removes both outcomes at once.
  *
- * Applied to the billing routes by T17. The remaining merchant controllers
- * are T29's authorization audit — the guard is written to be reused as-is.
+ * Applied to the billing routes by T17, the merchant booking routes by T18,
+ * redemption history by T23, staff by T24 — and by **T29** to the last three
+ * unguarded controllers: styles, visits and `GET /merchants/me`. Handlers now
+ * type their request as `MerchantRequest` instead of asserting with `!`.
  */
 @Injectable()
 export class RequireMerchantGuard implements CanActivate {
@@ -38,6 +40,14 @@ export class RequireMerchantGuard implements CanActivate {
     // silently widen to the whole table rather than fail. Refuse instead.
     if (!req.merchantId) {
       throw new ForbiddenException('No merchant context on this request');
+    }
+
+    // Same reasoning for the staff/owner account id — `visits.logVisit` writes
+    // it to `Visit.loggedBy`, so an undefined here would be a null in the audit
+    // trail rather than a refused request. Checking it is also what makes
+    // `MerchantRequest.accountId` honest as a non-optional type (T29).
+    if (!req.accountId) {
+      throw new ForbiddenException('No account context on this request');
     }
 
     return true;

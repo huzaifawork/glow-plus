@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Req, UseGuards } from '@nestjs/common';
 import { BusinessHoursService } from './business-hours.service';
 import { SetBusinessHoursDto } from './dto';
-import { AuthedRequest } from '../../middleware/auth.middleware';
+import { MerchantRequest } from '../../middleware/auth.middleware';
+import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
+import { RequireActiveSubscriptionGuard } from '../../common/guards/require-active-subscription.guard';
 
 @Controller('business-hours')
 export class BusinessHoursController {
@@ -13,9 +15,11 @@ export class BusinessHoursController {
     return this.businessHours.get(merchantId);
   }
 
-  // Merchant-only — sets their own hours.
+  // Merchant-only — sets their own hours. Before T29 a consumer token reached
+  // this handler and only failed on a Prisma error (a bare 500, not a refusal).
   @Put()
-  set(@Req() req: AuthedRequest, @Body() dto: SetBusinessHoursDto) {
-    return this.businessHours.set(req.merchantId!, dto);
+  @UseGuards(RequireMerchantGuard, RequireActiveSubscriptionGuard)
+  set(@Req() req: MerchantRequest, @Body() dto: SetBusinessHoursDto) {
+    return this.businessHours.set(req.merchantId, dto);
   }
 }

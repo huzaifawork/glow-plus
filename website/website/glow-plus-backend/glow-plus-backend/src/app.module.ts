@@ -20,7 +20,6 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
-import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveSubscription';
 import { GlobalRateLimitMiddleware } from './middleware/globalRateLimit.middleware';
 import { throttlerOptions } from './common/throttling';
 import { validateEnv } from './config/env.validation';
@@ -106,13 +105,13 @@ export class AppModule implements NestModule {
       )
       .forRoutes('*');
 
-    consumer
-      .apply(RequireActiveSubscriptionMiddleware)
-      .forRoutes(
-        { path: 'styles/(.*)', method: RequestMethod.ALL },
-        { path: 'visits/(.*)', method: RequestMethod.ALL },
-        { path: 'reward-rules/(.*)', method: RequestMethod.ALL },
-      );
+    // T29 [F30] — the subscription paywall used to be registered here as
+    // RequireActiveSubscriptionMiddleware for 'styles/(.*)', 'visits/(.*)' and
+    // 'reward-rules/(.*)'. It matched none of those real paths, so a SUSPENDED
+    // merchant still read and wrote freely, and 'reward-rules' has no
+    // controller at all. It is now RequireActiveSubscriptionGuard, applied with
+    // @UseGuards on the actual routes — a guard cannot be aimed at a path that
+    // doesn't exist.
   }
 }
 

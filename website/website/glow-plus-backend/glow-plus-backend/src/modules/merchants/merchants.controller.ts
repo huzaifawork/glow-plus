@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
 import { OnboardingService, MerchantSignupInput } from './onboarding.service';
 import { MerchantAuthService } from './merchant-auth.service';
 import { MerchantLoginDto } from './login.dto';
-import { AuthedRequest } from '../../middleware/auth.middleware';
+import { MerchantRequest } from '../../middleware/auth.middleware';
+import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 
 @Controller('merchants')
 export class MerchantsController {
@@ -32,8 +33,12 @@ export class MerchantsController {
     return this.merchants.listPublic();
   }
 
+  // Merchant-only (T29). Deliberately NOT behind RequireActiveSubscriptionGuard:
+  // a SUSPENDED or PAST_DUE merchant must still be able to read their own
+  // profile and reach billing to fix exactly that.
   @Get('me')
-  me(@Req() req: AuthedRequest) {
-    return this.merchants.getProfile(req.merchantId!);
+  @UseGuards(RequireMerchantGuard)
+  me(@Req() req: MerchantRequest) {
+    return this.merchants.getProfile(req.merchantId);
   }
 }
