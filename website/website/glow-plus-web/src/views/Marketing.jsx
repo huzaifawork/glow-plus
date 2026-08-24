@@ -2,36 +2,48 @@ import { useI18n } from '../i18n/I18nContext.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { useNav } from '../lib/useNav.js';
 import { useAsyncData } from '../lib/useAsyncData.js';
-import { getMerchants, getStyles } from '../lib/data.js';
+import { getMerchants } from '../lib/data.js';
+import { listPublicMerchants, listPublicStyles } from '../lib/api.js';
 import { FOUNDING_BADGE_CAP } from '../lib/helpers.js';
 import Punch from '../components/Punch.jsx';
 import T from '../components/T.jsx';
 
-/* ---------- live "find a salon" grid (port of renderSalonGrid) ---------- */
+/* ---------- live "find a salon" grid (port of renderSalonGrid) ----------
+   T36 — the real public salon directory. This used to read `data.js`, i.e.
+   this browser's own localStorage, so the landing page's "find a salon"
+   section could only ever list salons *you* had invented on *this* machine
+   [F9]. It now reads GET /merchants/public (ACTIVE merchants only, enforced
+   server-side) and GET /styles/public/:merchantId.
+
+   Both are genuinely public — no bearer token — which they have to be: this
+   section sits above the fold on the marketing page, long before anyone has
+   an account. Loading them here is also what keeps T48 honest. */
 function SalonGrid() {
   const { dataVersion } = useApp();
 
   const cards = useAsyncData(
     async () => {
-      const merchants = (await getMerchants()).filter(
-        (m) => (m.status || 'ACTIVE') === 'ACTIVE'
-      );
-      return Promise.all(
-        merchants.map(async (m) => {
-          const styles = await getStyles(m.id);
-          const types = [
-            ...new Set(styles.filter((s) => s.active !== false).map((s) => s.type)),
-          ];
-          // styleCount deliberately counts every style, active or not — that is
-          // what the original "N styles on the menu" line reported.
-          return {
-            id: m.id,
-            businessName: m.businessName,
-            styleCount: styles.length,
-            types,
-          };
-        })
-      );
+      try {
+        const merchants = await listPublicMerchants();
+        return await Promise.all(
+          merchants.map(async (m) => {
+            // One salon with no menu must not blank the whole directory, so a
+            // failed style lookup degrades to "Menu coming soon" — which is
+            // already a state this card knows how to render.
+            const styles = await listPublicStyles(m.id).catch(() => []);
+            return {
+              id: m.id,
+              businessName: m.businessName,
+              styleCount: styles.length,
+              types: [...new Set(styles.map((s) => s.type))],
+            };
+          })
+        );
+      } catch {
+        // The empty state below reads "no salons live on Glow+ yet", which is
+        // also the least misleading thing to say when the API is unreachable.
+        return [];
+      }
     },
     [dataVersion],
     null

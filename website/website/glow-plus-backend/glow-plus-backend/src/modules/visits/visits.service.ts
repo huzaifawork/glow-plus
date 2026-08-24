@@ -29,6 +29,49 @@ export class VisitsService {
   }
 
   /**
+   * The consumer's own visit history, newest first (T45).
+   *
+   * Flattened rather than returned with Prisma `include`s: the merchant-facing
+   * list() hands back whole related rows, and the only thing this caller needs
+   * from a Merchant is its trading name. Selecting explicitly is also what
+   * keeps [F31] from repeating — an `include: { merchant: true }` here would
+   * ship the salon's `passwordHash` and `stripeCustomerId` to every customer.
+   *
+   * `expired` visits are included on purpose (T25 [F8]): expiring points means
+   * excluding a visit from reward maths, never hiding it from history.
+   */
+  async listForConsumer(userId: string) {
+    const visits = await this.prisma.visit.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        merchantId: true,
+        styleId: true,
+        pointsEarned: true,
+        visitDate: true,
+        expired: true,
+        expiredAt: true,
+        style: { select: { name: true, type: true } },
+        merchant: { select: { businessName: true } },
+      },
+      orderBy: { visitDate: 'desc' },
+    });
+
+    return visits.map((v) => ({
+      id: v.id,
+      merchantId: v.merchantId,
+      businessName: v.merchant.businessName,
+      styleId: v.styleId,
+      styleName: v.style.name,
+      styleType: v.style.type,
+      pointsEarned: v.pointsEarned,
+      visitDate: v.visitDate,
+      expired: v.expired,
+      expiredAt: v.expiredAt,
+    }));
+  }
+
+  /**
    * Logs a visit, snapshots the style's current point value, and checks
    * every active reward rule for this merchant to see what just unlocked.
    * Runs inside a transaction so points and the visit record can't drift

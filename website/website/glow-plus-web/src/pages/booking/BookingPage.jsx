@@ -25,32 +25,13 @@ import {
   listPublicMerchants,
   listPublicStyles,
 } from '../../lib/api.js';
+// Shared with the SPA's consumer dashboard (T36) so the two never disagree
+// about how a time is written.
+import { formatDateTime, formatSlot, todayISO } from '../../lib/helpers.js';
 
 const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span></div>
 );
-
-function todayISO() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); // local date, not UTC
-  return d.toISOString().slice(0, 10);
-}
-
-function formatSlot(iso) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatDateTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 const CANCELLABLE = new Set(['PENDING', 'CONFIRMED']);
 

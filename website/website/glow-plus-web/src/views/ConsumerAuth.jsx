@@ -43,7 +43,16 @@ export default function ConsumerAuth({ active }) {
         setPassword('');
       } else {
         const data = await consumerLogin(email.trim(), password);
-        setCurrentConsumer({ id: data.user.id, name: data.user.name, phone: '', createdAt: Date.now() });
+        // `email` is carried from the form, not the response: POST /auth/login
+        // returns only { id, name, emailVerified }. The dashboard's identity
+        // line needs something real to show under the name (T36), and the
+        // address just used to sign in is exactly that.
+        setCurrentConsumer({
+          id: data.user.id,
+          name: data.user.name,
+          email: email.trim(),
+          emailVerified: data.user.emailVerified,
+        });
         if (!data.user.emailVerified) toast(t('auth_verify_banner', { email: email.trim() }));
         showView('view-consumer-dashboard');
       }

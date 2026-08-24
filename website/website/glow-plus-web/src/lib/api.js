@@ -278,6 +278,28 @@ export function listMyRedemptions() {
 }
 
 /* --------------------------------------------------------------------------
+   Endpoints used by the SPA consumer dashboard (T36)
+   -------------------------------------------------------------------------- */
+
+/**
+ * One call behind the whole rewards tab (T42).
+ *
+ * Returns `{ totalPoints, merchants: [{ merchantId, businessName, points,
+ * rewards[], recentVisits[] }] }` — the shape the React Native app was already
+ * written against, so the two clients read the same payload. Each reward
+ * carries `eligible`, which is why the dashboard does not also have to call
+ * `/redemptions/available` once per salon just to enable a Redeem button.
+ */
+export function getMyRewards() {
+  return apiRequest('/me/rewards', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
+/** Full visit history across every salon, newest first (T45). */
+export function listMyVisits() {
+  return apiRequest('/visits/me', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
+/* --------------------------------------------------------------------------
    Endpoints used by the admin panel (T22)
    -------------------------------------------------------------------------- */
 export async function adminLogin(email, password) {

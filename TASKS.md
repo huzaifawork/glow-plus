@@ -946,7 +946,32 @@ Rules:
 
   **Tested — driven Chromium (`puppeteer-core`, scratchpad-only), real dev servers, real Postgres, 22/23 automated checks passed** (the 1 "failure" is the same benign console-error pair T17/T22 already documented as expected — a `/favicon.ico` 404 and the deliberate wrong-password 401): consumer signup → success notice → resend confirms sent → login → dashboard → real token in `localStorage` → logout clears it → returns to auth; wrong password shows the real API error text (`Invalid email or password`); both F24 links navigate correctly in both directions; merchant signup → login → portal shows the real business name → logout clears the real token; mobile width (390px) introduces no *new* overflow beyond the pre-existing T39 issue. `tsc --noEmit` clean on the backend, **218/218 Jest tests still passing**, `npm run build` clean on the frontend. Test accounts created during the run were deleted afterward — DB back at exact seed state (`users:1, merchants:1`).
   **Verify independently:** open `http://localhost:3000/`, click "Track my rewards" or the business button, toggle to "Create an account", sign up with a real email/password, then log in.
-- [ ] **T36 — Consumer flow** — salon directory, styles, rewards, visit history, bookings.
+- [x] **T36 — Consumer flow** — salon directory, styles, rewards, visit history, bookings. ✅ **DONE & VERIFIED 2026-08-24 (session 17).**
+
+  **What changed.** `ConsumerDashboard.jsx` and the landing page's "find a salon" grid no longer read `data.js` → `localStorage` [F9]. Every number on the consumer's screen is now a real request. The dashboard is four tabs, reusing BusinessPortal's `.portal-tabs` / `.ptab-panel` markup so the two dashboards read as one product:
+
+  | Tab | Endpoints | What it does |
+  |---|---|---|
+  | Rewards | `GET /me/rewards` (T42), `POST /redemptions` | per-salon points, punch card or meter per rule, **Redeem** on an unlocked one, recent visits |
+  | Book | `GET /merchants/public`, `GET /styles/public/:id`, `GET /bookings/availability`, `POST /bookings` | salon → service → date → real open times → book |
+  | Appointments | `GET /bookings/me`, `PATCH /bookings/:id/cancel` | upcoming and past, with cancel |
+  | Visit history | `GET /visits/me` (T45) | every visit at every salon, expired points struck through (T25) |
+
+  **Two endpoints were pulled forward to unblock it** — the same move T18 made for T43/T44, except these two are built to their full stated spec, so they are ticked: **T42** `GET /me/rewards` and **T45** `GET /visits/me`. See their entries in Phase 6.
+
+  **Three real defects found and fixed, every one of them introduced by earlier work rather than pre-existing findings:**
+  1. **Every view stays mounted** (`.view.active` toggles visibility, not existence), so the new panels' loaders fired `GET /bookings/me` and `GET /visits/me` for anonymous visitors sitting on the **landing page** — two guaranteed 401s on first paint. Worse, the 401 handler called `signOutConsumer()`, which navigates to the login view: a first-time visitor could be yanked off the marketing page by a request they never made. Both loaders are now gated on `currentConsumer`, and the sign-out branch only fires when there is a session to end. Proved fixed — the passing run's network log contains **no 401 at all**.
+  2. **A points-threshold rule drew one punch dot per point.** The prototype punched `triggerValue` dots for every rule, which was invisible against its own invented data; the seeded "200 Points = $20 Off" renders **two hundred dots**. `RewardProgress` now keeps dots for `VISIT_COUNT` (that is what a punch card counts) and gives `POINTS_THRESHOLD` a meter reading "250 / 200 pts".
+  3. **[F25]/T39's overflow had got worse, not better.** T35's conditional "Log out" button pushed the 390px document from the recorded 401px to **460px**, because `.topnav` does not wrap — the exact cause [F25] names. Fixed with `flex-wrap:wrap`. **T39 stays open** for the rest of the mobile pass; this closes its measured starting point.
+
+  Also fixed in passing: `input[type=email|password|date]` were missing from the one CSS rule that styles form fields, so **T35's real auth form rendered browser-default inputs** beside correctly-styled ones. And the four-column visit-history table now scrolls inside its own box instead of widening the page.
+
+  **Tested — real Chrome (`puppeteer-core`, scratchpad-only), real dev servers, real Postgres: 29/29 checks passed.** Not response-shape assertions; the browser drove all of it. Landing page lists a real salon **with `localStorage` proven empty**. Login → the dashboard shows the real name, the signed-in email, and a `totalPoints` **equal to what `GET /me/rewards` returns**. A full punch card at the moment a reward unlocks. Redeem → `POST /redemptions` **201** → the card re-locks, because `/me/rewards` re-derives eligibility server-side rather than the page assuming it. Salon and service dropdowns from the public endpoints. 27 real availability slots for a chosen date; book → **201** → the booked 9:00 AM slot is gone, and so are the five overlapping starts a 90-minute service blocks. The appointment appears under Appointments; cancel → **200**, and it sticks. Visit-history row count equals `GET /visits/me`. No horizontal overflow at 390px on **any** of the four tabs. The only console error left is the `/favicon.ico` 404 every page has.
+
+  Suite **230 passing** (was 218) — 12 new specs for `MeService`. `tsc --noEmit` clean, `npm run build` clean. Every row the test wrote (redemptions, bookings) was deleted afterwards; visits untouched, DB back where it started.
+  **Verify independently:** `http://localhost:3000/` → "Track my rewards" → `consumer@glowplus.test` / `Consumer123!` → the four tabs.
+
+  **Deliberately left alone:** the standalone `/consumer/booking` and `/consumer/rewards` pages (T18/T23) still work and are untouched — they were built as workarounds for the missing SPA auth, and retiring them is a separate call, not part of building the real thing. The marketing page's founding-spots counter still reads `data.js`: it is a marketing number rather than consumer data, and no endpoint exposes it.
 - [ ] **T37 — Merchant portal** — profile, styles, reward rules, visits, staff, billing.
 - [ ] **T38 — Admin panel** — approval queue, MRR/churn metrics.
 - [ ] **T39 — Mobile-friendly** across all views (docx explicitly asks for this). ⚠️ **Concrete starting point [F25]:** at 390px the document is **401px** wide — the `.topnav` buttons don't wrap. Reproduced from the original, so it is a real design bug to fix, not a regression.
@@ -959,10 +984,14 @@ Rules:
 
 Build to the shapes the RN app already expects (`glow-plus-mobile app/src/api/client.js`) so Order 2 needs no backend changes.
 
-- [ ] **T42 — `GET /me/rewards`** — match `client.js:44-91` field-for-field.
+- [x] **T42 — `GET /me/rewards`** — match `client.js:44-91` field-for-field. ✅ **DONE & VERIFIED 2026-08-24 (session 17)**, pulled forward because T36 could not be built without it. `src/modules/me/`, consumer-guarded from the first commit.
+      Every field the RN app's `DEMO_REWARDS` names is produced under the same name: `totalPoints`, and per merchant `merchantId`, `businessName`, `points`, `rewards[{ ruleId, name, triggerType, triggerValue, progress, remaining, rewardType, rewardValue }]`, `recentVisits[{ id, styleName, styleType, pointsEarned, visitDate }]`. Three fields are **added** on top — `oneTime` and `eligible` on a reward, `expired` on a visit — which a client that ignores them cannot notice, and which save the website one call to `/redemptions/available` per salon purely to decide whether a Redeem button is live.
+      **Progress maths is deliberately identical to `RedemptionsService.progressFor`** — same `expired:false` filter (T25), same `styleScopeId` narrowing, same `progress % triggerValue`, same oneTime/repeatable rule. If they ever disagreed, a customer would see a Redeem button that `POST /redemptions` then refuses. Proved against the live API rather than asserted: `/me/rewards` and `/redemptions/available?merchantId=` return identical `progress`/`remaining`/`eligible` triples for the seeded consumer. 12 unit specs. Verified live: consumer **200**, merchant token **403**, no token **401**.
 - [ ] **T43 — `GET /merchants`** — public salon directory.
 - [ ] **T44 — `GET /styles/public/:merchantId`** — current `/styles` is merchant-scoped _and_ behind `RequireActiveSubscription`, so it can't serve consumers.
-- [ ] **T45 — `GET /visits/me`** — consumer visit history.
+- [x] **T45 — `GET /visits/me`** — consumer visit history. ✅ **DONE & VERIFIED 2026-08-24 (session 17)**, pulled forward with T42. Newest first, flattened to `{ id, merchantId, businessName, styleId, styleName, styleType, pointsEarned, visitDate, expired, expiredAt }`.
+      **Selected explicitly rather than `include`d** — an `include: { merchant: true }` here would have shipped the salon's `passwordHash` and `stripeCustomerId` to every customer, which is exactly [F31]. Expired visits are returned on purpose: T25 means a visit stops *counting*, never that it vanishes from history.
+      **This forced a guard restructure on `VisitsController`.** Its guards were controller-wide, and Nest *merges* controller- and handler-level guards, so a consumer-only route could not have opted out of `RequireMerchantGuard`. Moved to per-route, the same shape `styles.controller.ts` already uses. Regression-checked live: `GET /visits` still **200** for a merchant and **403** for a consumer; `GET /visits/me` **200** for a consumer, **403** for a merchant, **401** with no token.
 
 # PHASE 7 — React-Native readiness _(backend work, no app edits)_
 

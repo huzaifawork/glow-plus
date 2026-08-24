@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **218 passing** (`npm test`) — 16 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, input-validation (T31, 22), **pii-crypto (T31b, 25)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **230 passing** (`npm test`) — 17 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, input-validation (T31, 22), **pii-crypto (T31b, 25)**, **me.service (T42, 12)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -295,7 +295,9 @@ Wired at the only two places a phone number moves through the API: `auth.service
 
 ✅ **F24 (auth-switch links unclickable) — confirmed live 2026-08-24, user-reported independently of any task list, and it was a real gap: recorded as a finding since session 3 with no task ever attached to it.** Reproduced in a driven browser and it's worse than first written down: `view-business-auth` renders *"Go to customer login"* as text with **zero `<a>` elements** in the view — plain dead text; `view-consumer-auth` doesn't even keep the text, only *"Run a salon instead?"* survives. The whole landing page has exactly **one** anchor total (the logo). Now explicitly called out as T35's starting point, the same way F25 already anchors T39. **Not fixed yet** — T35 needs a design call on where those links should actually go once real auth exists, so this is scoped, not resolved.
 
-➡️ **NEXT: T32 (M-Pesa — needs a client decision; do not start without one) or Phase 5 (T33+, the website build).** Check `TASKS.md` for the next unticked item, and see its new **"Message for the client"** section at the end for exactly what to say about T32 and the now-resolved T31b. **T31c** (Nest 11 / Vite 8 majors) is still open and should land before the client runs their own `npm audit`.
+➡️ **NEXT: T37 (merchant portal against the real API), then T38 (admin panel) and T39 (mobile).** T36 is done — see the session-17 entry below. Also still open: T32 (M-Pesa — needs a client decision; do not start without one).
+
+➡️ **Previously: T32 or Phase 5 (T33+, the website build).** Check `TASKS.md` for the next unticked item, and see its new **"Message for the client"** section at the end for exactly what to say about T32 and the now-resolved T31b. **T31c** (Nest 11 / Vite 8 majors) is still open and should land before the client runs their own `npm audit`.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
@@ -344,6 +346,27 @@ Wired at the only two places a phone number moves through the API: `auth.service
 | **F23** | `prisma/seed.ts` sits outside tsconfig's `rootDir` (`./src`), so watch builds emitted `prisma/seed.js` in place. Added `exclude: [..., "prisma"]` and gitignored `prisma/*.js`. |
 
 **Note on merchant booking routes:** they are deliberately **not** behind `RequireActiveSubscription` — it's path-based and `bookings/*` mixes consumer and merchant routes, so a blanket rule would break consumer booking. Flagged for T29's authorization audit.
+
+✅ **T36 — done 2026-08-24 (session 17), the consumer half of the SPA.** `ConsumerDashboard.jsx` and the landing page salon grid stopped reading `data.js` → `localStorage` [F9]; every number on a customer's screen is a live request now. Four tabs (Rewards / Book / Appointments / Visit history) reusing BusinessPortal's `.portal-tabs` markup so the two dashboards look like one product.
+
+**Two Phase-6 endpoints were pulled forward because T36 was blocked on them**, and both are built to their full stated spec rather than as stopgaps, so both are ticked:
+
+- **T42 `GET /me/rewards`** — `src/modules/me/`. Matches the RN app's `DEMO_REWARDS` field-for-field (that constant was written against this endpoint before it existed), plus three additive fields — `oneTime`/`eligible` on a reward, `expired` on a visit — so the website does not have to call `/redemptions/available` once per salon just to know whether a Redeem button is live. Progress maths is deliberately a copy of `RedemptionsService.progressFor`; the two were checked against each other **on the live API**, not assumed.
+- **T45 `GET /visits/me`** — forced a guard restructure on `VisitsController`: its guards were controller-wide, and Nest *merges* controller- and handler-level guards, so a consumer-only route could not opt out of `RequireMerchantGuard`. Now per-route, same shape as `styles.controller.ts`. `GET /visits` re-checked: still 200 merchant / 403 consumer.
+
+**Three real defects found and fixed — all introduced by earlier work, none of them pre-existing findings:**
+
+1. **Anonymous visitors were firing authenticated requests from the landing page.** Every view stays mounted (`.view.active` toggles visibility, not existence), so the new panels' loaders called `GET /bookings/me` and `GET /visits/me` with no token — two 401s on first paint. And the 401 handler called `signOutConsumer()`, which *navigates*: a first-time visitor could be thrown off the marketing page onto a login form by a request they never made. Loaders are now gated on `currentConsumer`; the sign-out branch only fires when there is a session to end. **Generalise this** — any new panel added to a mounted-always view has the same trap.
+2. **A points-threshold reward drew one punch dot per point** — the seeded "200 Points = $20 Off" rendered 200 dots. Dots now belong to `VISIT_COUNT` only; `POINTS_THRESHOLD` gets a meter.
+3. **[F25]/T39 had got worse, not better:** T35's "Log out" button pushed the 390px document from the recorded 401px to **460px**, because `.topnav` does not wrap — the cause [F25] already named. `flex-wrap:wrap` fixes it. T39 is still open for the rest of the mobile pass.
+
+Also: `input[type=email|password|date]` were missing from the CSS rule that styles form fields, so **T35's auth form had browser-default inputs** next to styled ones.
+
+**29/29 checks in driven Chrome** against real servers and real Postgres — including `localStorage` proven empty while the salon grid still renders, on-screen points equal to `/me/rewards`, a redeem that re-locks the card, a booking whose slot (and the five overlapping starts a 90-minute service blocks) disappears from availability, and no overflow at 390px on any tab. Suite **230 passing** (was 218). Test rows deleted afterwards; DB back where it started.
+
+⚠️ **Two things that will waste time on the next browser-driven task:**
+- **T26's credential throttle is 20 attempts / 15 min** (`identity` tier). Repeated test runs hit it and login starts returning **429** — that is the rate limiter working, not a bug. Space the runs out, or restart the API (the throttler store is in-memory) to reset the counter.
+- `${D}#ctab-x` is **two IDs on one element** and matches nothing. The panels are children of the view: `${D} #ctab-x`.
 
 ## 9. RISK REGISTER — things that could cause trouble
 
@@ -499,11 +522,14 @@ returns break.
 - ✅ **T34** (project setup) — structurally done: framework, entry points, routing, storage seam
 - ✅ **T40** (preserve i18n) — all 8 languages + Arabic RTL verified
 - ✅ **T41** (keep verify-email + billing-result working) — verified in every state
-- ⬜ **T35–T38** (auth UI, consumer, merchant, admin against the **real API**) — still open
+- ✅ **T35** (auth UI) — done 2026-08-24 · ✅ **T36** (consumer flow) — done 2026-08-24
+- ⬜ **T37–T38** (merchant portal, admin panel against the **real API**) — still open
 - ⬜ **T39** (mobile-friendly) — still open; see F25
-- ⚠️ **Blocked on missing endpoints** — the SPA views still cannot be wired until
-  these exist: `GET /me/rewards` (**T42**), `GET /visits/me` (**T45**), and a
-  **reward-rules controller — that module has no HTTP routes at all.**
+- ⚠️ **Blocked on missing endpoints** — `GET /me/rewards` (**T42**) and
+  `GET /visits/me` (**T45**) were the consumer half of this and both now exist
+  (built by T36, 2026-08-24). What remains blocking is **T37**: the
+  **reward-rules module still has no HTTP routes at all**, so the merchant
+  portal cannot manage reward rules against the API.
   `GET /merchants` public directory (**T43**) and `GET /styles/public/:merchantId`
   (**T44**) now partially exist — **T18** (2026-08-24) added minimal versions
   (`/merchants/public`, `/styles/public/:merchantId`) to unblock the standalone

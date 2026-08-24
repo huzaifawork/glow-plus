@@ -13,6 +13,7 @@ import { VisitsModule } from './modules/visits/visits.module';
 import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
 import { RedemptionsModule } from './modules/redemptions/redemptions.module';
 import { PointsModule } from './modules/points/points.module';
+import { MeModule } from './modules/me/me.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -44,6 +45,7 @@ import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
     RewardRulesModule,
     RedemptionsModule,
     PointsModule,
+    MeModule,
     BillingModule,
     AdminModule,
     StaffModule,
