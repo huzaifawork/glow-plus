@@ -35,11 +35,11 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
-| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 13 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 38 routes mapped (T23 added 4), Prisma connected |
+| Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped (T24 added 9, T25 added 1), Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **55 passing** (`npm test`) — 8 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, trialEndingReminder job |
+| Tests | ✅ Jest configured, **67 passing** (`npm test`) — 10 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, **require-merchant-owner guard (T24)**, trialEndingReminder job, **expirePoints job (T25)** |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -102,9 +102,9 @@ joziilunga-attachments/
 | **F3** | **Rate limiting is applied to nothing.** `rateLimit.middleware.ts` has zero references. The client believes `/auth/login` is protected; it is not. |
 | **F4** | ✅ **RESOLVED 2026-08-24 by T23.** ~~Nothing writes to the `Redemption` table.~~ `src/modules/redemptions/` now writes to it, with double-redemption blocked inside a transaction. |
 | **F5** | No password-reset code exists at all. |
-| **F6** | `MerchantStaff` table exists in schema + migration, but **zero code uses it**. |
+| **F6** | ✅ **RESOLVED 2026-08-24 by T24.** ~~`MerchantStaff` table exists in schema + migration, but **zero code uses it**.~~ `src/modules/staff/` now writes to it, with an invite flow and an owner/staff split enforced by `RequireMerchantOwnerGuard`. |
 | **F7** | `/admin/*` has no guard — the code comments admit it. |
-| **F8** | `expirePoints.job.ts` writes `data: {}` — a literal no-op. |
+| **F8** | ✅ **RESOLVED 2026-08-24 by T25.** ~~`expirePoints.job.ts` writes `data: {}` — a literal no-op.~~ `Visit.expired`/`expiredAt` exist and the job sets them; all three progress paths filter expired visits out. |
 | **F9** | **The website is an AI-generated artifact prototype, not an app** — 0 `fetch` calls in 1,932 lines, 0 password fields, data layer is `window.storage` which doesn't exist in real browsers. It **fails silently**: renders fine, saves nothing. |
 | **F10** | The original developer's own `glow-plus-frontend/README.md` says the portal/dashboard need "their own, much bigger buildout." |
 | **F11** | Email provider **does** support Resend (`EMAIL_PROVIDER=resend` is already set in `.env`). Until a domain is verified, Resend only delivers to the account owner's own address. |
@@ -200,7 +200,31 @@ Frontend: `glow-plus-web/rewards.html` → `/consumer/rewards` (same standalone 
 
 No bug found in pre-existing code (new functionality, like T21). Suite still **55 passing**, `tsc --noEmit` clean, test data fully cleaned up — DB back at exact seed state.
 
-➡️ **NEXT: T24 — Merchant staff accounts + roles.** [F6] The `MerchantStaff` table exists in schema and migration but **zero code uses it**. Needs staff auth, an invite flow, role-scoped permissions, and a staff-management UI with role-limited views.
+✅ **T24 — done 2026-08-24 (session 11), both backend and frontend.** [F6] closed — the `MerchantStaff` table finally has a writer. New `src/modules/staff/` with 9 routes: public `POST /staff/login`, `GET /staff/invites/:token`, `POST /staff/accept-invite`; owner-only `GET /staff`, `POST /staff/invites`, `DELETE /staff/invites/:id`, `PATCH /staff/:id/role`, `DELETE /staff/:id`; and `GET /staff/me` for any merchant token.
+
+Invites live in a separate **`StaffInvite`** table (migration `20260824170000_staff_invites`), mirroring `EmailVerification`/`PasswordReset`: hashed single-use token, 7d `expiresAt` (an invite is not a live credential like a 1h reset), `acceptedAt`, `revokedAt`. No staff row — and so no password hash — exists until acceptance, which runs in a `$transaction` that **re-checks the token inside**, so two clicks on the emailed link can't both succeed. `MerchantStaff` gained `name` and `lastLoginAt`.
+
+**Role scoping is split across two guards.** T17's `RequireMerchantGuard` accepts owner *and* staff — day-to-day work. The new `RequireMerchantOwnerGuard` refuses `merchant_staff` with a distinct message ("requires the merchant owner account" — a staff member reading "requires a merchant account" would read it as a bug), and T24 **narrowed billing checkout/cancel/resume onto it**: a receptionist could previously have cancelled the salon's subscription. `StaffRole.OWNER` signs `merchant_owner`, `STAFF` signs `merchant_staff`, and `sub` is always the staff id — exactly what `Visit.loggedBy` ("staff user id") always meant to record, and now does.
+
+Every management method filters by the caller's `merchantId`, never by staff id alone: `MerchantStaff.email` is globally unique, so a bare `findUnique({ id })` would have let merchant A rename or delete merchant B's staff — **[F29]'s shape in a new table**. Verified: merchant B gets **404**, row intact.
+
+**55/55 backend checks** against the live API and real Postgres, including the invite email **DELIVERED** through Resend (`delivered@resend.dev`, `last_event=delivered`, token pulled back out of the delivered HTML as in T19–T21). **26/26 frontend checks** in real Chrome. Two new standalone pages: `staff.html` → `/business/staff` and `accept-invite.html` → `/staff/accept-invite` (backend-baked, like `/reset-password`). **One sign-in box serves both account kinds** — `teamSignIn()` tries `/merchants/login` and falls back to `/staff/login` **on 401 only**, so a real outage isn't reported as "wrong password". `GET /staff/me` then picks the view; staff never see the management panel, and the API refuses them independently (403 proved using the browser's own token), so the hiding is convenience, never the boundary. Fourth token key: `glowplus:token:staff`.
+
+**Also fixed while here:** `vercel.json` still had rewrites for only the original two routes, so `/consumer/booking`, `/forgot-password`, `/reset-password`, `/admin/panel` and `/consumer/rewards` would all have **404'd in production** — including reset-password links the backend already emails. All added.
+
+✅ **T25 — done 2026-08-24 (session 11), both backend and frontend.** [F8] closed. `expirePoints.job.ts` ran nightly, called `updateMany` with `data: {}` — a literal no-op — and logged a count of rows it had "touched" while changing none. `Visit` now has `expired` + `expiredAt` (migration `20260824180000_visit_points_expiry`, two indexes) and the job writes them.
+
+**Expiring never deletes.** Points aren't a stored balance — they're derived from `Visit` rows — so expiry excludes a visit from progress maths and leaves it in the merchant's history. The job filters `expired: false`, making it idempotent: a rerun expires 0 more and does **not** rewrite `expiredAt` on old rows. TTL is `POINTS_EXPIRE_AFTER_DAYS` (365, env-overridable).
+
+**All three progress paths now filter expired visits** — `redemptions.service.ts` (both the `available` read *and* the eligibility re-derivation inside the redeem `$transaction`) and `reward-rules.service.ts` `evaluate()`, which `POST /visits` calls to decide what just unlocked. Missing the in-transaction one would have let a consumer redeem against points the UI had already stopped showing.
+
+**`src/modules/points/` is now real** — one of [F22]'s empty placeholder directories. `GET /points/me` (consumer-guarded from the start) returns per-salon `activePoints`, `expiredPoints`, `expiresAfterDays`, `nextExpiry` and a 30-day `expiringSoon` window. **`nextExpiry` is computed from the visit date, not from the job**, so the UI warns before the points go rather than reporting the loss the morning after.
+
+**21/21 backend checks** (job booted through a Nest application context and called directly, as in T19, rather than waiting for its 3am cron) and **10/10 frontend checks** in real Chrome — a points card on `/consumer/rewards` with balance, expiry date, a red expiring-soon warning, and expired points reported rather than silently dropped. With every visit expired, `POST /redemptions` returns **400** — the refusal is server-side, not a hidden button.
+
+Suite now **67 passing** (was 55). `tsc --noEmit` clean. Test data fully cleaned up after both tasks — DB back at exact seed state (1 merchant, 5 visits, 0 expired, 0 staff, 0 invites).
+
+➡️ **NEXT: T26 onward in Phase 2** — check `TASKS.md` for the next unticked item. Note that **T29 (authorization audit) is now partly pre-paid**: T17, T18, T23, T24 and T25 each added their guards at build time, so [F29]/[F30] remain open only for the older controllers — `styles`, `visits` and `reward-rules` still read `req.merchantId!` with no role check, and `RequireActiveSubscriptionMiddleware` still matches no real path.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 
