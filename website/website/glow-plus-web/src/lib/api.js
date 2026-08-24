@@ -30,6 +30,11 @@ const CONSUMER_TOKEN_KEY = 'glowplus:token:consumer';
 // be able to be logged in alongside a merchant/consumer session in the same
 // browser without either clobbering the other.
 const ADMIN_TOKEN_KEY = 'glowplus:token:admin';
+// Separate again for the team page (T24). It holds EITHER an owner token or a
+// staff token, and deliberately not the same key as the billing page's
+// `glowplus:token` — a staff member signing in here must not silently replace
+// an owner session on the billing page, which they have no rights on.
+const STAFF_TOKEN_KEY = 'glowplus:token:staff';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -77,6 +82,10 @@ export const clearToken = () => removeToken(TOKEN_KEY);
 export const getConsumerToken = () => readToken(CONSUMER_TOKEN_KEY);
 export const setConsumerToken = (token) => writeToken(CONSUMER_TOKEN_KEY, token);
 export const clearConsumerToken = () => removeToken(CONSUMER_TOKEN_KEY);
+
+export const getStaffToken = () => readToken(STAFF_TOKEN_KEY);
+export const setStaffToken = (token) => writeToken(STAFF_TOKEN_KEY, token);
+export const clearStaffToken = () => removeToken(STAFF_TOKEN_KEY);
 
 export const getAdminToken = () => readToken(ADMIN_TOKEN_KEY);
 export const setAdminToken = (token) => writeToken(ADMIN_TOKEN_KEY, token);
@@ -257,4 +266,81 @@ export function getChurn() {
 
 export function getPlatformStats() {
   return apiRequest('/admin/metrics/platform', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+/* --------------------------------------------------------------------------
+   Endpoints used by the team / staff page (T24)
+   -------------------------------------------------------------------------- */
+
+/**
+ * One sign-in box for both kinds of merchant account.
+ *
+ * The salon's own account lives in `Merchant`; staff live in `MerchantStaff`.
+ * A team member typing their email has no idea which table they are in — and
+ * shouldn't need to — so try the owner endpoint first and fall back to the
+ * staff one on a 401. Any other error (network, 500) is rethrown rather than
+ * retried, so a real outage doesn't get reported as "wrong password".
+ */
+export async function teamSignIn(email, password) {
+  try {
+    const data = await apiRequest('/merchants/login', { method: 'POST', auth: false, body: { email, password } });
+    if (data?.token) setStaffToken(data.token);
+    return data;
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+  }
+  const data = await apiRequest('/staff/login', { method: 'POST', auth: false, body: { email, password } });
+  if (data?.token) setStaffToken(data.token);
+  return data;
+}
+
+export function getStaffMe() {
+  return apiRequest('/staff/me', { tokenKey: STAFF_TOKEN_KEY });
+}
+
+export function listStaff() {
+  return apiRequest('/staff', { tokenKey: STAFF_TOKEN_KEY });
+}
+
+export function inviteStaff({ email, name, role }) {
+  return apiRequest('/staff/invites', {
+    method: 'POST',
+    tokenKey: STAFF_TOKEN_KEY,
+    body: { email, name: name || undefined, role },
+  });
+}
+
+export function revokeStaffInvite(id) {
+  return apiRequest(`/staff/invites/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    tokenKey: STAFF_TOKEN_KEY,
+  });
+}
+
+export function updateStaffRole(id, role) {
+  return apiRequest(`/staff/${encodeURIComponent(id)}/role`, {
+    method: 'PATCH',
+    tokenKey: STAFF_TOKEN_KEY,
+    body: { role },
+  });
+}
+
+export function removeStaff(id) {
+  return apiRequest(`/staff/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    tokenKey: STAFF_TOKEN_KEY,
+  });
+}
+
+/* Both public — an invitee has no account yet, so no token exists to send. */
+export function previewStaffInvite(token) {
+  return apiRequest(`/staff/invites/${encodeURIComponent(token)}`, { auth: false });
+}
+
+export function acceptStaffInvite({ token, password, name }) {
+  return apiRequest('/staff/accept-invite', {
+    method: 'POST',
+    auth: false,
+    body: { token, password, name: name || undefined },
+  });
 }

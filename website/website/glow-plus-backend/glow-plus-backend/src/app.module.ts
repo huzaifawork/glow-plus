@@ -12,6 +12,7 @@ import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
 import { RedemptionsModule } from './modules/redemptions/redemptions.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { StaffModule } from './modules/staff/staff.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -32,6 +33,7 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     RedemptionsModule,
     BillingModule,
     AdminModule,
+    StaffModule,
     BookingsModule,
     BusinessHoursModule,
     JobsModule,
@@ -64,6 +66,14 @@ export class AppModule implements NestModule {
         // GET /merchants/me and GET /styles stay protected.
         { path: 'merchants/public', method: RequestMethod.GET },
         { path: 'styles/public/(.*)', method: RequestMethod.GET },
+        // Staff invite acceptance + staff login (T24). An invitee has no
+        // account yet, so they cannot hold a token — these must be reachable
+        // without one, exactly like merchants/login and admin/login.
+        // Only the single-invite preview is public: GET /staff (the roster)
+        // is owner-only and deliberately NOT matched by this pattern.
+        { path: 'staff/login', method: RequestMethod.POST },
+        { path: 'staff/accept-invite', method: RequestMethod.POST },
+        { path: 'staff/invites/(.*)', method: RequestMethod.GET },
       )
       .forRoutes('*');
 

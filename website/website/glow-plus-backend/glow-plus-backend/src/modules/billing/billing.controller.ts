@@ -2,8 +2,12 @@ import { Controller, Post, Req, Res, Headers, Body, UseGuards, Logger } from '@n
 import type { Response } from 'express';
 import { BillingService } from './billing.service';
 import { AuthedRequest } from '../../middleware/auth.middleware';
-import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
+import { RequireMerchantOwnerGuard } from '../../common/guards/require-merchant-owner.guard';
 
+// T24 narrowed these three from RequireMerchantGuard to
+// RequireMerchantOwnerGuard: a receptionist with a staff token could
+// otherwise cancel the salon's subscription. The webhook stays unguarded —
+// Stripe calls it with a signature, not a token.
 @Controller('billing')
 export class BillingController {
   private readonly logger = new Logger('BillingWebhook');
@@ -11,19 +15,19 @@ export class BillingController {
   constructor(private readonly billing: BillingService) {}
 
   @Post('checkout')
-  @UseGuards(RequireMerchantGuard)
+  @UseGuards(RequireMerchantOwnerGuard)
   checkout(@Req() req: AuthedRequest, @Body('plan') plan?: 'MONTHLY' | 'ANNUAL') {
     return this.billing.createCheckoutSession(req.merchantId!, plan);
   }
 
   @Post('cancel')
-  @UseGuards(RequireMerchantGuard)
+  @UseGuards(RequireMerchantOwnerGuard)
   cancel(@Req() req: AuthedRequest) {
     return this.billing.cancelSubscription(req.merchantId!);
   }
 
   @Post('resume')
-  @UseGuards(RequireMerchantGuard)
+  @UseGuards(RequireMerchantOwnerGuard)
   resume(@Req() req: AuthedRequest) {
     return this.billing.resumeSubscription(req.merchantId!);
   }

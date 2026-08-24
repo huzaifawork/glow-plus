@@ -19,7 +19,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Glow+ <onboarding@resend.dev>';
 
 export interface SendEmailInput {
   to: string;
-  template: 'confirm-email' | 'reset-password' | 'trial-ending-soon' | 'payment-failed' | 'reward-unlocked';
+  template: 'confirm-email' | 'reset-password' | 'trial-ending-soon' | 'payment-failed' | 'reward-unlocked' | 'staff-invite';
   data: Record<string, unknown>;
 }
 
@@ -90,6 +90,14 @@ function renderTemplate(template: SendEmailInput['template'], data: Record<strin
       return {
         subject: 'Action needed: your Glow+ payment failed',
         html: `<p>We couldn't process your last payment. <a href="${data.invoiceUrl}">Update your payment method</a> to avoid an interruption.</p>`,
+      };
+    case 'staff-invite':
+      return {
+        subject: `You've been invited to join ${data.businessName} on Glow+`,
+        html: `<p>${data.businessName} has invited you to join their team on Glow+ as <strong>${data.role}</strong>.</p>
+               <p>Click below to set your password and activate your account:</p>
+               <p><a href="${data.inviteUrl}">${data.inviteUrl}</a></p>
+               <p>This invite expires in 7 days. If you weren't expecting it, you can ignore this email.</p>`,
       };
     case 'reward-unlocked':
       return {

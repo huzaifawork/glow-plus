@@ -1,0 +1,42 @@
+/* Page-specific styles for the team page (T24). The shared primitives —
+   brand, card, form, field, err, btn — come from booking.css, the same way
+   rewards.css layers on top of it (T23). */
+.staff-list { display: flex; flex-direction: column; gap: 10px; }
+.staff-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid #ececee; border-radius: 12px; padding: 12px 14px;
+}
+.staff-info { text-align: left; min-width: 0; }
+.staff-name { font-weight: 700; font-size: 14px; word-break: break-word; }
+.staff-sub { font-size: 12.5px; color: var(--ink-soft); word-break: break-word; }
+.staff-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.staff-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.role-select {
+  font-family: var(--font); font-size: 13px; color: var(--ink);
+  padding: 7px 10px; border: 1px solid #d9d9de; border-radius: 8px; background: var(--white);
+}
+.role-pill {
+  font-size: 12px; font-weight: 700; padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+}
+.role-owner { background: rgba(0, 113, 227, 0.1); color: var(--accent); }
+.role-staff { background: rgba(13, 138, 95, 0.1); color: var(--sage); }
+
+.access-list { list-style: none; padding: 0; margin: 14px 0; text-align: left; }
+.access-list li { font-size: 13.5px; padding: 5px 0; color: var(--ink); }
+.access-list li::before { margin-right: 8px; font-weight: 700; }
+.access-list .allowed::before { content: '✓'; color: var(--sage); }
+.access-list .denied::before { content: '✕'; color: var(--rose); }
+.access-list .denied { color: var(--ink-soft); }
+
+.notice {
+  color: var(--sage); font-size: 13px; font-weight: 500; text-align: left;
+  background: rgba(13, 138, 95, 0.08); border-radius: 9px; padding: 10px 12px; margin: 0 0 14px;
+}
+.section-gap { margin-top: 24px; }
+.btn-link { display: inline-block; text-decoration: none; text-align: center; margin-top: 16px; }
+
+@media (max-width: 520px) {
+  .staff-row { flex-direction: column; align-items: stretch; }
+  .staff-actions { justify-content: space-between; }
+}

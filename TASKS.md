@@ -389,8 +389,27 @@ Rules:
 
   **No bug found in pre-existing code** — like T21, this was new functionality rather than a "was it ever exercised" check. Suite still **55 passing**; `tsc --noEmit` clean. Test data (5 redemptions, 10 visits, 1 throwaway consumer) fully cleaned up — DB back at exact seed state (5 visits, 0 redemptions, 1 user).
   **Verify independently:** open `http://localhost:3000/consumer/rewards`, sign in as `consumer@glowplus.test` / `Consumer123!`. The seed gives 5 visits / 250 points, so both rules show as redeemable; redeem one and it re-locks with the history entry appearing below.
-- [ ] **T24 — Merchant staff accounts + roles.** `MerchantStaff` model already exists — build auth, invite, and role-scoped permissions on it. [F6]
-  - [ ] Frontend: staff management UI + role-limited views.
+- [x] **T24 — Merchant staff accounts + roles.** `MerchantStaff` model already exists — build auth, invite, and role-scoped permissions on it. [F6] ✅ **2026-08-24**
+  - [x] Frontend: staff management UI + role-limited views.
+
+  **[F6] closed — the `MerchantStaff` table finally has a writer.** New `src/modules/staff/` with 9 routes: public `POST /staff/login`, `GET /staff/invites/:token`, `POST /staff/accept-invite`; owner-only `GET /staff`, `POST /staff/invites`, `DELETE /staff/invites/:id`, `PATCH /staff/:id/role`, `DELETE /staff/:id`; and `GET /staff/me` for any merchant token.
+
+  **Invites use a separate `StaffInvite` table** (migration `20260824170000_staff_invites`), mirroring `EmailVerification`/`PasswordReset`: hashed single-use token, `expiresAt` (7d — an invite is not a live credential like a 1h reset), `acceptedAt`, `revokedAt`. No staff row — and therefore no password hash — exists until the invite is accepted, inside a `$transaction` that re-checks the token so two clicks on the emailed link can't both succeed. `MerchantStaff` gained `name` and `lastLoginAt`.
+
+  **Role scoping is the point of the task**, so it's split across two guards. `RequireMerchantGuard` (T17) accepts owner *and* staff — day-to-day work. New `RequireMerchantOwnerGuard` refuses `merchant_staff` with a distinct message, and now also protects **billing checkout/cancel/resume**, which T24 narrowed from the wider guard: a receptionist could previously have cancelled the salon's subscription. `StaffRole.OWNER` signs `merchant_owner` in the token, `STAFF` signs `merchant_staff`, and `sub` is always the staff id — which is exactly what `Visit.loggedBy` ("staff user id") always meant to record, and now does.
+
+  **Every management method filters by the caller's `merchantId`**, never by staff id alone: `MerchantStaff.email` is globally unique, so a bare `findUnique({ id })` would have let merchant A rename or delete merchant B's staff — [F29]'s shape in a new table. Verified: merchant B gets **404**, not 200.
+
+  **Backend — 55/55 checks** against the live API and real Postgres: no token 401 / consumer token 403 on the roster; invite → **email DELIVERED via Resend** (`delivered@resend.dev`, `last_event=delivered`, token pulled back out of the delivered HTML exactly as in T19–T21) → public preview → accept → real `MerchantStaff` row → replay of the same token 400; staff login stamps `lastLoginAt`; STAFF refused on roster/invite/delete/**billing cancel** (403) but allowed on `/merchants/me`, `/styles` and `POST /visits` (201, `loggedBy` = staff id); promote → re-login signs `merchant_owner` → roster now 200 → demote; duplicate invite 409; owner's own email 400; re-invite supersedes rather than stacking; cross-merchant promote/delete 404 with the row intact; revoke → 404 on second revoke; an expired invite refused at both preview and accept with no account created; removed staff can no longer log in.
+
+  **Frontend — 26/26 checks** in real Chrome (`puppeteer-core`, scratchpad-only). Two new standalone pages, same pattern as T17/T18/T21/T22/T23: `staff.html` → `/business/staff` and `accept-invite.html` → `/staff/accept-invite` (backend-baked, like `/reset-password`). **One sign-in box serves both account kinds** — `teamSignIn()` tries `/merchants/login` and falls back to `/staff/login` on 401 only, so a real outage isn't reported as "wrong password". `GET /staff/me` then decides the view: owner gets roster + invite form + role select + remove; **staff gets a role-limited view with the management panel not rendered at all** — and the API refuses them independently (403 proved with the browser's own token), so the hiding is convenience, never the boundary. A removed staff member's stale token returns them to sign-in instead of a broken page. No horizontal overflow at 390px; no console errors.
+
+  `lib/api.js` gained a **fourth** token key, `glowplus:token:staff` — deliberately not the billing page's `glowplus:token`, so a staff sign-in can't silently replace an owner session on a page they have no rights on.
+
+  **Also fixed while here:** `vercel.json` had rewrites for only the original two routes, so `/consumer/booking`, `/forgot-password`, `/reset-password`, `/admin/panel` and `/consumer/rewards` would all have **404'd in production** — including reset-password links already emailed by the backend. All added alongside the two new T24 routes.
+
+  **No bug found in pre-existing code** (new functionality, like T21/T23). Suite now **62 passing** (was 55); `tsc --noEmit` clean; test data fully cleaned up — DB back at seed state (1 merchant, 0 staff, 0 invites).
+  **Verify independently:** open `http://localhost:3000/business/staff`, sign in as `merchant@glowplus.test` / `Merchant123!`, invite an address, then open the emailed link (or `/staff/accept-invite?token=…`), set a password, and sign back in with it — the same box now shows the staff view instead of the roster.
 - [ ] **T25 — Points expiration.** Add `expired Boolean` to `Visit`, migrate, replace the `data: {}` no-op, exclude expired visits from progress math. [F8]
   - [ ] Frontend: points balance + expiry display.
 

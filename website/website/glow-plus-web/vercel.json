@@ -1,6 +1,13 @@
 {
   "rewrites": [
     { "source": "/verify-email", "destination": "/verify-email.html" },
-    { "source": "/business/billing", "destination": "/billing-result.html" }
+    { "source": "/business/billing", "destination": "/billing-result.html" },
+    { "source": "/forgot-password", "destination": "/forgot-password.html" },
+    { "source": "/reset-password", "destination": "/reset-password.html" },
+    { "source": "/consumer/booking", "destination": "/booking.html" },
+    { "source": "/consumer/rewards", "destination": "/rewards.html" },
+    { "source": "/admin/panel", "destination": "/admin.html" },
+    { "source": "/business/staff", "destination": "/staff.html" },
+    { "source": "/staff/accept-invite", "destination": "/accept-invite.html" }
   ]
 }

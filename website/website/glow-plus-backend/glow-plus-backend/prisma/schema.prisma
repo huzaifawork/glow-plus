@@ -48,6 +48,7 @@ model Merchant {
   rewardRules       RewardRule[]
   visits            Visit[]
   staff             MerchantStaff[]
+  staffInvites      StaffInvite[]
   businessHours     BusinessHours[]
   bookings          Booking[]
 }
@@ -65,9 +66,33 @@ model MerchantStaff {
   merchantId  String
   merchant    Merchant  @relation(fields: [merchantId], references: [id])
   email       String    @unique
+  name        String?   // captured on the invite / when the invite is accepted (T24)
   passwordHash String
   role        StaffRole @default(STAFF)
+  lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
+
+  @@index([merchantId])
+}
+
+/// A pending staff invitation (T24). Kept separate from MerchantStaff for the
+/// same reason EmailVerification and PasswordReset are separate tables: the
+/// row holds a hashed, single-use, expiring token, and no staff account (and
+/// therefore no password hash) exists until the invite is accepted.
+model StaffInvite {
+  id          String    @id @default(cuid())
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id])
+  email       String
+  name        String?
+  role        StaffRole @default(STAFF)
+  token       String    @unique // random, single-use, hashed at rest
+  expiresAt   DateTime  // 7d — an invite is not a live credential, unlike a password reset
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([merchantId])
 }
 
 enum StaffRole {

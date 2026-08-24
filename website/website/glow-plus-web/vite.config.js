@@ -28,6 +28,11 @@ function legacyRouteRewrites() {
     '/admin/panel': '/admin.html',
     // T23 — reward redemption, same standalone-page pattern.
     '/consumer/rewards': '/rewards.html',
+    // T24 — team management, same standalone-page pattern. The accept-invite
+    // path is backend-baked (staff.service.ts emails APP_URL + this path), so
+    // it can't change, exactly like /verify-email and /reset-password.
+    '/business/staff': '/staff.html',
+    '/staff/accept-invite': '/accept-invite.html',
   };
   return {
     name: 'glow-plus-legacy-route-rewrites',
@@ -83,6 +88,8 @@ export default defineConfig({
         resetPassword: resolve(__dirname, 'reset-password.html'),
         admin: resolve(__dirname, 'admin.html'),
         rewards: resolve(__dirname, 'rewards.html'),
+        staff: resolve(__dirname, 'staff.html'),
+        acceptInvite: resolve(__dirname, 'accept-invite.html'),
       },
     },
   },
