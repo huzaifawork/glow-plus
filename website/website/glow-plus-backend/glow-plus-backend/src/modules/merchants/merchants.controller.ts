@@ -48,17 +48,20 @@ export class MerchantsController {
    * still owns any error thrown below.
    *
    * The total goes in a header rather than an envelope so the body stays the
-   * bare array the RN app maps over. `Access-Control-Expose-Headers` is what
-   * makes it readable from the browser at all: `X-Total-Count` is not a
-   * CORS-safelisted response header, so without this the website sees `null`
-   * even though the header is on the wire. Set here, next to the header it
-   * exposes, rather than globally — this is the only route that sends it.
+   * bare array the RN app maps over. `X-Total-Count` is not a CORS-safelisted
+   * response header, so the browser can only read it because CORS exposes it.
+   *
+   * T44 moved that exposure into `config/security.ts` (EXPOSED_HEADERS). It
+   * used to be a `res.setHeader('Access-Control-Expose-Headers', ...)` on
+   * this line, on the grounds that the exposure belonged next to the header
+   * it exposed — but `setHeader` replaces, so this route was answering with
+   * that one name and silently hiding every rate-limit header from the
+   * browser. See the note beside the constant.
    */
   @Get()
   async list(@Query() query: PublicMerchantsQueryDto, @Res({ passthrough: true }) res: Response) {
     const { items, total } = await this.merchants.listPublic(query);
     res.setHeader('X-Total-Count', String(total));
-    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count');
     return items;
   }
 

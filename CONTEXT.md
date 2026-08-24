@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **280 passing** (`npm test`) — 19 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **297 passing** (`npm test`) — 20 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,12 +121,51 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phase 5 done, Phase 6 all but done. Next is T44, then Phase 7.**
+## 8. EXACTLY where to resume — **Phases 5 and 6 are DONE. Next is Phase 7, starting at T46.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 21 (2026-08-25): 44 of 65 done. Phase 6 is T42 ✅
-> T43 ✅ T45 ✅ — only T44 is left in it.**
+> **State as of session 22 (2026-08-25): 45 of 65 done. PHASE 6 IS CLOSED —
+> T42 ✅ T43 ✅ T44 ✅ T45 ✅. The next task is T46, the first of Phase 7.**
+>
+> **T44 is done: `GET /styles/public/:merchantId` is the salon menu, and the
+> path deliberately did NOT move.** Unlike T43, `client.js:157` already calls
+> this exact path, so moving it for symmetry would have been a breaking change
+> to an app we may not edit, bought with nothing. Read its TASKS.md entry
+> before touching that module; three things there are easy to undo by accident.
+> 1. **`:merchantId` is a DTO, not `@Param('merchantId')`.** A bare param is
+>    validated by nothing [F38] — a 5,000-char id used to reach Prisma on an
+>    unauthenticated route. It is a **length** bound and deliberately not a
+>    cuid regex, so a future id scheme fails as a clean 404 rather than a 400.
+> 2. **The body is a bare array and the total is in `X-Total-Count`**, same
+>    contract as T43 — `BookScreen.js` maps it directly.
+> 3. **`active: true` here must match what T43's `styleCount` counts.** If the
+>    two ever disagree, a salon card advertises "3 styles" and the menu behind
+>    it shows two. There is a test on the `where`, not just the fixture.
+>
+> ⚠️ **New finding [F46], and it is a trap worth remembering:
+> `res.setHeader('Access-Control-Expose-Headers', ...)` REPLACES the global
+> CORS list, it does not append.** T43's `/merchants` was overwriting all nine
+> rate-limit headers with the single name `X-Total-Count`, so the limiter was
+> enforced but unreadable from a browser on that route — the exact failure
+> `EXPOSED_HEADERS` exists to prevent. **Fixed in T44 by moving the exposure
+> into `config/security.ts`; both per-route calls are gone. Do not add one
+> back.** It was latent (nothing reads those headers yet, and a 429 never
+> reaches a handler), and it only showed up because the SPA's request was
+> replayed **with an `Origin:` header** — a bare curl cannot see it. Replay
+> cross-origin requests properly when testing anything CORS-adjacent.
+>
+> ⚠️ **Session 22 found ~25 orphaned backend processes** — 13 stacked
+> `npm run start:dev` + `nest` watcher pairs from previous sessions, all
+> fighting over :4000, which is why an edited source file kept serving stale
+> code and the kill-by-port command kept finding a *new* PID holding the port.
+> Kill by **command line**, not by port:
+> ```
+> Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+>   Where-Object { $_.CommandLine -like '*glow-plus-backend*' -or $_.CommandLine -like '*run start:dev*' } |
+>   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+> ```
+> Check for this before concluding a change "didn't take".
 >
 > **T43 is done: `GET /merchants` is the public salon directory.** Read its
 > TASKS.md entry before touching that module; four decisions there are easy to
@@ -166,8 +205,9 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > matches `.js`, and ts-jest then follows the sourcemap until it runs out of
 > memory. Session 21 lost time to this.
 >
-> **T44 is what remains of Phase 6**, and it is smaller than it was — see its
-> TASKS.md note. **Then Phase 7.**
+> **Phase 6 is closed. Phase 7 (T46–T51) is next**, and T46 may already be
+> satisfied — auth has been `Authorization: Bearer` throughout — so start by
+> verifying it rather than building it.
 >
 > **T39 is done — the mobile pass found four real defects, not none.** Read
 > its TASKS.md entry before touching `global.css`. The headline: **T36's

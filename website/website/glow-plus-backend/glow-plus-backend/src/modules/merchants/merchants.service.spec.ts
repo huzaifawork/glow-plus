@@ -248,12 +248,14 @@ describe('MerchantsController — GET /merchants', () => {
     expect(body[0]).toMatchObject({ id: M1 });
   });
 
-  it('puts the total in X-Total-Count and exposes it to the browser', async () => {
+  it('puts the total in X-Total-Count and sets no other header', async () => {
     await controller.list({}, res as never);
     expect(res.setHeader).toHaveBeenCalledWith('X-Total-Count', '3');
-    // Not a CORS-safelisted response header: without this the website reads
-    // null even though the header is on the wire.
-    expect(res.setHeader).toHaveBeenCalledWith('Access-Control-Expose-Headers', 'X-Total-Count');
+    // Exposure is CORS' job, in config/security.ts. Setting
+    // `Access-Control-Expose-Headers` here would REPLACE the rate-limit
+    // headers that list exists to make readable, not add to them — the bug
+    // T44 found and fixed. One call, and it is this one.
+    expect(res.setHeader).toHaveBeenCalledTimes(1);
   });
 
   it('passes the validated query straight through', async () => {

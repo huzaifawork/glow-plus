@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { StylesService } from './styles.service';
 import { CreateStyleDto, UpdateStyleDto } from './dto';
+import { PublicStylesParamDto, PublicStylesQueryDto } from './public-styles.dto';
 import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 import { RequireActiveSubscriptionGuard } from '../../common/guards/require-active-subscription.guard';
@@ -23,12 +25,40 @@ export class StylesController {
     return this.styles.list(req.merchantId);
   }
 
-  // Public — a consumer picks a style before booking (T18/T44). Deliberately
-  // unguarded: there is no merchant context, and it must keep working for a
-  // consumer browsing a salon they don't own.
+  /**
+   * A salon's public menu (T44). Supports `?limit=`, `?offset=`.
+   *
+   * Deliberately unguarded: there is no merchant context, and it must keep
+   * working for a consumer browsing a salon they don't own — before they have
+   * an account at all. Public for real only because `app.module.ts` excludes
+   * `styles/public/(.*)` from AuthMiddleware, GET-only, so the merchant-scoped
+   * `GET /styles` above stays behind a token.
+   *
+   * The `:merchantId` is bound as a DTO, not a bare `@Param('merchantId')`
+   * string — see public-styles.dto.ts. A loose param is validated by nothing
+   * [F38], and this route is reachable without a token.
+   *
+   * `passthrough: true` matters, exactly as it does on `GET /merchants`:
+   * without it, injecting `@Res()` puts the handler into manual mode, Nest
+   * stops serialising the return value, and the request hangs until it times
+   * out.
+   *
+   * `X-Total-Count` is not a CORS-safelisted response header, so it is
+   * unreadable from a browser unless CORS exposes it — that is done once in
+   * `config/security.ts` (EXPOSED_HEADERS) and deliberately NOT with a
+   * `res.setHeader('Access-Control-Expose-Headers', ...)` here, which
+   * replaces rather than appends and would take the rate-limit headers down
+   * with it. See the note beside the constant.
+   */
   @Get('public/:merchantId')
-  listPublic(@Param('merchantId') merchantId: string) {
-    return this.styles.listPublicForMerchant(merchantId);
+  async listPublic(
+    @Param() params: PublicStylesParamDto,
+    @Query() query: PublicStylesQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { items, total } = await this.styles.listPublicForMerchant(params.merchantId, query);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Post()

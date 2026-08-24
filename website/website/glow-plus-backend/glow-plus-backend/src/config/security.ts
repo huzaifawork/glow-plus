@@ -67,6 +67,26 @@ export const EXPOSED_HEADERS = [
   'X-RateLimit-Limit-global',
   'X-RateLimit-Remaining-global',
   'X-RateLimit-Reset-global',
+  // T44 — the paginated public lists (`GET /merchants`, T43, and
+  // `GET /styles/public/:merchantId`) report their unpaged total here rather
+  // than in an `{ items, total }` envelope, because the RN app maps the body
+  // directly and an envelope would break Order 2.
+  //
+  // **It is listed here rather than set per route, and that reverses a T43
+  // decision on purpose.** T43 called `res.setHeader('Access-Control-Expose-
+  // Headers', 'X-Total-Count')` inside the handler, on the reasonable grounds
+  // that the exposure belongs next to the header it exposes. But `setHeader`
+  // REPLACES, so on those routes the whole list above was overwritten with
+  // this one name: verified live, `GET /merchants` answered
+  // `Access-Control-Expose-Headers: X-Total-Count` and nothing else, while
+  // still *sending* `X-RateLimit-Remaining: 119` that the browser could no
+  // longer read. Enforced but unreadable is the exact failure this list was
+  // written to prevent — see the note above it. Nothing in the website reads
+  // the rate-limit headers yet, so this was latent rather than live, and the
+  // 429 path was never affected (the throttler guard answers before any
+  // handler runs). Listing the name globally costs nothing: a header is only
+  // exposed on responses that actually send it.
+  'X-Total-Count',
 ];
 
 /** How long a browser may cache a preflight result. 10 minutes. */

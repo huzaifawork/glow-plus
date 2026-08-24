@@ -1,6 +1,36 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma, StyleType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateStyleDto, UpdateStyleDto } from './dto';
+import { DEFAULT_STYLE_PAGE, PublicStylesQueryDto } from './public-styles.dto';
+
+/** One row of a salon's public menu (T44). */
+export type PublicStyle = {
+  id: string;
+  name: string;
+  type: StyleType;
+  pointsPerVisit: number;
+  durationMinutes: number;
+};
+
+/**
+ * The fields of a Style that may leave the server on the PUBLIC route  (T44)
+ *
+ * An explicit allow-list, not `omit`, for the same reason as
+ * MERCHANT_PUBLIC_SELECT: a column added to the schema later is excluded BY
+ * DEFAULT and has to be opted in. Style holds nothing secret *today* — that
+ * is exactly the state in which an `include` gets added without anyone
+ * noticing, on a route that is served to the open internet with no token
+ * [F31]. The five fields here are the five the RN app's DEMO_STYLES names
+ * (`client.js:131-137`), so this is also the Order 2 contract.
+ */
+export const STYLE_PUBLIC_SELECT = {
+  id: true,
+  name: true,
+  type: true,
+  pointsPerVisit: true,
+  durationMinutes: true,
+} satisfies Prisma.StyleSelect;
 
 @Injectable()
 export class StylesService {
@@ -11,15 +41,40 @@ export class StylesService {
   }
 
   /**
-   * Public style list for one merchant (T18, pulled forward from T44 — a
-   * consumer picks a style before booking, and the merchant-scoped
-   * `list()` above is unusable for that: it trusts `req.merchantId`, has no
-   * concept of "someone else's styles", and would need to sit behind
-   * RequireActiveSubscriptionMiddleware, which is for merchant actions, not
-   * consumer browsing). Only active styles, at a merchant that's actually
-   * live — matches the same ACTIVE-only rule as listPublic() above.
+   * A salon's public menu  (T44 — replaces T18's stopgap in place)
+   *
+   * **The path stays `GET /styles/public/:merchantId`.** T43 had to *move*
+   * the directory because the RN app calls `/merchants` and the stopgap sat
+   * at `/merchants/public`; here `client.js:157` (`fetchSalonStyles`) already
+   * calls this exact path, so the Order 2 contract is satisfied where it is.
+   * Moving it to match the directory's shape would have been symmetry bought
+   * with a breaking change to an app we are not allowed to edit.
+   *
+   * Not servable by the merchant-scoped `list()` above, which is why this
+   * exists at all: that one trusts `req.merchantId`, has no concept of
+   * "someone else's styles", and sits behind RequireActiveSubscriptionGuard —
+   * a paywall on *merchant actions*, which would make a consumer's ability to
+   * browse a menu depend on the salon's billing state at request time.
+   *
+   * Only **active** styles at an **ACTIVE** merchant, matching `listPublic()`
+   * on the directory. The two have to agree: the directory's `styleCount`
+   * counts `active: true` rows, so a different rule here would make a card
+   * advertise "3 styles" and the menu behind it show two.
+   *
+   * **The body is a bare array even though it paginates**, exactly as T43's
+   * directory is: `BookScreen.js:44` does `setStyleList(await
+   * fetchSalonStyles(...))` and maps the result, so an `{ items, total }`
+   * envelope would break Order 2 on the day it ships. The total rides on
+   * `X-Total-Count` — see the controller.
    */
-  async listPublicForMerchant(merchantId: string) {
+  async listPublicForMerchant(
+    merchantId: string,
+    query: PublicStylesQueryDto = {},
+  ): Promise<{ items: PublicStyle[]; total: number }> {
+    // Checked before the styles, not alongside them: a suspended or
+    // not-yet-approved salon must 404 rather than return an empty menu, or
+    // "this salon has no services yet" and "this salon is not open to
+    // customers" become indistinguishable to the caller.
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
       select: { status: true },
@@ -27,11 +82,23 @@ export class StylesService {
     if (!merchant || merchant.status !== 'ACTIVE') {
       throw new NotFoundException('Merchant not found');
     }
-    return this.prisma.style.findMany({
-      where: { merchantId, active: true },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, type: true, pointsPerVisit: true, durationMinutes: true },
-    });
+
+    const where: Prisma.StyleWhereInput = { merchantId, active: true };
+
+    // Counted with the same `where`, so `X-Total-Count` is the size of the
+    // menu the caller is paging through — not the merchant's whole catalogue
+    // including the styles they have retired.
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.style.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        skip: query.offset ?? 0,
+        take: query.limit ?? DEFAULT_STYLE_PAGE,
+        select: STYLE_PUBLIC_SELECT,
+      }),
+      this.prisma.style.count({ where }),
+    ]);
+    return { items, total };
   }
 
   create(merchantId: string, dto: CreateStyleDto) {

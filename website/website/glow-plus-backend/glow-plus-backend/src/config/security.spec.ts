@@ -165,6 +165,17 @@ describe('buildCorsOptions', () => {
     expect(options.exposedHeaders).toContain('Retry-After');
   });
 
+  it('also exposes X-Total-Count, alongside the rate-limit headers not instead of them', () => {
+    // T44 — the paginated public lists report their total in this header.
+    // It lives here rather than in a per-route
+    // `res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count')`,
+    // which REPLACES the list: `GET /merchants` was answering with that one
+    // name and hiding every rate-limit header from the browser. Both halves
+    // are asserted together because the bug looked like the header working.
+    expect(options.exposedHeaders).toContain('X-Total-Count');
+    expect(options.exposedHeaders).toContain('X-RateLimit-Remaining');
+  });
+
   it('answers the preflight itself with 204', () => {
     expect(options.preflightContinue).toBe(false);
     expect(options.optionsSuccessStatus).toBe(204);
