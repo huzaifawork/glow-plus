@@ -54,3 +54,8 @@ Thumbs.db
 .cache/
 tmp/
 temp/
+
+# [F23] again: TS files outside tsconfig's rootDir get emitted in place by a
+# watch/build rather than into dist/. jest.setup.ts is one of them.
+jest.setup.js
+jest.setup.js.map
