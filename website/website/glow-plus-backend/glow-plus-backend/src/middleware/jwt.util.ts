@@ -13,7 +13,29 @@ export interface TokenPayload {
   exp: number;
 }
 
-const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
+/**
+ * No `?? 'dev-secret-change-me'` fallback here any more (T27).
+ *
+ * That default was [F20] with the safety off: if JWT_SECRET were ever unset,
+ * the API would boot happily and sign every token — including `role:'admin'`
+ * — with a constant string published in this repository. The same class of
+ * mistake was already proven exploitable once, when JWT_SECRET held the
+ * `.env.example` placeholder and a hand-forged admin token was accepted.
+ *
+ * config/env.validation.ts refuses to start without a real, >=32-char secret,
+ * so reaching this line without one is impossible in the app. The throw
+ * covers the remaining path — a script or test importing this module
+ * directly — and fails loudly instead of silently signing with a known key.
+ */
+const SECRET = requireSecret();
+
+function requireSecret(): string {
+  const secret = process.env.JWT_SECRET?.trim();
+  if (!secret) {
+    throw new Error('JWT_SECRET is not set. Tokens cannot be signed or verified without it.');
+  }
+  return secret;
+}
 
 function base64url(input: Buffer | string) {
   return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

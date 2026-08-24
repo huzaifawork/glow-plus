@@ -23,11 +23,15 @@ import { AuthMiddleware } from './middleware/auth.middleware';
 import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveSubscription';
 import { GlobalRateLimitMiddleware } from './middleware/globalRateLimit.middleware';
 import { throttlerOptions } from './common/throttling';
+import { validateEnv } from './config/env.validation';
 import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // T27 — refuse to boot on a missing or placeholder secret rather than
+    // falling back to one. Every secret in this codebase had a silent default,
+    // and JWT_SECRET's was a constant published in the repo ([F20]).
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ScheduleModule.forRoot(),
     // T26 [F3] — until now nothing in this API was rate limited at all.
     // See common/throttling.ts for the three tiers and why they differ.

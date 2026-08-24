@@ -19,5 +19,9 @@
     "noFallthroughCasesInSwitch": false,
     "esModuleInterop": true
   }
-  ,"exclude": ["node_modules", "dist", "prisma"]
+  // jest.setup.ts is excluded for the same reason prisma/ is ([F23]): it sits
+  // outside rootDir ("./src"), so leaving it in the program fails the build
+  // with TS6059. Jest compiles it through ts-jest, which does not use this
+  // include list, so nothing is lost.
+  ,"exclude": ["node_modules", "dist", "prisma", "jest.setup.ts"]
 }
