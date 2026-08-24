@@ -9,6 +9,7 @@ import { MerchantsModule } from './modules/merchants/merchants.module';
 import { StylesModule } from './modules/styles/styles.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
+import { RedemptionsModule } from './modules/redemptions/redemptions.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
@@ -28,6 +29,7 @@ import { RequireActiveSubscriptionMiddleware } from './middleware/requireActiveS
     StylesModule,
     VisitsModule,
     RewardRulesModule,
+    RedemptionsModule,
     BillingModule,
     AdminModule,
     BookingsModule,

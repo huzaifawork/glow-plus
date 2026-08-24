@@ -1,0 +1,31 @@
+.reward-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.reward-row:last-child {
+  border-bottom: none;
+}
+.reward-info {
+  min-width: 0;
+}
+.reward-name {
+  font-weight: 600;
+}
+.reward-progress {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+.reward-history-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 0.9em;
+}
+.reward-history-row:last-child {
+  border-bottom: none;
+}

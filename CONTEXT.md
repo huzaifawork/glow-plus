@@ -36,7 +36,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 13 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 34 routes mapped, Prisma connected |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 38 routes mapped (T23 added 4), Prisma connected |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
 | Tests | ✅ Jest configured, **55 passing** (`npm test`) — 8 suites: jwt.util, health controller, exception filter, billing readPeriod, require-merchant guard, require-consumer guard, require-admin guard, trialEndingReminder job |
@@ -100,7 +100,7 @@ joziilunga-attachments/
 | **F1** | `BookingsModule` / `BusinessHoursModule` are **never imported** in `app.module.ts` — confirmed at runtime, zero booking routes registered. |
 | **F2** | **Booking/BusinessHours tables don't exist in the DB.** The schema is split across two files; the only migration creates 9 tables, none of them Booking. **This is why the client says booking "was never run against real Postgres" — it could not have worked.** |
 | **F3** | **Rate limiting is applied to nothing.** `rateLimit.middleware.ts` has zero references. The client believes `/auth/login` is protected; it is not. |
-| **F4** | Nothing writes to the `Redemption` table. |
+| **F4** | ✅ **RESOLVED 2026-08-24 by T23.** ~~Nothing writes to the `Redemption` table.~~ `src/modules/redemptions/` now writes to it, with double-redemption blocked inside a transaction. |
 | **F5** | No password-reset code exists at all. |
 | **F6** | `MerchantStaff` table exists in schema + migration, but **zero code uses it**. |
 | **F7** | `/admin/*` has no guard — the code comments admit it. |
@@ -190,7 +190,17 @@ Suite still **49 passing** (no new unit tests — consistent with T17–T20, whi
 
 Noted in passing, not fixed (out of scope for T22): `POST /merchants/signup` returns a bare 500 even though the row commits — same shape as the already-resolved [F27], just on the merchant path instead of consumer. Worth a look next time merchant onboarding is touched.
 
-➡️ **NEXT: T23 — Reward redemption tracking.** [F4] Nothing writes to the `Redemption` table today. Needs an endpoint to redeem a reward, a guard against double-redemption, and a frontend redeem button + redemption history.
+✅ **T23 — done 2026-08-24 (session 10), both backend and frontend.** [F4] closed — the `Redemption` table finally has a writer. New `src/modules/redemptions/` module with four routes, every one role-guarded from the start (reusing T17's `RequireMerchantGuard` and T18's `RequireConsumerGuard`) so the [F29] `req.merchantId!` pattern isn't repeated in a new controller: `GET /redemptions/available?merchantId=` and `POST /redemptions` and `GET /redemptions/me` (consumer), `GET /redemptions` (merchant history, with client name/email).
+
+**Double-redemption is blocked by re-deriving eligibility inside the `$transaction`** from real `Visit`/`Redemption` rows — the client only ever names *which rule*, never its own progress. `oneTime` rules refuse once any redemption exists; repeatable rules refuse when `redeemedCount >= unlockedCount`, so a consumer at 10/5 visits can redeem exactly twice, not unlimited times.
+
+Verified against the live API and real Postgres: redeem → **201** with a real row; same rule again → **400**; a *different* rule → **201**; zero-visit consumer → **400 "Not eligible"**; bad rule id → **404**; wrong-role tokens → **403** both directions; no token → **401**. Then logged 5 more visits and confirmed the **second milestone genuinely unlocks and re-locks**.
+
+Frontend: `glow-plus-web/rewards.html` → `/consumer/rewards` (same standalone pattern as T17/T18/T21/T22). Real Chrome via `puppeteer-core`: 11/12 — including a live Redeem click that grew history by exactly one and re-locked the button, and no overflow at 390px. The single non-pass is a `favicon.ico` 404, cosmetic and present on every standalone page.
+
+No bug found in pre-existing code (new functionality, like T21). Suite still **55 passing**, `tsc --noEmit` clean, test data fully cleaned up — DB back at exact seed state.
+
+➡️ **NEXT: T24 — Merchant staff accounts + roles.** [F6] The `MerchantStaff` table exists in schema and migration but **zero code uses it**. Needs staff auth, an invite flow, role-scoped permissions, and a staff-management UI with role-limited views.
 
 **Everything needed to test is already working**: Postgres migrated, backend compiling and running, seed data, an auth helper, Jest, Stripe forwarding. A new session should be able to start coding T15 immediately after starting the three servers.
 

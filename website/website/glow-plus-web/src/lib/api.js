@@ -201,6 +201,26 @@ export function cancelBooking(id) {
 }
 
 /* --------------------------------------------------------------------------
+   Endpoints used by the consumer rewards page (T23)
+   -------------------------------------------------------------------------- */
+export function listAvailableRewards(merchantId) {
+  const qs = new URLSearchParams({ merchantId }).toString();
+  return apiRequest(`/redemptions/available?${qs}`, { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
+export function redeemReward(rewardRuleId) {
+  return apiRequest('/redemptions', {
+    method: 'POST',
+    tokenKey: CONSUMER_TOKEN_KEY,
+    body: { rewardRuleId },
+  });
+}
+
+export function listMyRedemptions() {
+  return apiRequest('/redemptions/me', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
+/* --------------------------------------------------------------------------
    Endpoints used by the admin panel (T22)
    -------------------------------------------------------------------------- */
 export async function adminLogin(email, password) {

@@ -26,6 +26,8 @@ function legacyRouteRewrites() {
     '/reset-password': '/reset-password.html',
     // T22 — admin panel, same standalone-page pattern as booking/billing.
     '/admin/panel': '/admin.html',
+    // T23 — reward redemption, same standalone-page pattern.
+    '/consumer/rewards': '/rewards.html',
   };
   return {
     name: 'glow-plus-legacy-route-rewrites',
@@ -80,6 +82,7 @@ export default defineConfig({
         forgotPassword: resolve(__dirname, 'forgot-password.html'),
         resetPassword: resolve(__dirname, 'reset-password.html'),
         admin: resolve(__dirname, 'admin.html'),
+        rewards: resolve(__dirname, 'rewards.html'),
       },
     },
   },

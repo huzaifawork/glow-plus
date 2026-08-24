@@ -355,8 +355,40 @@ Rules:
 
   **Tests:** `require-admin.guard.spec.ts` — 6 specs, incl. one explicitly named for the F31 scenario (a consumer token refused). Suite now **55 passing** (was 49). `tsc --noEmit` clean.
   **Verify independently:** open `http://localhost:3000/admin/panel`, sign in as `admin@glowplus.test` / `Admin123!`; separately, confirm a merchant or consumer login at `/business/billing` or `/consumer/booking` still works in the same browser without the admin session clobbering it.
-- [ ] **T23 — Reward redemption tracking.** Writhe to the existing `Redemption` table; endpoint to redeem; prevent double-redemption. [F4]
-  - [ ] Frontend: redeem button + redemption history.
+- [x] **T23 — Reward redemption tracking.** ✅ **DONE & VERIFIED 2026-08-24 (session 10).** [F4] closed — the `Redemption` table now has a writer.
+  - [x] Frontend: redeem button + redemption history.
+
+  **New module** `src/modules/redemptions/` (service, controller, dto, module), imported in `app.module.ts`. Four routes, each role-guarded from the start rather than retrofitted — reusing T18's `RequireConsumerGuard` and T17's `RequireMerchantGuard`, so the [F29] `req.merchantId!` pattern is not repeated in a new controller:
+  | Route | Guard | Purpose |
+  |---|---|---|
+  | `GET /redemptions/available?merchantId=` | consumer | each active rule + this consumer's progress + `eligible` |
+  | `POST /redemptions` | consumer | redeem one unlocked milestone |
+  | `GET /redemptions/me` | consumer | the consumer's own redemption history |
+  | `GET /redemptions` | merchant | that merchant's redemption history, with client name/email |
+
+  **Double-redemption is prevented by re-deriving eligibility inside the transaction**, not by trusting the client. `redeem()` recounts real `Visit` and `Redemption` rows within `$transaction`, so the client only ever names *which rule* — never its own progress. Two branches: `oneTime` rules refuse once any redemption exists; repeatable rules refuse when `redeemedCount >= unlockedCount`, which means a consumer at 10/5 visits can redeem exactly twice, not unlimited times. This is why the check is `>=` against a re-derived `unlockedCount` rather than a simple "has redeemed" boolean.
+
+  **Evidence — every row is a real request against the running API and real Postgres:**
+  | Check | Result |
+  |---|---|
+  | `GET /redemptions/available` as consumer, 5 visits / 250 pts | **200**, both seeded rules returned with `progress` 5 and 250, `eligible:true` |
+  | `POST /redemptions` (VISIT_COUNT rule) | **201**, real `Redemption` row created, confirmed by direct Prisma query |
+  | **Same rule redeemed immediately again** | **400** "Already redeemed at this milestone — keep visiting to unlock the next one" |
+  | `POST /redemptions` on a **different** rule | **201** — one rule's redemption doesn't block another |
+  | Fresh consumer, **zero visits** → `POST /redemptions` | **400** "Not eligible for this reward yet" |
+  | `POST /redemptions` with a nonexistent `rewardRuleId` | **404** "Reward rule not found" |
+  | `GET /redemptions/me` as consumer | **200**, both redemptions newest-first |
+  | `GET /redemptions` as merchant | **200**, same rows enriched with client name + email |
+  | **Merchant** token on `GET /redemptions/available` | **403** "This action requires a consumer account" |
+  | **Consumer** token on `GET /redemptions` | **403** "This action requires a merchant account" |
+  | No token on either | **401** "Missing bearer token" |
+  | **After 5 more visits (10 total)** → redeem again | **201** — the second milestone genuinely unlocks, then locks again |
+
+  **Frontend:** new standalone page `glow-plus-web/rewards.html` → `/consumer/rewards` (same pattern as T17/T18/T21/T22 — not in the SPA, since T35's auth UI doesn't exist yet). Consumer sign-in → salon picker (reuses T18's `GET /merchants/public`) → per-rule progress bar text and Redeem/Locked button → redemption history that refreshes on redeem via a `glowplus:reward-redeemed` event. `lib/api.js` gained three functions on the existing `CONSUMER_TOKEN_KEY`; `vite.config.js` route-rewrite plugin and Rollup `input` both extended.
+  Driven in real Chrome (`puppeteer-core`, scratchpad-only): **11/12 checks passed** — login form on fresh storage, sign-in, live progress from the API, **a real Redeem click that grew history by exactly one and re-locked the button**, real `fetch` calls to :4000 (not `window.storage`), no horizontal overflow at 390px, log-out clears the session. The one non-pass is a `favicon.ico` 404 — cosmetic, present on every standalone page, not app code.
+
+  **No bug found in pre-existing code** — like T21, this was new functionality rather than a "was it ever exercised" check. Suite still **55 passing**; `tsc --noEmit` clean. Test data (5 redemptions, 10 visits, 1 throwaway consumer) fully cleaned up — DB back at exact seed state (5 visits, 0 redemptions, 1 user).
+  **Verify independently:** open `http://localhost:3000/consumer/rewards`, sign in as `consumer@glowplus.test` / `Consumer123!`. The seed gives 5 visits / 250 points, so both rules show as redeemable; redeem one and it re-locks with the history entry appearing below.
 - [ ] **T24 — Merchant staff accounts + roles.** `MerchantStaff` model already exists — build auth, invite, and role-scoped permissions on it. [F6]
   - [ ] Frontend: staff management UI + role-limited views.
 - [ ] **T25 — Points expiration.** Add `expired Boolean` to `Visit`, migrate, replace the `data: {}` no-op, exclude expired visits from progress math. [F8]
