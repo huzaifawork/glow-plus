@@ -29,10 +29,17 @@
     font-size:12.5px;font-weight:600;padding:9px 16px;letter-spacing:0.01em;
   }
   .promo-bar b{color:#7fd4ff;}
+  /* T39 — `height:52px` became `min-height` because the bar has to be able to
+     grow. T36 gave `.topnav` `flex-wrap:wrap` to close [F25]'s horizontal
+     overflow, which turned it into a *vertical* one nobody measured: at 390px
+     the nav is ~107px tall inside a 52px box, so its rows spilled ~28px above
+     the bar (over the promo bar) and ~28px below it (over the page heading).
+     `scrollWidth` cannot see that — it was only ever looking sideways.
+     Desktop is unaffected: the nav fits on one row, so the bar stays 52px. */
   .topbar{
     position:sticky;top:0;z-index:40;
-    display:flex;align-items:center;justify-content:space-between;
-    padding:0 22px;height:52px;background:rgba(255,255,255,0.8);backdrop-filter:saturate(180%) blur(20px);
+    display:flex;align-items:center;justify-content:space-between;gap:6px;
+    padding:6px 22px;min-height:52px;background:rgba(255,255,255,0.8);backdrop-filter:saturate(180%) blur(20px);
     border-bottom:1px solid var(--line);
   }
   .brand{font-weight:700;font-size:19px;letter-spacing:-0.01em;display:flex;align-items:center;gap:1px;}
@@ -42,6 +49,13 @@
      conditional "Log out" button pushed that to 460px. Wrapping is the fix
      named in the finding; the rest of T39's mobile pass is still open. */
   .topnav{display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end;}
+  /* T39 — the language switcher is a `<select>`, so it was picking up
+     `width:100%` from the form-field rule below and rendering 302px wide at a
+     390px viewport: a full-width form field lying across the promo bar, taking
+     an entire nav row to itself. Inherited verbatim from the prototype (same
+     markup, same rule) and wrong at every width, not just on mobile — `.navbtn`
+     overrides the rule's colours and radius but never declares a width. */
+  .topnav select{width:auto;flex:0 0 auto;}
   .navbtn{padding:9px 16px;border-radius:980px;border:1px solid transparent;background:transparent;font-weight:500;font-size:12.5px;color:var(--ink);}
   .navbtn:hover{color:var(--ink-soft);}
   .navbtn.primary{background:var(--accent);color:#fff;font-weight:600;padding:8px 16px;}
@@ -222,7 +236,12 @@
   .portal-head h2{font-size:26px;margin:0;font-weight:700;letter-spacing:-0.01em;}
   .pending-banner{background:#fff8e6;border:1px solid #f0d98c;color:#8a6d00;padding:14px 18px;border-radius:14px;font-size:14px;margin:18px 0;}
   .portal-tabs{display:flex;gap:6px;margin:20px 0 30px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
-  .ptab{padding:12px 4px;margin-right:22px;font-weight:600;font-size:14px;color:var(--ink-soft);border-bottom:2px solid transparent;background:none;border-radius:0;}
+  /* T39 — `border:none` first. The rule only ever set `border-bottom`, so the
+     other three sides kept the browser default (`2px outset black`) and every
+     tab drew a grey box. Inherited from the prototype and wrong at every width;
+     it matters most on a phone, where the seven portal tabs wrap into a grid
+     and the strip reads as a broken table rather than as tabs. */
+  .ptab{padding:12px 4px;margin-right:22px;font-weight:600;font-size:14px;color:var(--ink-soft);border:none;border-bottom:2px solid transparent;background:none;border-radius:0;}
   .ptab.active{color:var(--ink);border-bottom-color:var(--accent);}
   .ptab-panel{display:none;}
   .ptab-panel.active{display:block;}
@@ -272,9 +291,25 @@
     .panel-grid{grid-template-columns:1fr;}
     .stat-row{grid-template-columns:repeat(2,1fr);}
     .pricing-grid{grid-template-columns:1fr;}
-    .topbar{padding:0 14px;}
+    .topbar{padding:6px 14px;}
     main{padding:0 16px;}
     section.block{padding:64px 16px;}
+
+    /* T39 — tap targets. Measured at 390px before this block: `.link-btn` 16px
+       tall, `.toggle` 31px, `.navbtn` 33-35px, `.brand` 28px. 16px fails WCAG
+       2.2 AA (2.5.8, a 24px floor) outright, and the rest sit under the 44px
+       both Apple's HIG and WCAG 2.5.5 AAA ask for. Scoped to the mobile query
+       deliberately: a pointer has no such problem, and growing the desktop
+       chrome would be a design change rather than a fix. `min-height` alone is
+       enough — a <button> centres its own content vertically. */
+    .navbtn, .topnav select, .toggle, .quickpick button{min-height:44px;}
+    .brand{min-height:44px;}
+    .link-btn{min-height:44px;vertical-align:middle;}
+    /* `.ptab` measured 45px only because of the browser-default border removed
+       above; without it the tabs land at 43px, and the narrow ones ("Book") at
+       42px wide. `min-width` widens just those — the strip wraps a little
+       sooner and nothing else moves. */
+    .ptab{min-height:44px;min-width:44px;}
   }
 
 /* --- Migration shim (the only rule not lifted verbatim from the original) ---

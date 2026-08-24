@@ -37,7 +37,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 63 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
-| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
+| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
 | Tests | ✅ Jest configured, **261 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
@@ -121,25 +121,47 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **NEXT IS T39 (the mobile pass)**
+## 8. EXACTLY where to resume — **PHASE 5 IS DONE. Next is Phase 6 (T43/T44) or Phase 7.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 19 (2026-08-24): Phase 5 is finished except T39.**
-> T33 ✅ T34 ✅ T35 ✅ T36 ✅ T37 ✅ **T38 ✅** T40 ✅ T41 ✅ — leaving
-> **T39 alone**. Phase 6 is T42 ✅ T45 ✅, leaving T43/T44, which exist as
-> deliberate stopgaps from T18 and are probably reusable as-is.
+> **State as of session 20 (2026-08-25): Phase 5 is finished. 43 of 65 done.**
+> T33 ✅ T34 ✅ T35 ✅ T36 ✅ T37 ✅ T38 ✅ **T39 ✅** T40 ✅ T41 ✅ — the
+> website phase is closed. Phase 6 is T42 ✅ T45 ✅, leaving **T43/T44**, which
+> exist as deliberate stopgaps from T18 and are probably reusable as-is.
 >
-> **T39 is now purely qualitative — do not go hunting for an overflow.**
-> [F25] closed in T36, and the caveat T39 itself raised (that the portal and
-> admin views had only ever been measured *empty*) is closed too: T37
-> re-measured all five portal tabs and T38 re-measured the admin console —
-> two 4-column `.stat-row`s, a live approval queue and a full salon list —
-> with real rows loaded. Both still report **390px at a 390px viewport**.
-> What is left needs human judgement on a real device: tap-target sizes, the
-> 4-column `table.ledger` and `.stat-row` under real data, `.panel-grid`'s
-> two-column split, the language switcher, and **Arabic RTL at 390px**, which
-> nobody has ever checked (T40 verified RTL works, at desktop width only).
+> **T39 is done — the mobile pass found four real defects, not none.** Read
+> its TASKS.md entry before touching `global.css`. The headline: **T36's
+> `flex-wrap:wrap` fix for [F25] removed the horizontal overflow and created a
+> vertical one** — the wrapped nav was 107px tall inside a `.topbar` with a
+> fixed `height:52px`, so it spilled ~28px above the bar (over the promo bar)
+> and ~28px below it (over the page heading). `scrollWidth` structurally
+> cannot see that; it only looks sideways. **Do not "restore" `height:52px`.**
+> Also fixed: the language `<select>` was inheriting `width:100%` from the
+> form-field rule and rendering 302px wide (wrong at *every* width, desktop
+> included), `.ptab` was drawing the browser-default `2px outset` border on
+> three sides, and tap targets were below spec — `.link-btn` at **16px** was a
+> flat WCAG 2.2 AA 2.5.8 failure. Findings 2 and 4 are **inherited from the
+> prototype**, verified against `Glow-Plus-Website .html`, not migration
+> regressions.
+>
+> **Arabic RTL at 390px is verified** — the one thing nobody had ever checked.
+> 18 surfaces, `dir=rtl`, correct mirroring, zero overflow. Closed.
+>
+> ⚠️ **The mobile header is now 103px of a 844px viewport and sticky**, because
+> seven controls at 44px cannot fit one row at 390px. That is a knowing
+> trade-off (containment over height); shortening it means a hamburger, which
+> would be the first real departure from the prototype's shell. Don't "fix" it
+> silently — it's a design decision for the user/client.
+>
+> **New finding [F43] — belongs to T40, not T39.** **18 i18n keys exist only in
+> the `en` block**, so 7 of 8 languages fall back to English across the entire
+> auth form (Email, Password, Sign in, Create account, verify banner, Log out).
+> T35 added them *after* T40 was signed off, so T40 was correct when ticked —
+> this is drift. The consumer tab labels and the portal's `Profile`/`Team`/
+> `Billing` are hardcoded English literals, not keys at all. Select العربية and
+> the page mirrors perfectly but the login form is in English. It is a
+> translation task, not a layout one.
 >
 > **T38 also built `GET /admin/merchants`** — the ticket said "frontend-only"
 > and was almost right. The API only exposed the PENDING slice, so a
@@ -150,16 +172,19 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >
 > **Also open, unrelated to the website:** **T32** (M-Pesa — needs a client
 > decision, do not start without one) and **T31c** (Nest 11 / Vite 8 majors,
-> which should land before the client runs their own `npm audit`). New
-> finding **[F42]**: the landing page's founding-spots counter is the last
-> `localStorage` read left in the SPA — it belongs to T43, not T39.
+> which should land before the client runs their own `npm audit`). **[F42]**:
+> the landing page's founding-spots counter is the last `localStorage` read
+> left in the SPA — it belongs to T43.
 >
 > ⚠️ **`@ThrottleCredentials()` will block you if you hammer login** while
 > debugging — 20 attempts / 5 min per IP, then a **15-minute** block, and only
 > **5 per email** (T26 [F3], working as designed). Session 19 hit the per-email
-> tier on its third browser run. The throttler store is in-memory, so
+> tier on its third browser run; session 20 hit it too and restarted the
+> backend three times to clear it. The throttler store is in-memory, so
 > **restarting the backend clears it**; don't mistake the 429 for a broken
-> login.
+> login. ⚠️ Note also that killing the `npm run start:dev` wrapper **orphans
+> the node child**, which keeps holding :4000 — see §4 for the kill-by-port
+> command.
 >
 > Everything is committed and pushed; the working tree is clean and the DB is
 > at seed state. Dev servers may still be running from the last session — see
@@ -427,6 +452,24 @@ The ticket said "frontend-only" and was almost right — **one endpoint was miss
 ⚠️ **Correction to the note above, learned the hard way this session:** the credential throttle's per-email tier is **5 attempts / 15 min**, not 20 — 20/5min is the per-IP tier. A browser run that tests a wrong password *and* a right one costs 2, so the **third run of the session got blocked**. Restarting the backend clears the in-memory store.
 
 → **New finding [F42]:** the landing page's founding-spots counter (`Marketing.jsx`, `FoundingSpots`) is the **last `localStorage` read left in the SPA** — it reports 50 spots left on every fresh browser, forever. It needs a genuinely *public* count, so it belongs to **T43**, not T39.
+
+✅ **T39 — done 2026-08-25 (session 20). Phase 5 is closed.** The mobile pass, and it was not a formality: four real defects, none of which a `scrollWidth` measurement could ever have caught.
+
+**The important one is a lesson about [F25].** T36 closed [F25] by giving `.topnav` `flex-wrap:wrap` — correct, and it did remove the 401px horizontal overflow. But `.topbar` still had a fixed `height:52px`, so wrapping converted a horizontal overflow into a **vertical** one that three sessions of `scrollWidth 390` measurements reported as clean. At 390px the nav was **107px tall inside a 52px box**: its first row lay across the black promo bar, and the "For salons" / "Log out" row floated over the page heading. Fixed with `min-height:52px` + `padding:6px 22px`; measured bar 52 → **103px** with the nav fully inside it and page content starting exactly at its bottom edge. **Do not restore `height:52px`.**
+
+**Three more, all confirmed against the original `Glow-Plus-Website .html` before being called regressions — two are inherited, not ours:**
+- The language `<select>` inherited **`width:100%`** from the global form-field rule and rendered **302px wide**, a full-width form field lying across the promo bar and eating a whole nav row. Wrong at **every** width — the desktop header had it too. `.navbtn` overrides that rule's colours, radius and font, but never declares a width. Fixed with `.topnav select{width:auto;flex:0 0 auto;}` → 104px. **Inherited from the prototype.**
+- `.ptab` set only `border-bottom`, so the other three sides kept the browser default `2px outset black` and every tab drew a grey box — on a phone the seven portal tabs wrap into a grid and read as a broken table. Fixed with `border:none` first. **Inherited from the prototype.**
+- Tap targets: `.link-btn` (the auth switches) measured **16px tall**, a flat **WCAG 2.2 AA 2.5.8** failure (24px floor); `.toggle` 31px, `.navbtn` 33–35px, `.brand` 28px, all under 44px. Fixed with `min-height:44px` scoped to the `≤860px` query only — a pointer has no such problem, and growing the desktop chrome would be a design change rather than a fix.
+
+**Arabic RTL at 390px is verified** — T39's one genuinely open unknown. 18 surfaces, all `dir=rtl`, correct mirroring of the stat row, form alignment, list cards and tab strip, **zero** horizontal overflow. The defects found there were the same LTR ones, not RTL-specific.
+
+**Evidence:** real Chrome (`puppeteer-core`, scratchpad-only, not added to the repo), real dev servers, real Postgres, signed in as all three roles, every surface measured in **both** English and Arabic. Before → after at 390px: WCAG `<24px` failures **2 → 0**, sub-44px targets **6–11 per surface → 0**, overflow **0 → 0** (already clean). Desktop re-measured at 1280px to prove nothing regressed: bar still exactly **52px**, nav now inside it (was spilling 72px out of 52px), select 453.9 → 104px. `npm run build` clean, `tsc --noEmit` clean, **261 passing** (unchanged — CSS only, one file, 39 lines). DB untouched, at exact seed state.
+
+⚠️ **Knowing trade-off:** the mobile header is now **103px of a 844px viewport, and sticky**, because seven controls at 44px cannot fit one row at 390px. Containment was the fix; making it *short* means collapsing to a hamburger, which would be the first real departure from the prototype's shell — a design call for the user/client, not something to change silently. Dropping `flex-wrap` from `.topbar` itself (keeping it only on `.topnav`) already cut this from 153px to 103px by keeping the brand on the nav's first row.
+
+→ **New finding [F43], recorded not fixed — it belongs to T40.** With Arabic selected the page mirrors perfectly and the login form stays in **English**. **18 keys exist only in the `en` block** of `translations.js` (`label_email`, `label_password`, `auth_logout`, `auth_continue`, `auth_signup_success`, `auth_verify_banner`, `auth_toggle_to_login`/`_signup`, `auth_resend_verification`/`_sent`, `consumer_login_submit`/`_signup_submit`, `business_login_submit`/`_signup_submit`, `added`, `card`, `salon`, `unlocked`), so **7 of 8 languages fall back to English**. T35 added them *after* T40 was signed off — T40 was correct when ticked; this is drift. Separately, the consumer dashboard's four tab labels and the portal's `Profile`/`Team`/`Billing` are hardcoded English literals, not keys at all. It is a translation task, not a layout one, and folding it into T39 would have mixed two concerns in one commit.
+
 
 ## 9. RISK REGISTER — things that could cause trouble
 
