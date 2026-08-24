@@ -514,7 +514,7 @@ returns break.
 | # | Finding |
 |---|---|
 | **F24** | **The auth-switch links never worked.** The markup nested a "Go to business login" / "Go to customer login" anchor inside a `[data-i18n]` element, and `applyStaticTranslations()` overwrote that element's `innerHTML` with the plain-text translation, destroying the anchor on first render. The `business_login_link` key exists in all 8 languages and is referenced by nothing. One-line fix; needs a design call. |
-| **F25** | **Mobile overflows horizontally.** At a 390px viewport the document is 401px wide — the `.topnav` buttons don't wrap. Measured identically on the original, so it is original, not migration damage. This is **T39**. |
+| **F25** | ✅ **RESOLVED 2026-08-24 by T36.** ~~**Mobile overflows horizontally.** At a 390px viewport the document is 401px wide — the `.topnav` buttons don't wrap.~~ `flex-wrap:wrap` on `.topnav` (shared shell, so it fixes every view at once); re-measured at **390px on all six SPA views**. T39 stays open, but for the qualitative mobile pass — the overflow number is no longer the thing to chase. |
 | **F26** | **`footer_note` is now factually wrong.** It reads "data is shared & persisted live for everyone previewing this page" — true of the artifact's shared `window.storage`, false of per-browser `localStorage`. Needs a copy change or the API wiring that makes it true again. |
 
 ### What this does and doesn't close in TASKS.md
@@ -524,7 +524,7 @@ returns break.
 - ✅ **T41** (keep verify-email + billing-result working) — verified in every state
 - ✅ **T35** (auth UI) — done 2026-08-24 · ✅ **T36** (consumer flow) — done 2026-08-24
 - ⬜ **T37–T38** (merchant portal, admin panel against the **real API**) — still open
-- ⬜ **T39** (mobile-friendly) — still open; see F25
+- ⬜ **T39** (mobile-friendly) — still open, but **[F25] is closed** (T36): every view now measures 390px at a 390px viewport. What remains is the qualitative pass, not the overflow.
 - ⚠️ **Blocked on missing endpoints** — `GET /me/rewards` (**T42**) and
   `GET /visits/me` (**T45**) were the consumer half of this and both now exist
   (built by T36, 2026-08-24). What remains blocking is **T37**: the
