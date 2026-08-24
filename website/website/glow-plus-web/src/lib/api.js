@@ -414,3 +414,71 @@ export function acceptStaffInvite({ token, password, name }) {
     body: { token, password, name: name || undefined },
   });
 }
+
+/* --------------------------------------------------------------------------
+   Endpoints used by the SPA merchant portal (T37)
+
+   All on the merchant TOKEN_KEY (`glowplus:token`) — the default — which is
+   the same session the billing page holds, so the portal's "Billing" tab can
+   hand off to /business/billing without a second sign-in. The team page keeps
+   its own key on purpose (see STAFF_TOKEN_KEY above): it may hold a *staff*
+   token, which has fewer rights than the owner session the portal runs on.
+   -------------------------------------------------------------------------- */
+
+/** The merchant's own catalogue, including deactivated styles. */
+export function listStyles() {
+  return apiRequest('/styles');
+}
+
+export function createStyle({ name, type, pointsPerVisit }) {
+  return apiRequest('/styles', { method: 'POST', body: { name, type, pointsPerVisit } });
+}
+
+export function setStyleActive(id, active) {
+  return apiRequest(`/styles/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * Reward rules (T37) — these routes did not exist until T37 built them.
+ *
+ * Reads accept staff; every write is owner-only, enforced server-side by
+ * RequireMerchantOwnerGuard. The SPA only ever signs in owners (BusinessAuth
+ * calls /merchants/login), so the portal does not render a staff-mode form —
+ * but the refusal is real and does not depend on the UI to hold.
+ */
+export function listRewardRules() {
+  return apiRequest('/reward-rules');
+}
+
+export function createRewardRule(rule) {
+  return apiRequest('/reward-rules', { method: 'POST', body: rule });
+}
+
+export function setRewardRuleActive(id, active) {
+  return apiRequest(`/reward-rules/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, {
+    method: 'PATCH',
+  });
+}
+
+/** The merchant's visit ledger, newest first, with style and client included. */
+export function listMerchantVisits() {
+  return apiRequest('/visits');
+}
+
+/**
+ * Logs a visit. The client is named by EMAIL, not phone.
+ *
+ * The prototype's form asked for "Client phone" and keyed its fake data on it;
+ * the backend identifies people by email and creates a lightweight account for
+ * a walk-in who has never signed up (VisitsService.findOrCreateClient). Email
+ * is the identity the whole API — and the RN app's login — already uses, so
+ * the portal form follows the backend rather than the mockup.
+ */
+export function logVisit({ clientEmail, clientName, styleId }) {
+  return apiRequest('/visits', {
+    method: 'POST',
+    body: { clientEmail, clientName: clientName || undefined, styleId },
+  });
+}

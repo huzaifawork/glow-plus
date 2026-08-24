@@ -39,7 +39,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 48 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000 |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **230 passing** (`npm test`) — 17 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, input-validation (T31, 22), **pii-crypto (T31b, 25)**, **me.service (T42, 12)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **251 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, input-validation (T31, 22), **pii-crypto (T31b, 25)**, me.service (T42, 12), **reward-rules.service (T37, 21)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,27 +121,46 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **NEXT IS T37 (merchant portal)**
+## 8. EXACTLY where to resume — **NEXT IS T38 (admin panel)**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **Next task: T37 — merchant portal.** Read **T37 in `TASKS.md` before
-> writing anything**: it is not unblocked the way T36 was. The
-> `reward-rules` module has **no controller and no service CRUD** — only
-> `evaluate()` — so T37 means building the reward-rules HTTP layer *first*,
-> then wiring the portal. T37 also carries a scoping call to settle up
-> front (does "profile" mean editable? no `PATCH /merchants/me` exists).
+> **Next task: T38 — admin panel.** This one **is** unblocked, unlike T37:
+> T22 already built every admin endpoint (`/admin/login`,
+> `GET /admin/merchants/pending`, `PATCH /admin/merchants/:id/{approve,suspend}`,
+> `GET /admin/metrics/{mrr,churn,platform}`, all behind `RequireAdminGuard`),
+> **and** the standalone page `glow-plus-web/admin.html` → `/admin/panel`
+> already calls all of them. T38 is largely moving that into the SPA's
+> `Admin.jsx`, the same move T37 just made for `BusinessPortal.jsx`.
+> Reuse T36/T37's `useApiError` / `usePortalData` seam rather than
+> re-deriving it, and note the admin session has its **own** token key
+> (`glowplus:token:admin`) so it can coexist with a merchant session.
 >
-> **State as of session 17 (2026-08-24):** Phases 0–4 done. Phase 5 is
-> T33 ✅ T34 ✅ T35 ✅ **T36 ✅** T40 ✅ T41 ✅ — leaving **T37, T38, T39**.
+> **State as of session 18 (2026-08-24):** Phases 0–4 done. Phase 5 is
+> T33 ✅ T34 ✅ T35 ✅ T36 ✅ **T37 ✅** T40 ✅ T41 ✅ — leaving **T38, T39**.
 > Phase 6 is T42 ✅ T45 ✅ (built by T36), leaving T43/T44, which exist as
 > deliberate stopgaps from T18 and are probably reusable as-is.
-> **T38 is frontend-only** (T22 already built every admin endpoint).
-> **T39's [F25] overflow is closed** (T36); its remainder is qualitative.
+> **T39's [F25] overflow is closed** (T36); its remainder is qualitative, and
+> T37 re-measured 390px on all five portal tabs **with real rows loaded**,
+> which was the specific caveat T39 raised about empty-state measurements.
+>
+> **T37 built the reward-rules HTTP layer** (`GET/POST /reward-rules`,
+> `PATCH /:id`, `PATCH /:id/{activate,deactivate}`) — reads accept staff,
+> **every write is owner-only**, and there is deliberately **no DELETE**
+> (Redemption rows point at a rule by FK). [F30]'s paywall finally covers a
+> real `reward-rules` path. Two scoping calls were made and recorded in T37:
+> **profile is read-only** (no `PATCH /merchants/me` — a small follow-up if
+> the client wants editing), and **Team/Billing hand off** to the existing
+> `/team` and `/business/billing` pages rather than being duplicated.
 >
 > **Also open, unrelated to the website:** **T32** (M-Pesa — needs a client
 > decision, do not start without one) and **T31c** (Nest 11 / Vite 8 majors,
 > which should land before the client runs their own `npm audit`).
+>
+> ⚠️ **`@ThrottleCredentials()` will block you if you hammer login** while
+> debugging — 20 attempts / 5 min, then a **15-minute** block (T26 [F3],
+> working as designed). The throttler store is in-memory, so **restarting the
+> backend clears it**; don't mistake the 429 for a broken login.
 >
 > Everything is committed and pushed; the working tree is clean and the DB is
 > at seed state. Dev servers may still be running from the last session — see
@@ -545,7 +564,8 @@ returns break.
 - ✅ **T40** (preserve i18n) — all 8 languages + Arabic RTL verified
 - ✅ **T41** (keep verify-email + billing-result working) — verified in every state
 - ✅ **T35** (auth UI) — done 2026-08-24 · ✅ **T36** (consumer flow) — done 2026-08-24
-- ⬜ **T37–T38** (merchant portal, admin panel against the **real API**) — still open
+- ✅ **T37** (merchant portal against the **real API**) — done 2026-08-24; it also built the reward-rules HTTP layer the portal needed
+- ⬜ **T38** (admin panel against the **real API**) — still open
 - ⬜ **T39** (mobile-friendly) — still open, but **[F25] is closed** (T36): every view now measures 390px at a 390px viewport. What remains is the qualitative pass, not the overflow.
 - ⚠️ **Blocked on missing endpoints** — `GET /me/rewards` (**T42**) and
   `GET /visits/me` (**T45**) were the consumer half of this and both now exist
