@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
 import { OnboardingService } from './onboarding.service';
 import { MerchantAuthService } from './merchant-auth.service';
 import { MerchantLoginDto } from './login.dto';
 import { MerchantSignupDto } from './signup.dto';
+import { PublicMerchantsQueryDto } from './public-merchants-query.dto';
 import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
 
@@ -32,10 +34,41 @@ export class MerchantsController {
     return this.merchantAuth.login(dto);
   }
 
-  // Public salon directory — see MerchantsService.listPublic() (T18/T43).
-  @Get('public')
-  listPublic() {
-    return this.merchants.listPublic();
+  /**
+   * Public salon directory (T43). Supports `?q=`, `?limit=`, `?offset=`.
+   *
+   * Declared before `@Get('me')` only for readability — Nest matches
+   * `/merchants` and `/merchants/me` as distinct paths, so order is not
+   * load-bearing here the way it would be under a `:id` param route.
+   *
+   * `passthrough: true` matters: without it, injecting `@Res()` switches the
+   * handler into manual mode and Nest stops serialising the return value, so
+   * the request hangs until it times out. With it, the header is set and the
+   * returned array is still sent normally — and the global exception filter
+   * still owns any error thrown below.
+   *
+   * The total goes in a header rather than an envelope so the body stays the
+   * bare array the RN app maps over. `Access-Control-Expose-Headers` is what
+   * makes it readable from the browser at all: `X-Total-Count` is not a
+   * CORS-safelisted response header, so without this the website sees `null`
+   * even though the header is on the wire. Set here, next to the header it
+   * exposes, rather than globally — this is the only route that sends it.
+   */
+  @Get()
+  async list(@Query() query: PublicMerchantsQueryDto, @Res({ passthrough: true }) res: Response) {
+    const { items, total } = await this.merchants.listPublic(query);
+    res.setHeader('X-Total-Count', String(total));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count');
+    return items;
+  }
+
+  /**
+   * Founding-spots counter for the landing page (T43) [F42]. Public — it sits
+   * above the fold and returns one integer, no merchant identities.
+   */
+  @Get('founding-spots')
+  foundingSpots() {
+    return this.merchants.foundingSpots();
   }
 
   // Merchant-only (T29). Deliberately NOT behind RequireActiveSubscriptionGuard:

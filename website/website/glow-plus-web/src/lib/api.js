@@ -221,8 +221,35 @@ export async function consumerLogin(email, password) {
   return data;
 }
 
-export function listPublicMerchants() {
-  return apiRequest('/merchants/public', { auth: false });
+/**
+ * The public salon directory (T43).
+ *
+ * **The path is `/merchants`, not T18's `/merchants/public`** — that stopgap
+ * is gone. `/merchants` is what the React Native app already calls
+ * (`client.js:152`), so having one canonical route is what lets Order 2 ship
+ * against this backend unchanged.
+ *
+ * Each row now carries `foundingMember`, `styleCount` and `styleTypes`, which
+ * is why the salon grid no longer fetches a style list per salon.
+ *
+ * `q`/`limit`/`offset` are supported server-side and passed through here;
+ * nothing in the site paginates yet, and the API's default page is larger
+ * than the directory, so callers can keep omitting them. The filtered total
+ * rides on the `X-Total-Count` response header (exposed via CORS) rather than
+ * wrapping the body, because the RN app maps over the array directly.
+ */
+export function listPublicMerchants({ q, limit, offset } = {}) {
+  const qs = new URLSearchParams();
+  if (q) qs.set('q', q);
+  if (limit != null) qs.set('limit', String(limit));
+  if (offset != null) qs.set('offset', String(offset));
+  const suffix = qs.toString();
+  return apiRequest('/merchants' + (suffix ? `?${suffix}` : ''), { auth: false });
+}
+
+/** Founding-spots counter for the landing page (T43) [F42] — `{ cap, taken, left }`. */
+export function getFoundingSpots() {
+  return apiRequest('/merchants/founding-spots', { auth: false });
 }
 
 export function listPublicStyles(merchantId) {

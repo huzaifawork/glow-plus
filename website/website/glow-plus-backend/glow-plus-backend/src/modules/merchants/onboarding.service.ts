@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationService } from '../auth/email-verification.service';
+import { FOUNDING_MEMBER_CAP } from './founding';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
   apiVersion: '2025-03-31.basil' as Stripe.LatestApiVersion,
@@ -72,8 +73,11 @@ export class OnboardingService {
     // First 50 salons/spas on the platform get an extra free month on top
     // of the standard 7-day trial — decided at signup time so the offer
     // can't be gamed by re-signing up after the 50th account lands.
+    // T43 — the 50 is FOUNDING_MEMBER_CAP now, shared with the public
+    // spots-left counter so the landing page cannot advertise a spot this
+    // line is about to refuse.
     const merchantCount = await this.prisma.merchant.count();
-    const foundingMember = merchantCount < 50;
+    const foundingMember = merchantCount < FOUNDING_MEMBER_CAP;
 
     let merchant;
     try {

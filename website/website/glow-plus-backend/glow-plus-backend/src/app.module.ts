@@ -90,11 +90,16 @@ export class AppModule implements NestModule {
         // GET only: PUT /business-hours (merchant-only) stays protected.
         { path: 'bookings/availability', method: RequestMethod.GET },
         { path: 'business-hours/(.*)', method: RequestMethod.GET },
-        // Public salon directory + style list (T18, pulled forward from
-        // T43/T44) — a consumer picks a merchant and a style before booking,
-        // both before creating an account. GET only: the merchant-scoped
-        // GET /merchants/me and GET /styles stay protected.
-        { path: 'merchants/public', method: RequestMethod.GET },
+        // Public salon directory + style list — a consumer picks a merchant
+        // and a style before booking, both before creating an account.
+        // GET only: the merchant-scoped GET /merchants/me and GET /styles
+        // stay protected, and each path is listed exactly rather than as
+        // 'merchants/(.*)' precisely so that stays true.
+        // T43 moved the directory from 'merchants/public' to 'merchants' —
+        // the path the RN app calls — and added the founding-spots counter,
+        // which is on the landing page above the fold [F42].
+        { path: 'merchants', method: RequestMethod.GET },
+        { path: 'merchants/founding-spots', method: RequestMethod.GET },
         { path: 'styles/public/(.*)', method: RequestMethod.GET },
         // Staff invite acceptance + staff login (T24). An invitee has no
         // account yet, so they cannot hold a token — these must be reachable

@@ -2,9 +2,7 @@ import { useI18n } from '../i18n/I18nContext.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { useNav } from '../lib/useNav.js';
 import { useAsyncData } from '../lib/useAsyncData.js';
-import { getMerchants } from '../lib/data.js';
-import { listPublicMerchants, listPublicStyles } from '../lib/api.js';
-import { FOUNDING_BADGE_CAP } from '../lib/helpers.js';
+import { listPublicMerchants, getFoundingSpots } from '../lib/api.js';
 import Punch from '../components/Punch.jsx';
 import T from '../components/T.jsx';
 
@@ -12,33 +10,25 @@ import T from '../components/T.jsx';
    T36 — the real public salon directory. This used to read `data.js`, i.e.
    this browser's own localStorage, so the landing page's "find a salon"
    section could only ever list salons *you* had invented on *this* machine
-   [F9]. It now reads GET /merchants/public (ACTIVE merchants only, enforced
-   server-side) and GET /styles/public/:merchantId.
+   [F9]. It reads the real directory instead: ACTIVE merchants only, enforced
+   server-side.
 
-   Both are genuinely public — no bearer token — which they have to be: this
-   section sits above the fold on the marketing page, long before anyone has
-   an account. Loading them here is also what keeps T48 honest. */
+   It is genuinely public — no bearer token — which it has to be: this section
+   sits above the fold on the marketing page, long before anyone has an
+   account. Loading it here is also what keeps T48 honest.
+
+   T43 — **one request, not 1+N.** T36 had to call GET /styles/public/:id once
+   per salon purely to render "3 styles on the menu" and the tag row, so a
+   directory of 40 salons cost 41 round trips from the landing page, in
+   series-ish bursts, before anything rendered. `GET /merchants` now carries
+   `styleCount` and `styleTypes` itself. */
 function SalonGrid() {
   const { dataVersion } = useApp();
 
   const cards = useAsyncData(
     async () => {
       try {
-        const merchants = await listPublicMerchants();
-        return await Promise.all(
-          merchants.map(async (m) => {
-            // One salon with no menu must not blank the whole directory, so a
-            // failed style lookup degrades to "Menu coming soon" — which is
-            // already a state this card knows how to render.
-            const styles = await listPublicStyles(m.id).catch(() => []);
-            return {
-              id: m.id,
-              businessName: m.businessName,
-              styleCount: styles.length,
-              types: [...new Set(styles.map((s) => s.type))],
-            };
-          })
-        );
+        return await listPublicMerchants();
       } catch {
         // The empty state below reads "no salons live on Glow+ yet", which is
         // also the least misleading thing to say when the API is unreachable.
@@ -68,8 +58,8 @@ function SalonGrid() {
             {c.styleCount} style{c.styleCount === 1 ? '' : 's'} on the menu
           </div>
           <div style={{ marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {c.types.length ? (
-              c.types.map((type) => (
+            {c.styleTypes.length ? (
+              c.styleTypes.map((type) => (
                 <span className={'tag ' + type} key={type}>
                   {type.toLowerCase()}
                 </span>
@@ -84,29 +74,39 @@ function SalonGrid() {
   );
 }
 
-/* ---------- founding-spots counter (port of renderFoundingSpots) ---------- */
+/* ---------- founding-spots counter (port of renderFoundingSpots) ----------
+   T43 [F42] — this was the last thing in the SPA still reading localStorage.
+   It counted `foundingBadge` in `data.js`, i.e. salons invented in *this*
+   browser, so on any fresh browser it announced all 50 spots free — forever,
+   however many salons had actually signed up. It now asks the API.
+
+   The cap comes from the server too, not from a constant here: signup decides
+   the badge from the same number (`FOUNDING_MEMBER_CAP`), and a marketing
+   page that advertises a spot the signup route is about to refuse is worse
+   than the bug this replaces. */
 function FoundingSpots() {
   const { t } = useI18n();
   const { dataVersion } = useApp();
 
-  const taken = useAsyncData(
-    async () => (await getMerchants()).filter((m) => m.foundingBadge).length,
+  const spots = useAsyncData(
+    // The placeholder copy below is a better failure state than a wrong
+    // number, so an unreachable API keeps "checking availability" rather than
+    // claiming the offer is either open or gone.
+    () => getFoundingSpots().catch(() => null),
     [dataVersion],
     null
   );
 
   // Until the count lands, the element keeps its data-i18n placeholder copy,
   // exactly as the original markup did.
-  if (taken === null) {
+  if (!spots) {
     return <T as="div" className="fsub" id="foundingSpotsLeft" k="founding_checking" />;
   }
 
-  const left = Math.max(FOUNDING_BADGE_CAP - taken, 0);
-
   return (
     <div className="fsub" id="foundingSpotsLeft">
-      {left > 0
-        ? left + ' ' + t('founding_spots_left_suffix', { cap: FOUNDING_BADGE_CAP })
+      {spots.left > 0
+        ? spots.left + ' ' + t('founding_spots_left_suffix', { cap: spots.cap })
         : t('founding_spots_claimed')}
     </div>
   );

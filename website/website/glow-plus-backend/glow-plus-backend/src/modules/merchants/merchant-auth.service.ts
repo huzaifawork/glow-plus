@@ -23,6 +23,13 @@ export class MerchantAuthService {
         businessName: merchant.businessName,
         status: merchant.status,
         emailVerified: !!merchant.emailVerifiedAt,
+        // T43 [F44] — additive. The portal's "waiting for approval" banner has
+        // two versions, and the founding one could never render: it tested
+        // `currentMerchant.foundingBadge`, a name only the localStorage
+        // prototype ever used, and login had no founding field under any name.
+        // So the salons actually owed the extra free month were the ones told
+        // about the standard trial.
+        foundingMember: merchant.foundingMember,
       },
     };
   }

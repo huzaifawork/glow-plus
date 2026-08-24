@@ -36,10 +36,10 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25) |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 63 routes mapped, Prisma connected. **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **261 passing** (`npm test`) — 18 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ Jest configured, **280 passing** (`npm test`) — 19 suites: jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**. ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -121,14 +121,53 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **PHASE 5 IS DONE. Next is Phase 6 (T43/T44) or Phase 7.**
+## 8. EXACTLY where to resume — **Phase 5 done, Phase 6 all but done. Next is T44, then Phase 7.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 20 (2026-08-25): Phase 5 is finished. 43 of 65 done.**
-> T33 ✅ T34 ✅ T35 ✅ T36 ✅ T37 ✅ T38 ✅ **T39 ✅** T40 ✅ T41 ✅ — the
-> website phase is closed. Phase 6 is T42 ✅ T45 ✅, leaving **T43/T44**, which
-> exist as deliberate stopgaps from T18 and are probably reusable as-is.
+> **State as of session 21 (2026-08-25): 44 of 65 done. Phase 6 is T42 ✅
+> T43 ✅ T45 ✅ — only T44 is left in it.**
+>
+> **T43 is done: `GET /merchants` is the public salon directory.** Read its
+> TASKS.md entry before touching that module; four decisions there are easy to
+> undo by accident.
+> 1. **`GET /merchants/public` is gone, not aliased.** The RN app calls
+>    `/merchants` (`client.js:152`). Two paths serving one list is how the
+>    shapes drift, and nothing is deployed yet. Its AuthMiddleware exclusion
+>    is the **exact** path `merchants` — *not* `merchants/(.*)`, or
+>    `GET /merchants/me` goes public with it.
+> 2. **The body is a bare array on purpose, even though it paginates.**
+>    `BookScreen.js:29` maps the response directly, so an `{ items, total }`
+>    envelope breaks Order 2. The total is in **`X-Total-Count`**, and the
+>    `Access-Control-Expose-Headers` line next to it is what makes that header
+>    readable from a browser at all — delete it and the website silently reads
+>    `null`.
+> 3. **`styleCount`/`styleTypes` on each row are not decoration** — they exist
+>    so the landing page stops calling `/styles/public/:id` once per salon.
+>    Reverting them restores an N+1 above the fold.
+> 4. **The founding count counts merchant ROWS, not badges, at every status.**
+>    That is what `OnboardingService.signup` gates on. "Fixing" it to filter
+>    `foundingMember: true` or `status: ACTIVE` makes the landing page
+>    advertise spots that signup then refuses.
+>
+> **[F42] is closed and the SPA no longer reads `localStorage` for data at
+> all** — `data.js` is down to the language preference. **[F44] was found
+> while closing it and fixed here:** the portal's founding-member banner had
+> never rendered once, because it tested `foundingBadge` (a prototype-only
+> name) against a login response that carried no founding field at all, so the
+> salons owed the extra free month were the ones told about the standard
+> trial. **[F45] is new and deliberately left**: the directory sorts
+> case-sensitively, so `glow bar downtown` lands after `Zenith Hair`. It needs
+> a collation decision and belongs with **T52**.
+>
+> ⚠️ **If `npm test` dies with `FATAL ERROR: Zone Allocation failed`, look for
+> a stray `.js`/`.js.map` in the backend root before you touch jest.config.**
+> `npx ts-node` emits one beside any `.ts` you run there, jest's transform
+> matches `.js`, and ts-jest then follows the sourcemap until it runs out of
+> memory. Session 21 lost time to this.
+>
+> **T44 is what remains of Phase 6**, and it is smaller than it was — see its
+> TASKS.md note. **Then Phase 7.**
 >
 > **T39 is done — the mobile pass found four real defects, not none.** Read
 > its TASKS.md entry before touching `global.css`. The headline: **T36's

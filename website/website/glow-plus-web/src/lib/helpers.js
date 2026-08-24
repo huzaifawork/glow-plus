@@ -18,9 +18,6 @@ export function formatPhone(p) {
   return p;
 }
 
-// Informational only — everyone still gets the free first month.
-export const FOUNDING_BADGE_CAP = 50;
-
 /* --------------------------------------------------------------------------
    Date formatting shared by every consumer-facing surface (T36).
 

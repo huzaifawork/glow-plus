@@ -36,6 +36,10 @@ export default function BusinessAuth({ active }) {
           id: data.merchant.id,
           businessName: data.merchant.businessName,
           status: data.merchant.status,
+          // T43 [F44] — the portal's pending banner reads this. It used to
+          // look for `foundingBadge`, which nothing here ever set, so the
+          // founding half of the banner was unreachable.
+          foundingMember: data.merchant.foundingMember,
           createdAt: Date.now(),
         });
         if (!data.merchant.emailVerified) toast(t('auth_verify_banner', { email: email.trim() }));

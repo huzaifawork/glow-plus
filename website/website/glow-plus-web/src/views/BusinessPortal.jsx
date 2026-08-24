@@ -754,7 +754,7 @@ export default function BusinessPortal({ active }) {
     bannerMsg =
       status === 'PENDING'
         ? t('pending_banner_base') +
-          (currentMerchant.foundingBadge
+          (currentMerchant.foundingMember
             ? ' ' + t('pending_banner_founding')
             : ' ' + t('pending_banner_standard'))
         : t('suspended_banner');
