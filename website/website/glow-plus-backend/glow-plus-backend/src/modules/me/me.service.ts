@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { freeServiceFields, resolveFreeServiceNames } from '../../common/free-service';
 
 /** How many visits each salon block carries back. The prototype's dashboard
  *  sliced its "Recent visits" list at 5, and the RN app's demo payload shows 3
@@ -100,6 +101,11 @@ export class MeService {
       this.prisma.redemption.findMany({ where: { userId }, select: { rewardRuleId: true } }),
     ]);
 
+    // [F62] — a FREE_SERVICE rule's value is a style, not a number, and the
+    // id was never in this payload. One query, and only when such a rule
+    // exists. See common/free-service.ts.
+    const freeServiceNames = await resolveFreeServiceNames(this.prisma, rules);
+
     const nameOf = new Map(merchants.map((m) => [m.id, m.businessName]));
     const redeemedCountOf = new Map<string, number>();
     for (const r of redemptions) {
@@ -134,6 +140,7 @@ export class MeService {
             remaining: rule.triggerValue - (progress % rule.triggerValue),
             rewardType: rule.rewardType,
             rewardValue: rule.rewardValue,
+            ...freeServiceFields(rule, freeServiceNames),
             oneTime: rule.oneTime,
             eligible: rule.oneTime ? unlockedCount > 0 && redeemedCount === 0 : redeemedCount < unlockedCount,
           };

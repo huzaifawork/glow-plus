@@ -89,12 +89,25 @@ function useApiData(loader, deps) {
   );
 }
 
+/**
+ * What the customer actually gets.  [F62]
+ *
+ * The FREE_SERVICE branch used to be `r.rewardValue + ' free'`, and a
+ * FREE_SERVICE rule holds its value in a *style*, not a number — `rewardValue`
+ * stays **0**. So a rule giving away a free Deep Tissue Massage rendered as
+ * **"0 free"**, and on an unlocked card as `Ready — 0 free` with a Redeem
+ * button next to it. `/me/rewards` now sends `freeServiceName` alongside.
+ *
+ * The null fallback is not defensive padding: `freeServiceStyleId` has no
+ * foreign key, so it can genuinely name a style that was deleted. "a free
+ * service" is vague but true; "0 free" was neither.
+ */
 function rewardLabel(r) {
-  return r.rewardType === 'PERCENT_OFF'
-    ? r.rewardValue + '% off'
-    : r.rewardType === 'FLAT_DISCOUNT'
-    ? '$' + (r.rewardValue / 100).toFixed(2).replace(/\.00$/, '') + ' off'
-    : r.rewardValue + ' free';
+  if (r.rewardType === 'PERCENT_OFF') return r.rewardValue + '% off';
+  if (r.rewardType === 'FLAT_DISCOUNT') {
+    return '$' + (r.rewardValue / 100).toFixed(2).replace(/\.00$/, '') + ' off';
+  }
+  return r.freeServiceName ? 'a free ' + r.freeServiceName : 'a free service';
 }
 
 function unitLabel(r) {

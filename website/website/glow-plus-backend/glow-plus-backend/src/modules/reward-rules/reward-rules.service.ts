@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { freeServiceFields, resolveFreeServiceNames } from '../../common/free-service';
 import {
   CreateRewardRuleDto,
   REWARD_VALUE_BOUNDS,
@@ -65,14 +66,20 @@ export class RewardRulesService {
    * turn back on. The consumer-facing paths (`/me/rewards`, `POST /visits`)
    * do their own `active: true` filtering.
    */
-  list(merchantId: string) {
-    return this.prisma.rewardRule.findMany({
+  async list(merchantId: string) {
+    const rules = await this.prisma.rewardRule.findMany({
       where: { merchantId },
       orderBy: { createdAt: 'asc' },
       include: {
         styleScope: { select: { id: true, name: true, type: true } },
       },
     });
+    // [F62] — `styleScope` gets an `include` because it is a real relation;
+    // `freeServiceStyleId` cannot, because it is a bare `String?` with no
+    // foreign key. Resolved by hand so the salon's own rules list can say
+    // "Free Deep Tissue Massage" rather than just "Free service".
+    const names = await resolveFreeServiceNames(this.prisma, rules);
+    return rules.map((rule) => ({ ...rule, ...freeServiceFields(rule, names) }));
   }
 
   async create(merchantId: string, dto: CreateRewardRuleDto) {

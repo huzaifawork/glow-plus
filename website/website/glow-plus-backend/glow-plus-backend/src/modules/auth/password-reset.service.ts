@@ -66,9 +66,14 @@ export class PasswordResetService {
 
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
+    // One instant for the whole transaction. The token being spent, the
+    // address being proved [F61] and the old sessions dying are a single
+    // event, and three separate `new Date()` calls would date them apart.
+    const now = new Date();
+
     const queries: Prisma.PrismaPromise<any>[] = [
-      this.prisma.passwordReset.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-      ...this.updatePasswordQuery(record.accountId, record.accountType as AccountType, passwordHash),
+      this.prisma.passwordReset.update({ where: { id: record.id }, data: { usedAt: now } }),
+      ...this.updatePasswordQuery(record.accountId, record.accountType as AccountType, passwordHash, now),
       // T47 — every session issued before this reset dies with it.
       //
       // Until now a password reset changed the password and nothing else: the
@@ -87,7 +92,7 @@ export class PasswordResetService {
           accountType: record.accountType as AccountType,
           revokedAt: null,
         },
-        data: { revokedAt: new Date() },
+        data: { revokedAt: now },
       }),
     ];
 
@@ -96,12 +101,53 @@ export class PasswordResetService {
     return { ok: true };
   }
 
-  private updatePasswordQuery(accountId: string, accountType: AccountType, passwordHash: string): Prisma.PrismaPromise<any>[] {
+  /**
+   * The new password, plus the verification a completed reset has just proved.
+   * [F61]
+   *
+   * Consuming this token means the emailed link was received and opened, which
+   * is the *same* evidence the verification link carries — the two flows send
+   * a one-time secret to the address and wait for it to come back. Leaving
+   * `emailVerifiedAt` NULL after that under-reports what the server knows.
+   *
+   * It is not a tidiness point. `POST /visits` creates a walk-in with a
+   * 128-bit password they never see, so they never sign up, so
+   * `sendVerificationEmail` is never called for them and signup answers them
+   * 409 [F56]. The resend button is the only other route to a verification
+   * mail and it renders solely off `signupNotice` — set only by a *successful*
+   * signup — so a walk-in cannot reach that either. Without this, every
+   * walk-in a salon logs is permanently unverifiable: reset gets them in, and
+   * then the "verify your email" banner follows them on every login forever
+   * with no control anywhere in the product that can clear it.
+   *
+   * `updateMany` with `emailVerifiedAt: null` in the WHERE, not `update`, so
+   * an account that verified properly months ago keeps its original
+   * timestamp instead of having it rewritten to today by an unrelated
+   * password change. Already-verified accounts simply match 0 rows.
+   */
+  private updatePasswordQuery(
+    accountId: string,
+    accountType: AccountType,
+    passwordHash: string,
+    now: Date,
+  ): Prisma.PrismaPromise<any>[] {
     switch (accountType) {
       case 'CONSUMER':
-        return [this.prisma.user.update({ where: { id: accountId }, data: { passwordHash } })];
+        return [
+          this.prisma.user.update({ where: { id: accountId }, data: { passwordHash } }),
+          this.prisma.user.updateMany({
+            where: { id: accountId, emailVerifiedAt: null },
+            data: { emailVerifiedAt: now },
+          }),
+        ];
       case 'MERCHANT':
-        return [this.prisma.merchant.update({ where: { id: accountId }, data: { passwordHash } })];
+        return [
+          this.prisma.merchant.update({ where: { id: accountId }, data: { passwordHash } }),
+          this.prisma.merchant.updateMany({
+            where: { id: accountId, emailVerifiedAt: null },
+            data: { emailVerifiedAt: now },
+          }),
+        ];
     }
   }
 }

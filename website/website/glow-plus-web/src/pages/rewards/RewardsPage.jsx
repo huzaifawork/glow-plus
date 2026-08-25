@@ -24,10 +24,14 @@ const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span></div>
 );
 
-function formatReward(rewardType, rewardValue) {
-  if (rewardType === 'PERCENT_OFF') return `${rewardValue}% off`;
-  if (rewardType === 'FLAT_DISCOUNT') return `$${(rewardValue / 100).toFixed(2)} off`;
-  return 'Free service';
+// [F62] — this page said a truthful but vague "Free service" where the SPA
+// said "0 free". Now that `/redemptions/available` carries `freeServiceName`,
+// both can name the thing. Falls back to the old wording when the name is null
+// — `freeServiceStyleId` has no foreign key, so it can outlive its style.
+function formatReward(r) {
+  if (r.rewardType === 'PERCENT_OFF') return `${r.rewardValue}% off`;
+  if (r.rewardType === 'FLAT_DISCOUNT') return `$${(r.rewardValue / 100).toFixed(2)} off`;
+  return r.freeServiceName ? `Free ${r.freeServiceName}` : 'Free service';
 }
 
 function formatDate(iso) {
@@ -291,7 +295,7 @@ function RewardsList() {
               <div className="reward-info">
                 <div className="reward-name">{r.name}</div>
                 <div className="reward-progress">
-                  {formatReward(r.rewardType, r.rewardValue)} · {r.progress}/{r.triggerValue}
+                  {formatReward(r)} · {r.progress}/{r.triggerValue}
                   {r.triggerType === 'POINTS_THRESHOLD' ? ' points' : ' visits'}
                   {r.eligible ? '' : ` · ${r.remaining} to go`}
                 </div>

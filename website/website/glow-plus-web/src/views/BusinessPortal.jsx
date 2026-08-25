@@ -7,6 +7,7 @@ import {
   createRewardRule,
   createStyle,
   getMerchantProfile,
+  listMerchantRedemptions,
   listMerchantVisits,
   listRewardRules,
   listStyles,
@@ -17,7 +18,7 @@ import {
   getMyBusinessHours,
   setBusinessHours,
 } from '../lib/api.js';
-import { formatDay } from '../lib/helpers.js';
+import { formatDateTime, formatDay } from '../lib/helpers.js';
 import T from '../components/T.jsx';
 
 /**
@@ -145,7 +146,12 @@ function rewardLabel(r) {
   if (r.rewardType === 'FLAT_DISCOUNT') {
     return '$' + (r.rewardValue / 100).toFixed(2).replace(/\.00$/, '') + ' off';
   }
-  return 'Free service';
+  // [F62] — a FREE_SERVICE rule keeps `rewardValue` at 0 and holds its real
+  // value in `freeServiceStyleId`, so anything reading `rewardValue` alone
+  // prints nothing useful (the consumer dashboard printed "0 free"). The null
+  // fallback is load-bearing: `freeServiceStyleId` carries no foreign key, so
+  // it can outlive the style it names.
+  return r.freeServiceName ? 'Free ' + r.freeServiceName : 'Free service';
 }
 
 function unitLabel(r) {
@@ -756,6 +762,72 @@ function LedgerPanel({ active }) {
 }
 
 /* ============================================================
+   Redemptions tab  [F60]
+   ============================================================
+
+   `GET /redemptions` shipped in T23 — role-guarded, tested, returning the
+   salon's redemption rows enriched with the client's name and email
+   (TASKS.md:387) — and then **no client ever called it.** T23's only frontend
+   was the standalone `/consumer/rewards` page, written that way because T35's
+   auth UI did not exist yet (TASKS.md:393); the merchant half of the same
+   feature was never given a screen at all, and the portal that arrived later
+   in T37 had no tab for it.
+
+   That is not cosmetic. `POST /redemptions` writes a row and returns — it
+   sends the salon nothing, and the customer's own confirmation is a toast
+   that disappears on the next render. Without this panel a customer walks in
+   saying "the app gave me 20% off" and there is nowhere for the salon to
+   check. The reward is recorded and unclaimable.
+
+   Read-only on purpose. Marking a redemption "used at the counter" is a
+   second state this table does not have a column for, and inventing one here
+   would be a schema decision made from a UI. Recorded for the client instead.
+   ============================================================ */
+function RedemptionsPanel({ active }) {
+  const rows = usePortalData(() => listMerchantRedemptions(), []) || [];
+
+  return (
+    <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-redemptions">
+      <div className="hint" style={{ marginBottom: '10px' }}>
+        Rewards your clients have claimed in the app. Check here when someone
+        says they have a discount waiting.
+      </div>
+      {/* Same `.table-scroll` as the ledger — four columns are wider than a
+          phone, and without it the page scrolls sideways instead of the table. */}
+      <div className="table-scroll">
+        <table className="ledger">
+          <thead>
+            <tr>
+              <T as="th" k="th_date" />
+              <T as="th" k="th_client" />
+              <th>Reward</th>
+              <th>Worth</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>{formatDateTime(r.redeemedAt)}</td>
+                <td>{(r.user && (r.user.name || r.user.email)) || 'Client'}</td>
+                <td>{r.rewardRule ? r.rewardRule.name : ''}</td>
+                <td className="pts">{r.rewardRule ? rewardLabel(r.rewardRule) : ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div
+        className="empty"
+        style={{ display: rows.length ? 'none' : 'block', marginTop: '16px' }}
+      >
+        No rewards claimed yet. Once a client redeems one, it appears here with
+        their name so you can honour it at the counter.
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
    Profile tab
 
    Read-only, deliberately. No PATCH /merchants/me exists, and adding one is a
@@ -991,6 +1063,7 @@ export default function BusinessPortal({ active }) {
     ['styles', t('tab_styles')],
     ['rules', t('tab_rules')],
     ['ledger', t('tab_ledger')],
+    ['redemptions', 'Redemptions'],
     ['hours', 'Opening hours'],
     ['profile', 'Profile'],
     ['team', 'Team'],
@@ -1029,6 +1102,7 @@ export default function BusinessPortal({ active }) {
       <StylesPanel active={tab === 'styles'} />
       <RulesPanel active={tab === 'rules'} />
       <LedgerPanel active={tab === 'ledger'} />
+      <RedemptionsPanel active={tab === 'redemptions'} />
       <HoursPanel active={tab === 'hours'} />
       <ProfilePanel active={tab === 'profile'} />
       <LinkOutPanel

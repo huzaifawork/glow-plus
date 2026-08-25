@@ -736,6 +736,28 @@ export function listMerchantVisits() {
 }
 
 /**
+ * The salon's redemption history, newest first, with the client's name/email
+ * and the rule that was claimed.  [F60]
+ *
+ * `GET /redemptions` shipped in T23 and — exactly like `PUT /business-hours`
+ * before [F52] and `PATCH /styles/:id` before session 27 — **no client ever
+ * called it.** T23's only frontend was the standalone `/consumer/rewards`
+ * page, written that way because T35's auth UI did not exist yet
+ * (TASKS.md:393); the merchant half of the same feature was never given a
+ * screen at all.
+ *
+ * That is not a missing convenience. `POST /redemptions` writes a row and
+ * returns — it does not email the salon, and the consumer's confirmation is a
+ * toast that disappears. Without this call there is no surface anywhere in the
+ * product on which a salon can learn that a customer claimed 20% off, so the
+ * reward is recorded and unclaimable and the loyalty loop does not close at
+ * the counter.
+ */
+export function listMerchantRedemptions() {
+  return apiRequest('/redemptions');
+}
+
+/**
  * Logs a visit. The client is named by EMAIL, not phone.
  *
  * The prototype's form asked for "Client phone" and keyed its fake data on it;

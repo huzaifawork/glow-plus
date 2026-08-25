@@ -50,6 +50,9 @@ function aRule(over: Record<string, unknown> = {}) {
     styleScopeId: null,
     rewardType: 'PERCENT_OFF',
     rewardValue: 15,
+    // [F62] — a real RewardRule row always carries this column; it is null on
+    // every rule that is not a FREE_SERVICE.
+    freeServiceStyleId: null,
     oneTime: false,
     ...over,
   };
@@ -60,6 +63,7 @@ describe('MeService.rewards', () => {
   const merchantFindMany = jest.fn();
   const ruleFindMany = jest.fn();
   const redemptionFindMany = jest.fn();
+  const styleFindMany = jest.fn();
   let service: MeService;
 
   beforeEach(async () => {
@@ -71,6 +75,7 @@ describe('MeService.rewards', () => {
     ]);
     ruleFindMany.mockReset().mockResolvedValue([]);
     redemptionFindMany.mockReset().mockResolvedValue([]);
+    styleFindMany.mockReset().mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -82,6 +87,7 @@ describe('MeService.rewards', () => {
             merchant: { findMany: merchantFindMany },
             rewardRule: { findMany: ruleFindMany },
             redemption: { findMany: redemptionFindMany },
+            style: { findMany: styleFindMany },
           },
         },
       ],
@@ -111,6 +117,10 @@ describe('MeService.rewards', () => {
       // Additive beyond the RN shape — see the service docblock.
       oneTime: false,
       eligible: false,
+      // [F62] — present on EVERY reward, null unless it is a FREE_SERVICE, so
+      // a client can read them without first branching on rewardType.
+      freeServiceStyleId: null,
+      freeServiceName: null,
     });
     expect(res.merchants[0].recentVisits[0]).toEqual({
       id: 'v1',

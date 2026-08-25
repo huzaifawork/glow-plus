@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { assertMerchantVisible } from '../../common/merchant-visibility';
-import { dayOfWeekFor, isValidDateISO, salonWallTimeToInstant } from '../../common/salon-time';
+import { dayOfWeekFor, isValidDateISO, salonDateFor, salonWallTimeToInstant } from '../../common/salon-time';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const SLOT_GRANULARITY_MINUTES = 15; // candidate slots start every 15 min
@@ -86,6 +86,73 @@ export class AvailabilityService {
     }
 
     return slots;
+  }
+
+  /**
+   * Refuses a requested appointment that the salon is not open for.  [F64]
+   *
+   * `POST /bookings` validated the merchant, the style, the past and a
+   * conflicting booking — and **never consulted `BusinessHours` at all.**
+   * `isSlotStillAvailable()` below only looks for a clashing row, so opening
+   * hours were enforced by nothing but the slot grid the browser happened to
+   * render. A grid is a suggestion. Proved live: a booking on the salon's
+   * closed Sunday, one two hours before opening, and one starting at 4:30 PM
+   * for a 90-minute service that ran an hour past closing were **all accepted
+   * with 201**.
+   *
+   * This is the same reasoning already written into `create()` for T48
+   * [F47] — *"Re-checked here and not merely on the availability route,
+   * because a client can POST straight to this one"* — which was applied to
+   * merchant visibility and never to hours.
+   *
+   * The grid-alignment check is deliberately expressed as **membership in the
+   * slots this service itself would offer**, rather than as a re-derived
+   * modulo. A second copy of the rule is a second thing to drift; asking the
+   * generator makes it impossible for the write path to refuse a slot the
+   * read path advertised, or accept one it never showed.
+   */
+  async assertBookable(
+    merchantId: string,
+    styleId: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<void> {
+    // The salon's calendar date for this instant — NOT the server's. A 10:30 PM
+    // Toronto appointment is already "tomorrow" in UTC, and looking up
+    // tomorrow's hours row would apply the wrong day's opening times.
+    const dateISO = salonDateFor(startTime);
+    const dayOfWeek = dayOfWeekFor(dateISO);
+
+    const hours = await this.prisma.businessHours.findUnique({
+      where: { merchantId_dayOfWeek: { merchantId, dayOfWeek } },
+    });
+    // A missing row and `closed` are the same answer to a customer, and the
+    // distinction that matters ([F52] — a salon that never set its hours) is
+    // the salon's problem to fix, not something to expose here.
+    if (!hours || hours.closed) {
+      throw new BadRequestException('The salon is closed that day. Please pick another date.');
+    }
+
+    const opensAt = salonWallTimeToInstant(dateISO, hours.openTime);
+    const closesAt = salonWallTimeToInstant(dateISO, hours.closeTime);
+
+    if (startTime < opensAt) {
+      throw new BadRequestException('That time is before the salon opens. Please pick another time.');
+    }
+    // `endTime`, not `startTime` — booking a 90-minute service half an hour
+    // before closing is the case that actually costs the salon an hour.
+    if (endTime > closesAt) {
+      throw new BadRequestException('That appointment would run past closing time. Please pick another time.');
+    }
+
+    const offered = await this.getAvailableSlots(merchantId, styleId, dateISO);
+    const wanted = startTime.toISOString();
+    if (!offered.some((s) => s.startTime === wanted)) {
+      // Reached when the start is off the 15-minute grid, or when the slot has
+      // been taken since the customer loaded the page. The conflict case gets
+      // its own clearer message from isSlotStillAvailable() in create().
+      throw new BadRequestException('Please pick one of the offered appointment times.');
+    }
   }
 
   /** Confirms a specific start time is still free right before booking it — closes the race-condition window between browsing and submitting. */

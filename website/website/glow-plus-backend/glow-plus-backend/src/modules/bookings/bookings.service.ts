@@ -43,10 +43,27 @@ export class BookingsService {
     // the single-resource-per-merchant limitation this inherits (no
     // per-staff concurrency yet — that's the natural place to extend this
     // check once staff/room resources are modeled).
+    //
+    // Ordered BEFORE the [F64] check below, and that order is deliberate:
+    // `assertBookable` refuses a taken slot too (it asks the slot generator,
+    // which already excludes booked times), so running it first made this
+    // message unreachable and told a customer who lost a race to "pick one of
+    // the offered times" — which is what they did. Losing a race and typing a
+    // nonsense time are different mistakes and deserve different sentences.
     const stillFree = await this.availability.isSlotStillAvailable(dto.merchantId, startTime, endTime);
     if (!stillFree) {
       throw new BadRequestException('That time slot was just booked by someone else. Please pick another.');
     }
+
+    // [F64] — the salon has to actually be OPEN. Until this line, `create()`
+    // checked the merchant, the style, the past and a clashing booking, and
+    // never looked at BusinessHours once: a POST straight to this route was
+    // accepted on the closed Sunday, before opening, past closing, and off the
+    // 15-minute grid. The slot grid in the browser was the only thing
+    // enforcing opening hours, and a grid the client draws is not a
+    // constraint the server may rely on — the same argument T48 made two
+    // checks above this one.
+    await this.availability.assertBookable(dto.merchantId, dto.styleId, startTime, endTime);
 
     const booking = await this.prisma.booking.create({
       data: {

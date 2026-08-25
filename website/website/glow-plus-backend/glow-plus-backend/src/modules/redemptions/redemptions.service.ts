@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { freeServiceFields, resolveFreeServiceNames } from '../../common/free-service';
 
 @Injectable()
 export class RedemptionsService {
@@ -18,7 +19,17 @@ export class RedemptionsService {
       throw new BadRequestException('merchantId is required');
     }
     const rules = await this.prisma.rewardRule.findMany({ where: { merchantId, active: true } });
-    return Promise.all(rules.map((rule) => this.progressFor(userId, rule)));
+    // [F62] — resolved once for the whole set rather than inside progressFor,
+    // which runs per rule. Kept in step with `/me/rewards` on purpose: T42's
+    // note is that these two must not disagree about a reward, and "what am I
+    // actually getting" is part of that.
+    const freeServiceNames = await resolveFreeServiceNames(this.prisma, rules);
+    return Promise.all(
+      rules.map(async (rule) => ({
+        ...(await this.progressFor(userId, rule)),
+        ...freeServiceFields(rule, freeServiceNames),
+      })),
+    );
   }
 
   async history(userId: string) {
@@ -29,15 +40,44 @@ export class RedemptionsService {
     });
   }
 
+  /**
+   * What this salon has had claimed, newest first, with who claimed it.
+   *
+   * [F60] — this shipped in T23 and **no client called it for two months**.
+   * `POST /redemptions` writes a row and returns; it does not email the salon,
+   * and the customer's confirmation is a toast that disappears. So until the
+   * portal grew a Redemptions tab there was no surface anywhere in the product
+   * on which a salon could learn that someone had claimed 20% off — the reward
+   * was recorded and unclaimable, and the loyalty loop did not close at the
+   * counter. Same shape as [F52] and [F55]: built, reachable, never called.
+   */
   async historyForMerchant(merchantId: string) {
-    return this.prisma.redemption.findMany({
+    const rows = await this.prisma.redemption.findMany({
       where: { rewardRule: { merchantId } },
       include: {
         user: { select: { name: true, email: true } },
-        rewardRule: { select: { name: true, rewardType: true, rewardValue: true } },
+        rewardRule: {
+          // [F62] — `freeServiceStyleId` included so the counter is told which
+          // service is free, not just that "a" service is.
+          select: {
+            name: true,
+            rewardType: true,
+            rewardValue: true,
+            freeServiceStyleId: true,
+          },
+        },
       },
       orderBy: { redeemedAt: 'desc' },
     });
+
+    const names = await resolveFreeServiceNames(
+      this.prisma,
+      rows.map((r) => r.rewardRule),
+    );
+    return rows.map((r) => ({
+      ...r,
+      rewardRule: { ...r.rewardRule, ...freeServiceFields(r.rewardRule, names) },
+    }));
   }
 
   /**

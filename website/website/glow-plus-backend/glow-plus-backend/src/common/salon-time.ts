@@ -113,3 +113,25 @@ export function isValidDateISO(dateISO: string): boolean {
     d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day
   );
 }
+
+/**
+ * Which calendar date an instant falls on **at the salon**.  [F64]
+ *
+ * The inverse of `salonWallTimeToInstant`, and needed for the same reason:
+ * `POST /bookings` receives an absolute instant and has to find the
+ * `BusinessHours` row that governs it. Asking the Date object directly would
+ * answer in the Node process's zone — the exact defect [F57] closed on the
+ * read path — so `2026-08-27T02:30:00Z` must resolve to **Aug 26** for a
+ * Toronto salon (10:30 PM the previous evening), not Aug 27.
+ *
+ * `en-CA` because it formats as YYYY-MM-DD, which is what every other date
+ * helper here already speaks.
+ */
+export function salonDateFor(instant: Date, tz: string = SALON_TIMEZONE): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
