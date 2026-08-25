@@ -56,6 +56,27 @@ export class PasswordResetService {
     await sendEmail({ to: email, template: 'reset-password', data: { resetUrl } });
   }
 
+  /**
+   * Validates a reset token WITHOUT spending it, so the page can refuse a dead
+   * link before asking for a password.  [F65]
+   *
+   * The three rejections below are deliberately the same three, in the same
+   * order and with the same wording, as `resetPassword()`. If this said a link
+   * was fine and the POST then refused it — or the reverse — the customer
+   * would be told two different things about one token.
+   */
+  async previewReset(rawToken: string) {
+    const record = await this.prisma.passwordReset.findUnique({
+      where: { token: this.hashToken(rawToken) },
+    });
+
+    if (!record) throw new BadRequestException('Invalid or already-used token');
+    if (record.usedAt) throw new BadRequestException('Invalid or already-used token');
+    if (record.expiresAt < new Date()) throw new BadRequestException('Token expired');
+
+    return { email: record.email, expiresAt: record.expiresAt };
+  }
+
   async resetPassword(rawToken: string, newPassword: string) {
     const hashedToken = this.hashToken(rawToken);
     const record = await this.prisma.passwordReset.findUnique({ where: { token: hashedToken } });

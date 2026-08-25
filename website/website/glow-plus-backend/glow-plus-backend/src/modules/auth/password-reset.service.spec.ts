@@ -131,6 +131,71 @@ const consumer = (over: Partial<Account> = {}): Account => ({
   ...over,
 });
 
+describe('PasswordResetService.previewReset  [F65]', () => {
+  it('accepts a live token and names the account it resets', async () => {
+    const { prisma, service } = setup();
+    const account = consumer();
+    prisma.users.set(account.id, account);
+    issue(prisma, account, 'CONSUMER', 'raw-token');
+
+    await expect(service.previewReset('raw-token')).resolves.toEqual(
+      expect.objectContaining({ email: 'walkin@example.com' }),
+    );
+  });
+
+  it('does NOT spend the token it was asked to inspect', async () => {
+    const { prisma, service } = setup();
+    const account = consumer();
+    prisma.users.set(account.id, account);
+    issue(prisma, account, 'CONSUMER', 'raw-token');
+
+    await service.previewReset('raw-token');
+
+    // Checking a link must not burn it — the customer has not set a password
+    // yet, and this runs on every page load.
+    expect(prisma.resets[0].usedAt).toBeNull();
+    await expect(service.resetPassword('raw-token', 'NewPassw0rd!')).resolves.toEqual({ ok: true });
+  });
+
+  it('refuses a spent token — the case that produced the form anyway', async () => {
+    const { prisma, service } = setup();
+    const account = consumer();
+    prisma.users.set(account.id, account);
+    issue(prisma, account, 'CONSUMER', 'raw-token', { usedAt: new Date() });
+
+    await expect(service.previewReset('raw-token')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses an expired token', async () => {
+    const { prisma, service } = setup();
+    const account = consumer();
+    prisma.users.set(account.id, account);
+    issue(prisma, account, 'CONSUMER', 'raw-token', { expiresAt: new Date(Date.now() - 1000) });
+
+    await expect(service.previewReset('raw-token')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses a token that was never issued', async () => {
+    const { service } = setup();
+    await expect(service.previewReset('never-issued')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('agrees with resetPassword on every rejection', async () => {
+    // The whole point of the endpoint is that the page and the POST cannot
+    // tell a customer different things about one token.
+    for (const over of [{ usedAt: new Date() }, { expiresAt: new Date(Date.now() - 1000) }]) {
+      const { prisma, service } = setup();
+      const account = consumer();
+      prisma.users.set(account.id, account);
+      issue(prisma, account, 'CONSUMER', 'raw-token', over);
+
+      const preview = await service.previewReset('raw-token').catch((e) => e.message);
+      const post = await service.resetPassword('raw-token', 'NewPassw0rd!').catch((e) => e.message);
+      expect(preview).toBe(post);
+    }
+  });
+});
+
 describe('PasswordResetService.resetPassword', () => {
   describe('[F61] a completed reset proves the address', () => {
     it('verifies an account that was never verified', async () => {

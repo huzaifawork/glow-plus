@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ThrottleCredentials, ThrottleEmailSend, ThrottleRefresh } from '../../common/throttling';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
@@ -49,6 +49,34 @@ export class AuthController {
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.passwordReset.forgotPassword(dto.email);
+  }
+
+  /**
+   * Is this reset link still good?  [F65]
+   *
+   * `ResetPassword.jsx` checked only that a `token` query param was PRESENT,
+   * never that it meant anything — so a spent or expired link rendered a full,
+   * inviting "Choose a new password" form and only revealed the truth after
+   * the customer had typed a password and submitted it. Proved live during J5:
+   * a token whose `usedAt` was already stamped still produced the form.
+   *
+   * The practical harm is not the wasted keystrokes. Someone re-opening an old
+   * link is shown the same screen as someone opening a fresh one, sets what
+   * they believe is their new password, and is then locked out with no idea
+   * why the password they just chose does not work.
+   *
+   * Mirrors `GET /staff/invites/:token`, which had this from birth — same
+   * throttle tier, same BadRequest wording as `resetPassword` so the two
+   * cannot drift into telling a customer different stories about one token.
+   *
+   * Returning the address is not a disclosure: whoever holds this token can
+   * already take the account over with it. It is what lets the page say WHICH
+   * account is being reset, which matters to anyone with more than one.
+   */
+  @ThrottleCredentials()
+  @Get('reset-password/:token')
+  previewReset(@Param('token') token: string) {
+    return this.passwordReset.previewReset(token);
   }
 
   @ThrottleCredentials()
