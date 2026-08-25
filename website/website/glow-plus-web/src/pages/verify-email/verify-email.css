@@ -31,3 +31,17 @@
    card stays a direct flex child of <body> and `position:sticky` still resolves
    against the viewport — i.e. layout is identical to the pre-migration DOM. */
 #root{display:contents;}
+
+/* [F66]/[F67] — these pages gained "back to sign in" links, and `.link-btn`
+   is defined in the SPA's global.css, which a standalone bundle deliberately
+   does NOT load (see the header note). Without a rule here the links rendered
+   as bare anchors at 20px tall — under WCAG 2.2 AA 2.5.8's 24px floor, on the
+   one control a customer locked out of their account needs to hit.
+   `inline-block` is load-bearing: `min-height` is ignored on a non-replaced
+   inline element, which is exactly how the same rule stayed inert in the SPA. */
+.link-btn{
+  display:inline-block;min-height:44px;line-height:44px;
+  color:var(--accent);font-weight:600;font-size:14.5px;text-decoration:none;
+  background:none;border:none;cursor:pointer;
+}
+.link-btn:hover{text-decoration:underline;}

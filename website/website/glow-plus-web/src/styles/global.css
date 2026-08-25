@@ -356,7 +356,15 @@
        enough — a <button> centres its own content vertically. */
     .navbtn, .topnav select, .toggle, .quickpick button{min-height:44px;}
     .brand{min-height:44px;}
-    .link-btn{min-height:44px;vertical-align:middle;}
+    /* [F67] — `min-height` does NOTHING on a non-replaced INLINE element, and
+       half of these are `<a class="link-btn">`, not `<button>`. A <button> is
+       inline-block by default so T39's rule bit; every anchor silently ignored
+       it and stayed 16px tall. Measured again at 390px after T39 shipped:
+       "Forgot your password?" 142x16, "Go to sign in" 82x20 — both well under
+       WCAG 2.2 AA 2.5.8's 24px floor, on the two links a customer locked out
+       of their account most needs to hit. `display:inline-block` is what makes
+       the existing min-height apply; without it the declaration is inert. */
+    .link-btn{min-height:44px;vertical-align:middle;display:inline-block;}
     /* `.ptab` measured 45px only because of the browser-default border removed
        above; without it the tabs land at 43px, and the narrow ones ("Book") at
        42px wide. `min-width` widens just those — the strip wraps a little
