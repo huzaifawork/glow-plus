@@ -112,10 +112,11 @@ joziilunga-attachments/
 | **F12** | JWT is hand-rolled HS256, fixed 7-day, **no refresh token**. |
 | **F13** | No `/health` endpoint. |
 
-**F60–F66 live in the SESSION 28 block in §8** — **seven** found across J3–J6;
-**six are FIXED and verified live** (F60, F61, F62, F64, F65, F66) and
-**[F63] is OPEN** (appointment times render in the browser timezone, not the
-salon's — the display twin of [F57]).
+**F60–F68 live in the SESSION 28 block in §8** — **nine** found across J3–J8;
+**seven are FIXED and verified live** (F60, F61, F62, F64, F65, F66, F67).
+**Two are OPEN: [F63]** (appointment times render in the browser's timezone,
+not the salon's — the display twin of [F57]) and **[F68]** (the seven
+standalone pages have no translation and **no RTL**).
 **F49–F54 live in the SESSION 26 block in §8** — five of the six are fixed;
 **[F50]** (paying bypasses admin approval) is open and needs a **client decision**, not code.
 **F55–F59 are newer still and live in the SESSION 27 block in §8** — all four real ones
@@ -147,15 +148,23 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > to start on and what state the local DB is in. Do not start a T-number task
 > without checking there first.
 >
-> ### ➡️ RESUME HERE — **J6, J7, J8**
+> ### ➡️ RESUME HERE — **THE MANUAL TEST RUN IS COMPLETE. Back to T-numbers: T53.**
 >
-> **J1 ✅ J2 ✅ (s26) · the whole merchant side ✅ (s27) · J3 ✅ J4 ✅ J5 ✅ (s28).**
+> **ALL EIGHT JOURNEYS ARE CLOSED.** J1 ✅ J2 ✅ (s26) · the whole merchant
+> side M1–M9 ✅ (s27) · **J3 ✅ J4 ✅ J5 ✅ J6 ✅ J7 ✅ J8 ✅ (s28).**
+>
+> There is no journey left to pick up. **The next work is PHASE 8: T53.**
+> Three findings remain open and each needs a decision rather than a keystroke
+> — **[F63]** (times in the browser's timezone), **[F68]** (standalone pages
+> untranslated, no RTL), **[F50]** (paying bypasses approval — client's call).
+>
+> The old J6/J7/J8 rows are kept below only as a record of what they covered:
 >
 > | # | Journey | Notes for whoever picks this up |
 > |---|---|---|
-> | **J6** | 15-min expiry → silent refresh + **replay revokes the family** | Read T47's TASKS.md entry first. The SPA resets to the marketing view on reload, so **reloading proves nothing** — drive `await import('/src/lib/api.js')` in the page instead. Authenticated responses carry an **ETag**, so a good retry is **304**, not 200. **`+walkin` is the ready subject: 0 live sessions, password `Walkin456!`.** J5.5 already proved reset-revokes-all; J6 is the *rotation/replay* half |
-> | **J7** | admin approve/suspend | **MOSTLY DONE ALREADY in J4.6/J4.7** — suspend → all four public salon-scoped routes 404 + `POST /bookings` 404, reactivate → all restored, 6/6. What is left is the **PENDING → approve** half on a genuinely pending salon; both local salons are ACTIVE, so one has to be created or set back |
-> | **J8** | every view at **390px** | The long pole; touches all 8 languages incl. **Arabic RTL**. Note [F43]: 18 keys exist only in the `en` block and several tab labels are hardcoded English — pre-existing, belongs to T40 |
+> | **J6** ✅ | 15-min expiry → silent refresh + **replay revokes the family** | Read T47's TASKS.md entry first. The SPA resets to the marketing view on reload, so **reloading proves nothing** — drive `await import('/src/lib/api.js')` in the page instead. Authenticated responses carry an **ETag**, so a good retry is **304**, not 200. **`+walkin` is the ready subject: 0 live sessions, password `Walkin456!`.** J5.5 already proved reset-revokes-all; J6 is the *rotation/replay* half |
+> | **J7** ✅ | admin approve/suspend | **MOSTLY DONE ALREADY in J4.6/J4.7** — suspend → all four public salon-scoped routes 404 + `POST /bookings` 404, reactivate → all restored, 6/6. What is left is the **PENDING → approve** half on a genuinely pending salon; both local salons are ACTIVE, so one has to be created or set back |
+> | **J8** ✅ | every view at **390px** | The long pole; touches all 8 languages incl. **Arabic RTL**. Note [F43]: 18 keys exist only in the `en` block and several tab labels are hardcoded English — pre-existing, belongs to T40 |
 >
 > ⚠️ **Two admin surfaces exist and they are NOT the same.** `/admin`
 > (standalone, T22) reads `GET /admin/merchants/pending` — **PENDING only**, so
@@ -173,7 +182,7 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >
 > ---
 >
-> ## 🟢 SESSION 28 (2026-08-26) — **J3, J4, J5, J6 ALL CLOSED. Seven findings.**
+> ## 🟢 SESSION 28 (2026-08-26) — **ALL EIGHT JOURNEYS CLOSED. Nine findings.**
 >
 > Same working mode, unchanged and it must continue: **one case at a time,
 > given click-by-click in chat, the user executes it in a real browser, Claude
@@ -187,10 +196,12 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > | **J4** — booking at ACTIVE vs SUSPENDED | ✅ **7/7** — found **[F64]**, [F63] |
 > | **J5** — forgot password → reset → login | ✅ **5/5** — found [F61], [F65], [F66] |
 > | **J6** — 15-min expiry → silent refresh → replay revokes the family | ✅ **4/4** — clean |
+> | **J7** — admin approve (PENDING → ACTIVE) | ✅ **4/4** — clean |
+> | **J8** — every view at 390px × 8 languages | ✅ **176/176** — found **[F67]**, **[F68]** |
 >
 > Backend suite **407 → 432, 26 → 28 suites.**
 >
-> ### Seven findings — F60–F66, six FIXED, one open
+> ### Nine findings — F60–F68, seven FIXED, two open
 >
 > | # | Finding | Status |
 > |---|---|---|
@@ -235,6 +246,64 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >   a 200-point rule and **still holds 200 points**; the rule re-locked and needs
 >   **400** to fire again. If the client expects points to be *spent*, that is a
 >   product conversation, not a bug.
+>
+> ### J7 and J8 — both closed the same session
+>
+> **J7 — 4/4.** The suspend half was already banked in J4.6/J4.7; this closed
+> **PENDING → approve** on a salon created by **real signup** rather than a
+> flipped database row. Signup → PENDING, `foundingMember` true, real `cus_`,
+> **no subscription**, founding-spots **2 → 3**, and the *founding* pending
+> banner rendered — so **[F44] has not regressed**. A PENDING salon is
+> invisible on **every** public route (directory lists 2 of 3; styles, hours,
+> availability all 404; `POST /bookings` 404 even holding the id) — same
+> `merchant-visibility.ts` rule as SUSPENDED, **by construction, not by two
+> rules that happen to agree**. Approve → ACTIVE, directory 2 → 3, banner
+> gone. **Full status lifecycle now covered: PENDING → ACTIVE → SUSPENDED →
+> ACTIVE.**
+>
+> ⚠️ **What J7 shows about [F50], for the client.** Approval and payment are
+> **two independent gates and neither implies the other**: Pending Test Salon is
+> ACTIVE and publicly listed **with no subscription at all**, while
+> `onCheckoutCompleted` sets `status = ACTIVE` unconditionally so a salon that
+> pays goes live **without admin review**. Either gate alone puts a salon live.
+> That may well be intended for a trial-first product — but the approval queue
+> is not currently a gate on anything a paying salon must pass. **Client
+> decision, not a code fix.** Also worth raising: a newly approved salon appears
+> in *"Find a salon"* with **0 styles and every day closed**, so customers can
+> find it and book nothing.
+>
+> **J8 — 176/176 clean.** Driven in **real Chrome via `puppeteer-core`**
+> (scratchpad only, as T42 did — **nothing added to the repo**): **22 views
+> × 8 languages**, and **zero horizontal page overflow anywhere**. Two things
+> make that number mean something: elements inside an `overflow-x` scroller are
+> **excluded**, so a wide `.table-scroll` is correctly not counted; and RTL is
+> measured on the **left** edge, which a plain `scrollWidth` check misses
+> entirely because the document is anchored right. Arabic sets `dir="rtl"` on
+> every SPA view.
+>
+> **[F67] — T39's tap-target fix was inert on half its targets.** `min-height`
+> does **nothing** on a non-replaced **inline** element, and half of
+> `.link-btn` are `<a>`, not `<button>`. A `<button>` is inline-block by
+> default so the rule bit; **every anchor silently ignored it.** *"Forgot your
+> password?"* measured **142×16** and *"Go to sign in"* **82×20** — under
+> **WCAG 2.2 AA 2.5.8**'s 24px floor, on the links a locked-out customer most
+> needs. [F56]'s link was added *after* T39 was signed off, so it was never
+> measured. ✅ Fixed with `display:inline-block`; the standalone pages needed
+> **their own copy**, because they deliberately do not load the SPA's
+> `global.css` and `.link-btn` was not styled there at all.
+>
+> ### ⚠️ [F68] IS OPEN — the standalone pages have no i18n and no RTL
+>
+> `/forgot-password`, `/reset-password`, `/verify-email`, `/consumer/rewards`,
+> `/business/staff`, `/business/billing` and `/admin` keep **`html lang="en"`
+> in all eight languages** and carry **no `dir` attribute at all**. So an
+> Arabic-speaking customer clicking a password-reset link **from their email**
+> lands on an English, **left-to-right** page while the SPA mirrors correctly.
+> They are separate Vite entry points that never used `I18nProvider` (T17/T18/
+> T21–T24 predate T35's auth UI). Two are superseded, but **reset, verify and
+> staff are live and reached from real transactional emails** — exactly where a
+> language preference cannot be carried across. **Same family as [F43]; belongs
+> with it under T40**, a translation task rather than a layout one.
 >
 > ### Local DB state left behind (changed from session 27)
 >
