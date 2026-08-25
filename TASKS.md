@@ -1201,7 +1201,40 @@ Build to the shapes the RN app already expects (`glow-plus-mobile app/src/api/cl
 
 Vercel runs the backend **serverless**, a different model from a long-running Node process. T54–T58 exist because of that and are not optional.
 
-- [ ] **T52 — Production Postgres** (Neon/Supabase — Vercel doesn't host it). **Use the pooled connection string.**
+- [x] **T52 — Production Postgres.** ✅ **DONE & VERIFIED 2026-08-25.**
+      **Supabase**, project `xhyoeiltwcciqowlwyov`, region **`us-east-1` (East US, N. Virginia)**, free plan, Postgres **17.6**.
+
+      **Why us-east-1 and not Canada Central, for a Canadian client.** **Vercel has no Canadian serverless-function region** — Toronto/Montreal are edge PoPs (static caching), not compute. The API will run in `iad1` = AWS `us-east-1` regardless, so a Montreal database would sit ~15–25ms from the code querying it, on every one of the 4–8 queries a portal page makes. PIPEDA imposes no residency requirement, only *disclosure* of cross-border processing — which **T66**'s privacy policy has to state anyway. The clinching argument: the same personal data already goes to **Stripe** (US) and **Resend** on every signup, so a Canadian Postgres beside a US payment processor and a US email provider protects nobody. Revisit only on a **written** residency requirement from the client — Quebec's Law 25 would be the realistic trigger — and note that changing a Supabase project's region afterwards is a dump-and-restore, not a setting.
+
+      **The schema now declares TWO urls, and in production they must not be the same string.** `prisma/schema.prisma` gained `directUrl`:
+      | Prisma field | Supabase string | Port | Read by |
+      |---|---|---|---|
+      | `url` → `DATABASE_URL` | Transaction pooler, `?pgbouncer=true&connection_limit=1` | **6543** | Prisma **Client** — every request |
+      | `directUrl` → `DIRECT_URL` | Session pooler, no flags | **5432** | Prisma **CLI** only — `migrate deploy`, `db pull` |
+
+      **Why the split is mandatory, not tidiness:** migrations take a **session-level advisory lock** and run DDL in a transaction that must outlive one statement. Through a *transaction* pooler that lock is taken on a connection the pooler may hand to someone else mid-migration, so `migrate deploy` hangs or fails. And `?pgbouncer=true` is not optional either — transaction mode does not support prepared statements, which Prisma uses by default; without the flag you get `prepared statement "s0" already exists`, **intermittently, under load, in production only**.
+
+      ⚠️ **Do NOT use Supabase's third string, "Direct connection" (`db.<ref>.supabase.co`), for `DIRECT_URL`.** On the free plan that host is **IPv6-only** and GitHub Actions runners are IPv4-only — it works from a laptop and then fails in CI, i.e. it breaks **T58**, which is the worst possible place to discover it. The session pooler is the IPv4-reachable equivalent. Both pooler strings use the `postgres.<project-ref>` username form, not plain `postgres`; copying the username off the direct string onto the pooler host is the usual first failure (`Tenant or user not found`).
+
+      ⚠️ **The generated password contained `/ $ ^ * @ @` and is PERCENT-ENCODED in both URLs.** Two `@` and a `/` in a URL password is not a cosmetic problem: `@` delimits userinfo from host, so an un-encoded password makes the parser read the host as `P@25…` and fail with a "host not found" error that looks nothing like its cause. All five special characters are encoded (`safe=''`), deliberately more than the URI spec strictly requires — `$` also expands in a shell and in some dotenv parsers, and this string ends up in both (**T53** Vercel env vars, **T58** CI). The **raw** form is kept on a commented line at the bottom of `.env` for dashboard/psql use, which needs the un-encoded value.
+
+      **Evidence — run, not assumed:**
+      | Check | Result |
+      |---|---|
+      | `prisma migrate deploy` | all **8** migrations applied to a fresh DB |
+      | Tables created | **16** = 15 app tables + `_prisma_migrations` |
+      | **Schema diff prod vs local**, table+column+type | **126 columns each, zero drift — IDENTICAL** |
+      | Prisma **Client** over the **pooled** `:6543` string | connected; 5× parameterised query OK (the shape that trips the prepared-statement bug when `pgbouncer=true` is missing) |
+      | Prisma Client with `DIRECT_URL` **deleted** | still served queries — proves `directUrl` is **CLI-only**, so a wrong value breaks deploys, never live requests |
+      | API booted against production | `GET /health` **200**, `GET /health/ready` **200**, `database.status: "up"` |
+      | `npm run seed` against production | **refused** — *"DATABASE_URL does not point at a local database"*. The local-DB guard works; production cannot be seeded with known-weak test passwords |
+      | `npm test` | **396 passing, 25 suites** — unchanged by the schema edit |
+
+      **On the latency figure, so nobody panics at it later:** `/health/ready` reported **~1,170ms** against Supabase versus **5ms** against local Docker. That is **distance, not misconfiguration** — measured raw TCP RTT from Pakistan to the pooler is **240ms**, so ~1.17s is 2–4 round trips plus TLS. It was checked rather than assumed precisely because a fixed per-query overhead would have meant a pooling bug that followed us to Vercel. On Vercel the function and the database sit in the **same AWS region**, so this collapses to single-digit ms. **T63** measures the number that actually matters, from the deployed environment.
+
+      **`.env` is switched BACK to local Docker**, with the Supabase pair commented directly beneath it. Pointing local development at production would write test signups into the launch database. Swap the comments to flip, and **restart** — `nest start --watch` does not reload `.env`.
+
+      ⬜ **Still open, and deliberately:** the connection strings must be added as Vercel env vars (**T53**), the project is on the **free plan** (500 MB, autosuspends after ~1 week idle — flag ~$25/mo to the client before real traffic), and it lives in **the developer's own Supabase account** — **transfer to the client's organisation at handover**, which is a Supabase project-transfer, not a re-migration.
 - [ ] **T53 — Deploy backend + website**, env vars in Vercel project settings.
 - [ ] **T54 — Convert all 4 cron jobs to Vercel Cron.** `@Cron()` **never fires** on serverless — this silently kills T19 and T25. Expose each as a route guarded by `CRON_SECRET`; schedule in `vercel.json`.
 - [ ] **T55 — Prisma connection pooling** (PgBouncer / `?pgbouncer=true` / Accelerate). **The most common way Prisma-on-Vercel dies in production.**

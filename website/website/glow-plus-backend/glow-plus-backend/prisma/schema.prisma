@@ -7,7 +7,30 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // T52 — TWO urls, and they must not be the same string in production.
+  //
+  // `url` is the POOLED connection (Supabase transaction mode, :6543). Every
+  // serverless invocation gets its own process, so without a pooler in front
+  // a modest traffic spike opens hundreds of Postgres connections and the
+  // database refuses new ones — the single most common way Prisma-on-Vercel
+  // dies (T55). Transaction mode is also why the URL carries
+  // `?pgbouncer=true&connection_limit=1`: it does not support prepared
+  // statements, which Prisma uses by default.
+  //
+  // `directUrl` is the UNPOOLED connection (Supabase session mode, :5432) and
+  // is used by the CLI only — `migrate deploy`, `migrate dev`, `db pull`. It
+  // exists because migrations take a session-level advisory lock and run DDL
+  // in a transaction that must outlive a single statement; through a
+  // transaction pooler that lock is taken on a connection the pooler may hand
+  // to someone else, so `migrate deploy` hangs or fails. Prisma Client never
+  // reads this at runtime.
+  //
+  // ⚠️ Do NOT point `directUrl` at Supabase's "Direct connection" host
+  // (`db.<ref>.supabase.co`). On the free plan that host is IPv6-only, and
+  // GitHub Actions runners are IPv4-only — it works on a laptop and then
+  // fails in CI at T58. The session pooler is the IPv4-reachable equivalent.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

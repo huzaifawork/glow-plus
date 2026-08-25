@@ -15,7 +15,8 @@ misbehaving later — see [Why boot validation](#why-boot-validation).
 
 | Variable | Secret? | Local | Production (Vercel) | What breaks if it is wrong |
 | --- | --- | --- | --- | --- |
-| `DATABASE_URL` | 🔴 yes | `postgresql://…@localhost:5433/glowplus` | Neon/Supabase **pooled** string (T52/T55) | Nothing starts. A non-pooled string is the most common way Prisma-on-Vercel dies (T55) |
+| `DATABASE_URL` | 🔴 yes | `postgresql://…@localhost:5433/glowplus` | Supabase **transaction pooler**, port **6543**, with `?pgbouncer=true&connection_limit=1` (T52/T55) | Nothing starts. A non-pooled string is the most common way Prisma-on-Vercel dies (T55); without `pgbouncer=true` you get intermittent `prepared statement "s0" already exists` under load only |
+| `DIRECT_URL` | 🔴 yes | same as `DATABASE_URL` (no local pooler) | Supabase **session pooler**, port **5432**, no flags (T52) | `prisma migrate deploy` hangs or fails — migrations take a session-level advisory lock a transaction pooler cannot hold. Read by the Prisma **CLI only**; Prisma Client never touches it, so a wrong value breaks deploys, not requests |
 | `JWT_SECRET` | 🔴 yes | 48 random bytes | **A different** 48 random bytes | A weak or shared value means anyone can mint an `admin` token — this already happened once, [F20] |
 | `PORT` | no | `4000` | set by Vercel — **do not set** | — |
 | `APP_URL` | no | `http://localhost:3000` | `https://glowplusmember.com` | Verification and password-reset emails ship dead `localhost` links to real customers |
@@ -30,6 +31,20 @@ misbehaving later — see [Why boot validation](#why-boot-validation).
 | `EMAIL_FROM` | no | `Glow+ <noreply@mail.glowplusmember.com>` | same | Resend rejects a From on an unverified domain |
 | `POINTS_EXPIRE_AFTER_DAYS` | no | unset → `365` | set explicitly | Points expire on a different schedule than the client expects (T25) |
 | `CRON_SECRET` | 🔴 yes | n/a | **add with T54** | Cron routes are unauthenticated, or the jobs never fire |
+
+### The two database URLs (T52)
+
+Supabase's connection page offers three strings. Which two you take matters:
+
+| Supabase label | Port | Use it for | Why |
+| --- | --- | --- | --- |
+| **Transaction pooler** | 6543 | `DATABASE_URL` | Serverless gives every invocation its own process. Without a pooler in front, a traffic spike opens hundreds of Postgres connections and the database starts refusing them |
+| **Session pooler** | 5432 | `DIRECT_URL` | Migrations need a session that outlives one statement. IPv4-reachable, unlike the direct host |
+| **Direct connection** (`db.<ref>.supabase.co`) | 5432 | ⚠️ **neither** | On the free plan this host is **IPv6-only**. It works from a laptop on an IPv6 ISP and then fails from GitHub Actions, whose runners are IPv4-only — i.e. it breaks T58, not local development, which is the worst place to find out |
+
+Both pooler strings use the `postgres.<project-ref>` username form, not plain
+`postgres`. Copying the username off the direct string onto the pooler host is
+the usual first failure (`Tenant or user not found`).
 
 `NODE_ENV`, `VERCEL` and `VERCEL_ENV` are set by Vercel; the validator reads
 them to decide whether the production rules apply. It treats `VERCEL=1` as

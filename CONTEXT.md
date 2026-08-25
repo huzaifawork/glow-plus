@@ -36,6 +36,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25; **`RefreshToken` added T47**, and `AccountType` gained a fourth value `STAFF`) |
+| Production DB | ✅ **T52 — Supabase, project `xhyoeiltwcciqowlwyov`, region `us-east-1`, Postgres 17.6, free plan.** 8/8 migrations applied; schema diffed against local at column+type level: **126 vs 126, zero drift**. `.env` is switched **back to local Docker** — the Supabase pair sits commented beneath it. `npm run seed` **refuses** to run against it (local-DB guard). Latency from here is ~1,170ms and that is **distance, not config** (raw TCP RTT to the pooler is 240ms); on Vercel `iad1` the DB is same-region. Account is the developer's → **transfer at handover** |
 | Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
@@ -121,13 +122,37 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5–7 DONE. Next is PHASE 8 (deployment), starting at T52.**
+## 8. EXACTLY where to resume — **Phases 5–7 DONE. In PHASE 8 (deployment); T52 done, next is T53.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 24 (2026-08-25): 51 of 65 done. PHASE 7 IS CLOSED —
-> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. Everything remaining is Phase 8
-> deployment (T52–T59) plus T64–T66.** Backend suite **396 passing**, 25 suites.
+> **State as of session 25 (2026-08-25): 52 of 65 done. PHASE 7 IS CLOSED —
+> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. PHASE 8 IS UNDERWAY: T52 ✅ (and
+> T60 ✅, done early). Next is T53. Remaining: T53–T59, T61–T63, T64–T66.**
+> Backend suite **396 passing**, 25 suites.
+>
+> ⚠️ **T52: PRODUCTION POSTGRES EXISTS — Supabase `us-east-1`, Postgres 17.6,
+> all 8 migrations applied, schema verified IDENTICAL to local (126 columns,
+> zero drift).** Three things to know before touching it:
+>
+> - **`.env` is pointed at LOCAL Docker on purpose**, with the Supabase pair
+>   commented right beneath. Swap the comments to flip, and **restart** —
+>   `nest start --watch` does not reload `.env`. Do not leave local dev on
+>   production: ordinary signup testing would write into the launch database.
+> - **The schema now has TWO urls and they must differ in production.**
+>   `DATABASE_URL` = transaction pooler **:6543** `?pgbouncer=true&connection_limit=1`
+>   (Prisma Client, every request). `DIRECT_URL` = session pooler **:5432**
+>   (Prisma **CLI only** — proven: the client still served queries with
+>   `DIRECT_URL` deleted). Never use Supabase's third string, "Direct
+>   connection" `db.<ref>.supabase.co` — it is **IPv6-only** on the free plan
+>   and CI runners are IPv4-only, so it breaks **T58**, not local work.
+> - **The password is PERCENT-ENCODED inside both URLs** (it contains
+>   `/ $ ^ * @ @` — two `@` in a URL password makes the parser read the host
+>   as `P@25…`). The **raw** form is on a commented line at the bottom of
+>   `.env` for dashboard/psql use. Do not "clean up" the `%XX` escapes.
+>
+> **Supabase account is the DEVELOPER'S, not the client's** — transfer the
+> project at handover. Free plan: 500 MB, autosuspends after ~1 week idle.
 >
 > ⚠️ **T49: EVERY ROUTE IS NOW UNDER `/v1`, except `/health`.** This is the
 > single most important thing to know before touching anything — it changes
