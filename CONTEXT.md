@@ -222,6 +222,25 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >   pointing at a style that no longer exists.
 > - **`seed.ts` salon renamed `Glow Salon (Seed)` → `Glow Salon`** — the suffix
 >   was rendering in the public salon directory. Live row updated too.
+> - **The salon directory rendered a large grey void.** `.salon-grid` paints
+>   `var(--line)` behind a **1px gap** so card seams read as hairlines — which
+>   means an empty column track is not blank space, it is a **solid grey
+>   block**. It used `repeat(auto-fill, …)`, which keeps empty tracks, so any
+>   salon count that was not an exact multiple of the column count showed the
+>   void — and **1–3 salons is exactly the launch-day state**. Now
+>   `repeat(auto-fit, …)`; empty tracks collapse and the real cards stretch.
+>   One word, and it would have shipped.
+> - **"Show more" on the directory.** It previously requested **no limit** and
+>   rendered **no pager**, which worked only while `DEFAULT_MERCHANT_PAGE` (50)
+>   exceeded the number of salons — past 50, the remainder silently stopped
+>   appearing with nothing in the UI to say so. Now 12 per page with a button
+>   and a `Showing N of M salons` line. `apiRequest` gained a `withTotal`
+>   option that returns `{ items, total }` by reading **`X-Total-Count`**;
+>   **no endpoint changed shape**, so T43/T44/T50's bare-array contract with
+>   the RN app is untouched. The header is only readable cross-origin because
+>   `EXPOSED_HEADERS` lists it — if it ever reads null, check that first [F46].
+>   Verified: `offset=0/1/2` with `limit=1` paged correctly, `X-Total-Count: 2`
+>   throughout, and all nine rate-limit headers still exposed alongside it.
 > - **`Visit.loggedBy` is a bare `String` with no FK** (noted, not fixed).
 >   Removing a staff member hard-deletes the `MerchantStaff` row, so audit rows
 >   point at a dead id. Audit-only field; low severity.
@@ -247,6 +266,46 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 > with `connect_timeout=45` appended. On Vercel `iad1` the DB is same-region so
 > this will not bite in production, but **T58's CI runner may need it**, and if
 > anyone sees P1001 that is the first thing to check — **not** a paused project.
+>
+> ### 🚀 PRODUCTION DAY — read this before deploying (checked 2026-08-25)
+>
+> **The founding-50 counter needs NO reset.** `GET /merchants/founding-spots`
+> is **derived, not stored** — it counts `Merchant` rows against a cap of 50.
+> Locally it reads `{cap:50, taken:2, left:48}` **only because of the two local
+> test salons**. Verified directly against the Supabase project: **0 merchants,
+> 0 founding**, so production will serve `{cap:50, taken:0, left:50}` and the
+> landing page will say *"50 of 50 founding badges left"* on its own. Nothing
+> to run, nothing to reset. ⚠️ Do NOT "fix" the count to filter
+> `foundingMember: true` or `status: ACTIVE` — it counts **rows at every
+> status** because that is what `OnboardingService.signup` gates on, and
+> narrowing it makes the page advertise spots signup then refuses.
+>
+> **No seed data will exist in production, and that is enforced, not assumed.**
+> `prisma/seed.ts` regexes `DATABASE_URL` for
+> `localhost|127.0.0.1|host.docker.internal|postgres` and throws otherwise.
+> **Proved this session** by running it against the real Supabase URL:
+> *"Refusing to seed: DATABASE_URL does not point at a local database."* So no
+> `Glow Salon`, no `merchant@glowplus.test`, no `consumer@glowplus.test`. The
+> directory starts genuinely empty and renders *"No salons live on Glow+ yet
+> — be the first to add yours."*
+>
+> **Set `SALON_TIMEZONE` on Vercel.** [F57]'s fix defaults to
+> `America/Toronto`. If the client's salons are not Eastern, set the variable
+> — it is config, not code. Leaving it unset on a non-Eastern deployment
+> silently shifts every salon's opening hours.
+>
+> **If `P1001 Can't reach database server` appears, it is the connect
+> timeout, NOT a paused project.** See the Supabase note in this block: DNS
+> resolves and both 5432/6543 are open; Prisma's default 5s is simply too
+> short from a high-latency link. `connect_timeout=45` connects fine. Same
+> region on Vercel `iad1`, so this should not appear there — but T58's CI
+> runner may need it.
+>
+> **Two known limits shipping as-is** (recorded, not defects): the salon
+> directory shows 12 per page with a **Show more** button and the API's own
+> `DEFAULT_MERCHANT_PAGE` is 50, so a single page never exceeds that; and
+> `Subscription.priceCents` is still a hardcoded constant with no currency
+> column while the live Stripe price is in **CAD** — see the session 26 block.
 >
 > ### ➡️ RESUME HERE — the consumer side, J3 onward
 >

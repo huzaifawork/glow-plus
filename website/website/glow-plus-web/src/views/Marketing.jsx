@@ -2,7 +2,8 @@ import { useI18n } from '../i18n/I18nContext.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { useNav } from '../lib/useNav.js';
 import { useAsyncData } from '../lib/useAsyncData.js';
-import { listPublicMerchants, getFoundingSpots } from '../lib/api.js';
+import { useState } from 'react';
+import { listPublicMerchantsPage, getFoundingSpots } from '../lib/api.js';
 import Punch from '../components/Punch.jsx';
 import T from '../components/T.jsx';
 
@@ -22,22 +23,59 @@ import T from '../components/T.jsx';
    directory of 40 salons cost 41 round trips from the landing page, in
    series-ish bursts, before anything rendered. `GET /merchants` now carries
    `styleCount` and `styleTypes` itself. */
+/* How many salons the directory shows before asking. Deliberately smaller than
+   the API's own DEFAULT_MERCHANT_PAGE of 50: the point of the button is that
+   the section above the fold stays a short, scannable list, not that it
+   matches the server's page size. */
+const SALON_PAGE = 12;
+
 function SalonGrid() {
+  const { t } = useI18n();
   const { dataVersion } = useApp();
 
-  const cards = useAsyncData(
+  // Accumulated across pages rather than replaced, so "Show more" appends.
+  const [extra, setExtra] = useState([]);
+  const [total, setTotal] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const first = useAsyncData(
     async () => {
       try {
-        return await listPublicMerchants();
+        const { items, total: count } = await listPublicMerchantsPage({ limit: SALON_PAGE });
+        setExtra([]);
+        setTotal(count);
+        return items;
       } catch {
         // The empty state below reads "no salons live on Glow+ yet", which is
         // also the least misleading thing to say when the API is unreachable.
+        setExtra([]);
+        setTotal(null);
         return [];
       }
     },
     [dataVersion],
     null
   );
+
+  const cards = first ? [...first, ...extra] : first;
+  // `total` is null when the header was unreadable — in which case say nothing
+  // rather than guess, since a wrong "Show more" is worse than none.
+  const hasMore = Boolean(cards && total != null && cards.length < total);
+
+  async function showMore() {
+    setLoadingMore(true);
+    try {
+      const { items } = await listPublicMerchantsPage({
+        limit: SALON_PAGE,
+        offset: cards.length,
+      });
+      setExtra((current) => [...current, ...items]);
+    } catch {
+      /* leave the list as it is; the button stays for another try */
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (!cards || !cards.length) {
     return (
@@ -50,6 +88,7 @@ function SalonGrid() {
   }
 
   return (
+    <>
     <div className="salon-grid" id="salonGrid">
       {cards.map((c) => (
         <div className="salon-card" key={c.id}>
@@ -71,6 +110,15 @@ function SalonGrid() {
         </div>
       ))}
     </div>
+    {hasMore ? (
+      <div className="salon-more">
+        <button className="btn btn-secondary" type="button" onClick={showMore} disabled={loadingMore}>
+          {loadingMore ? t('salons_loading') : t('salons_show_more')}
+        </button>
+        <div className="hint">{t('salons_showing', { shown: cards.length, total })}</div>
+      </div>
+    ) : null}
+    </>
   );
 }
 

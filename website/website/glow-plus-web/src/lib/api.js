@@ -192,7 +192,7 @@ export const clearAdminToken = () => endSession(ADMIN_TOKEN_KEY);
 /* --------------------------------------------------------------------------
    Request
    -------------------------------------------------------------------------- */
-export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY, retried = false } = {}) {
+export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY, retried = false, withTotal = false } = {}) {
   const token = auth ? readToken(tokenKey) : null;
 
   let res;
@@ -267,6 +267,22 @@ export async function apiRequest(path, { method = 'GET', body, auth = true, toke
       res.status,
       payload?.details,
     );
+  }
+
+  // `withTotal` opts a caller into the paginated shape. The default stays a
+  // bare body on purpose: T43/T44/T50 all made the list routes return a bare
+  // array with the count in `X-Total-Count`, because the RN app maps the
+  // response directly. Reading the header here rather than changing any
+  // endpoint keeps that contract intact and still lets the website know
+  // whether more rows exist.
+  //
+  // The header is only readable cross-origin because `EXPOSED_HEADERS` in the
+  // backend's config/security.ts lists it [F46]. If it ever reads null when
+  // the body is clearly a page, check that list before anything here.
+  if (withTotal) {
+    const raw = res.headers.get('X-Total-Count');
+    const total = raw == null ? null : Number(raw);
+    return { items: payload, total: Number.isFinite(total) ? total : null };
   }
 
   return payload;
@@ -364,12 +380,30 @@ export async function consumerLogin(email, password) {
  * wrapping the body, because the RN app maps over the array directly.
  */
 export function listPublicMerchants({ q, limit, offset } = {}) {
+  return merchantsRequest({ q, limit, offset });
+}
+
+/**
+ * The same call, but returning `{ items, total }` so the landing page can tell
+ * whether there is another page.
+ *
+ * The directory used to request no limit at all and render no pager, which was
+ * fine only while `DEFAULT_MERCHANT_PAGE` (50) exceeded the number of salons
+ * on the platform. Past 50 the remainder simply stopped appearing, silently,
+ * with nothing in the UI to suggest anything was missing — and the client's
+ * launch target is more salons than that.
+ */
+export function listPublicMerchantsPage({ q, limit, offset } = {}) {
+  return merchantsRequest({ q, limit, offset }, true);
+}
+
+function merchantsRequest({ q, limit, offset }, withTotal = false) {
   const qs = new URLSearchParams();
   if (q) qs.set('q', q);
   if (limit != null) qs.set('limit', String(limit));
   if (offset != null) qs.set('offset', String(offset));
   const suffix = qs.toString();
-  return apiRequest('/merchants' + (suffix ? `?${suffix}` : ''), { auth: false });
+  return apiRequest('/merchants' + (suffix ? `?${suffix}` : ''), { auth: false, withTotal });
 }
 
 /** Founding-spots counter for the landing page (T43) [F42] — `{ cap, taken, left }`. */
