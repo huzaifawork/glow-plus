@@ -57,9 +57,14 @@ export default function VerifyEmail() {
         const data = await res.json();
         setView({ status: 'success', accountType: data.accountType });
       } catch (err) {
+        // Dev/production split, same reasoning as lib/api.js: naming the API
+        // origin and telling the reader to start a backend is developer copy,
+        // and this card is the FIRST thing a new customer sees after signing up.
         renderError(
           'Could not reach the server',
-          'Make sure your Glow+ backend is running at ' + API_BASE_URL + ' and try again.'
+          import.meta.env.DEV
+            ? 'Make sure your Glow+ backend is running at ' + API_BASE_URL + ' and try again.'
+            : 'We could not reach Glow+ just now. Check your internet connection, then open the link from your email again.'
         );
       }
     }

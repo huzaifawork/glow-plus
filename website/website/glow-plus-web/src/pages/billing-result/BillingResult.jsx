@@ -27,19 +27,40 @@ export default function BillingResult() {
         <h1>You’re all set!</h1>
         <p>
           Your Glow+ subscription checkout completed. It can take a few seconds
-          for the payment confirmation to reach our system in the background —
-          switch back to your Glow+ tab and log in again to see your updated
-          status.
+          for the payment confirmation to reach us in the background, so your
+          plan may show as pending for a moment.
+        </p>
+        {/* [F51] — this used to say "log in again to see your updated status",
+            which was advice written around a bug: the app forgot the session
+            on every navigation. Sessions now survive, so the honest next step
+            is simply going back to the portal. */}
+        <p>
+          <a className="btn btn-primary btn-link" href="/business/billing">
+            View my subscription
+          </a>
         </p>
         {sessionId ? (
           <div className="session-id">Checkout session: {sessionId}</div>
         ) : null}
-        <div className="note">
-          If your status still shows as pending after a minute, check that your
-          backend’s <code>stripe listen</code> (in local dev) or webhook
-          endpoint (in production) is running — that’s what actually activates
-          your account.
-        </div>
+        {/* The troubleshooting note is DEV-ONLY. It used to render in every
+            build, so a salon owner in production was told to go and check a
+            `stripe listen` process on a machine they do not have — developer
+            copy on a customer-facing page. `import.meta.env.DEV` is true only
+            under `vite dev`; a production build drops this branch entirely. */}
+        {import.meta.env.DEV ? (
+          <div className="note">
+            Dev note: if the status still shows as pending after a minute, check
+            that <code>stripe listen</code> is running and forwarding to
+            <code> /v1/billing/webhook</code> — that is what activates the
+            account locally.
+          </div>
+        ) : (
+          <div className="note">
+            If your subscription still shows as pending after a few minutes,
+            refresh this page or contact support with the checkout session id
+            above.
+          </div>
+        )}
       </div>
     );
   }

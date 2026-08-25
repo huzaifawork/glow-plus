@@ -277,6 +277,39 @@
   .toggle.active{background:rgba(13,138,95,0.1);color:var(--sage);border-color:transparent;}
   .toggle.inactive{background:rgba(224,17,111,0.08);color:var(--rose);border-color:transparent;}
 
+  /* ---------- Editable panel forms  [F55 follow-up] ----------
+     The styles form now serves two modes. Three things had to change for the
+     edit mode to read as a mode rather than as the add form with odd copy. */
+
+  /* An action, not a state. `.toggle` bare is the neutral pill, and it sits
+     directly beside Active/Inactive — which IS a state. Same shape keeps the
+     row tidy; the accent text is what tells them apart at a glance. */
+  .toggle.edit{color:var(--accent);background:var(--white);border-color:var(--ink-faint);}
+  .toggle.edit:hover{background:rgba(0,113,227,0.06);}
+
+  /* Ties the card you clicked to the form that is now editing it. Below 860px
+     `.panel-grid` collapses to one column, so the form sits ABOVE the list and
+     the card can be scrolled out of sight entirely — hence the chip as well. */
+  .list-card.editing{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.10);}
+
+  .editing-chip{
+    display:inline-flex;align-items:center;gap:6px;max-width:100%;
+    padding:5px 12px;margin-bottom:12px;border-radius:980px;
+    font-size:12.5px;font-weight:600;
+    background:rgba(0,113,227,0.08);color:var(--accent);
+  }
+  .editing-chip .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* A form with a way out of it has two decisions, not one. `.auth-submit` is
+     width:100% by design, so a bare `.link-btn` underneath read as a stray
+     link rather than the second half of a pair. `1fr auto` keeps the primary
+     action dominant and still fits both on one row at 390px. */
+  .form-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-top:24px;}
+  .form-actions.pair{grid-template-columns:1fr auto;}
+  .form-actions .auth-submit{margin-top:0;}
+  .btn-secondary{background:var(--white);color:var(--ink);border-color:var(--ink-faint);justify-content:center;}
+  .btn-secondary:hover{background:var(--surface-2);}
+
   /* T36 — a wide table scrolls inside itself rather than widening the page. */
   .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
   table.ledger{width:100%;border-collapse:collapse;font-size:13.5px;}
@@ -363,3 +396,27 @@
    card stays a direct flex child of <body> and `position:sticky` still resolves
    against the viewport — i.e. layout is identical to the pre-migration DOM. */
 #root{display:contents;}
+
+/* ---- Opening hours rows  [F52] ----
+   A grid rather than a flex row so the day name, the open toggle and the two
+   time inputs line up down the column. Collapses to two lines on phones,
+   where four controls cannot share a 390px row at a 44px tap target. */
+.hours-row{display:grid;grid-template-columns:1fr auto auto auto auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+.hours-row:last-of-type{border-bottom:none;}
+.hours-day{font-weight:600;font-size:14px;}
+.hours-closed{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);white-space:nowrap;}
+.hours-closed input{width:18px;height:18px;accent-color:var(--accent);margin:0;}
+.hours-time{width:auto!important;min-height:44px;padding:6px 8px;border:1px solid var(--ink-faint);border-radius:10px;font-size:13px;}
+.hours-time:disabled{opacity:.45;}
+.hours-sep{font-size:12.5px;color:var(--ink-soft);}
+/* Below 700px the five columns cannot share the width at a 44px tap target,
+   so the row becomes a wrapping flex line: day + Open on the first line, the
+   two times on the second. Grid areas were wrong here — putting both inputs
+   and the separator in one area stacks them on top of each other. */
+@media (max-width:700px){
+  .hours-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;}
+  .hours-day{flex:1 1 auto;}
+  .hours-closed{flex:0 0 auto;}
+  .hours-time{flex:1 1 110px;min-width:0;}
+  .hours-sep{flex:0 0 auto;}
+}

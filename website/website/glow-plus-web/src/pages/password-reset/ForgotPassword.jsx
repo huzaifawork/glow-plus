@@ -12,7 +12,12 @@ const Brand = () => (
  * matched anything, matching the backend's account-enumeration protection.
  */
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
+  // Prefilled from `?email=` when arriving from a sign-in form [F56], so a
+  // walk-in who has just been told their address is taken does not have to
+  // type it a second time.
+  const [email, setEmail] = useState(
+    () => new URLSearchParams(window.location.search).get('email') || '',
+  );
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

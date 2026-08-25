@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /** How many visits each salon block carries back. The prototype's dashboard
@@ -38,6 +38,35 @@ const RECENT_VISITS_PER_MERCHANT = 5;
 @Injectable()
 export class MeService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * The signed-in consumer's own profile  [F51]
+   *
+   * `GET /merchants/me` has always existed for the salon side; there was no
+   * consumer equivalent, so a client holding a valid consumer token had no
+   * way to ask "who am I?". The website therefore could not restore a
+   * consumer session on page load — it knew the token was there but not whose
+   * it was — and rendered every refresh as a logout.
+   *
+   * An explicit field list, not the Prisma row: User carries `passwordHash`
+   * and the AES-GCM `phone` ciphertext plus its blind index, none of which
+   * may leave the server. Same allow-list reasoning as MERCHANT_PUBLIC_SELECT
+   * — a column added later is excluded by default.
+   */
+  async profile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, emailVerifiedAt: true, createdAt: true },
+    });
+    if (!user) throw new NotFoundException('Account not found');
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      emailVerified: !!user.emailVerifiedAt,
+      createdAt: user.createdAt,
+    };
+  }
 
   async rewards(userId: string) {
     const visits = await this.prisma.visit.findMany({

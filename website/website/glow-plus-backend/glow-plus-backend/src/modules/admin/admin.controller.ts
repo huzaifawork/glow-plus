@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './login.dto';
 import { AdminMerchantsQueryDto } from './merchants-query.dto';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
+import { AuthedRequest } from '../../middleware/auth.middleware';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -31,6 +32,18 @@ export class AdminController {
   // Bound as a whole DTO object, not `@Query('status')`: a loose @Query param
   // is not validated at all [F38], and an unchecked status string reaches a
   // Prisma enum filter as a 500 rather than a 400.
+  /**
+   * Who am I? Lets the console restore an admin session from a stored token
+   * [F51]. Guarded like every other /admin route except login — the identity
+   * it returns is the caller's own, but confirming an admin account exists
+   * for a token is itself an answer only an admin should get.
+   */
+  @UseGuards(RequireAdminGuard)
+  @Get('me')
+  me(@Req() req: AuthedRequest) {
+    return this.admin.profile(req.accountId!);
+  }
+
   @UseGuards(RequireAdminGuard)
   @Get('merchants')
   merchants(@Query() query: AdminMerchantsQueryDto) {

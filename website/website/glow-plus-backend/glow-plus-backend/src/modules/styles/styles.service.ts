@@ -103,7 +103,17 @@ export class StylesService {
 
   create(merchantId: string, dto: CreateStyleDto) {
     return this.prisma.style.create({
-      data: { merchantId, name: dto.name, type: dto.type, pointsPerVisit: dto.pointsPerVisit },
+      data: {
+        merchantId,
+        name: dto.name,
+        type: dto.type,
+        pointsPerVisit: dto.pointsPerVisit,
+        // [F55] — an explicit field list, so adding `durationMinutes` to the
+        // DTO alone was NOT enough; it had to be named here too or every
+        // created style silently kept the schema default. `undefined` lets
+        // Prisma apply that default for callers that omit it.
+        durationMinutes: dto.durationMinutes,
+      },
     });
   }
 

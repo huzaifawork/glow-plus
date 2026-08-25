@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { assertMerchantVisible } from '../../common/merchant-visibility';
+import { dayOfWeekFor, isValidDateISO, salonWallTimeToInstant } from '../../common/salon-time';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const SLOT_GRANULARITY_MINUTES = 15; // candidate slots start every 15 min
@@ -38,17 +39,21 @@ export class AvailabilityService {
     }
     if (!style.active) return [];
 
-    const date = new Date(dateISO + 'T00:00:00');
-    if (isNaN(date.getTime())) throw new NotFoundException('Invalid date');
+    // [F57] — every one of these three conversions used to run in the Node
+    // process's timezone, so the same BusinessHours row produced different
+    // slots on a developer machine and on Vercel (which runs UTC). The rule
+    // now lives in common/salon-time.ts; pass a per-merchant zone here the day
+    // Merchant grows a `timezone` column and nothing else has to change.
+    if (!isValidDateISO(dateISO)) throw new NotFoundException('Invalid date');
 
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = dayOfWeekFor(dateISO);
     const hours = await this.prisma.businessHours.findUnique({
       where: { merchantId_dayOfWeek: { merchantId, dayOfWeek } },
     });
     if (!hours || hours.closed) return [];
 
-    const dayStart = this.timeToDate(date, hours.openTime);
-    const dayClose = this.timeToDate(date, hours.closeTime);
+    const dayStart = salonWallTimeToInstant(dateISO, hours.openTime);
+    const dayClose = salonWallTimeToInstant(dateISO, hours.closeTime);
     const durationMs = style.durationMinutes * 60 * 1000;
 
     // Don't offer slots in the past, e.g. for "today".
@@ -94,13 +99,6 @@ export class AvailabilityService {
       },
     });
     return !conflict;
-  }
-
-  private timeToDate(date: Date, hhmm: string): Date {
-    const [h, m] = hhmm.split(':').map(Number);
-    const d = new Date(date);
-    d.setHours(h, m, 0, 0);
-    return d;
   }
 
   private roundUpToGranularity(date: Date): Date {

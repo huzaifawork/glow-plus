@@ -17,6 +17,7 @@ import {
   ApiError,
   cancelSubscription,
   clearToken,
+  createCheckoutSession,
   getMerchantProfile,
   getToken,
   merchantLogin,
@@ -97,6 +98,7 @@ export default function BillingManager({ banner }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [plan, setPlan] = useState('MONTHLY');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,6 +133,34 @@ export default function BillingManager({ banner }) {
       setError(err.message);
     } finally {
       setBusy(null);
+    }
+  }
+
+  /**
+   * Start a subscription  [F49]
+   *
+   * `POST /billing/checkout` and `createCheckoutSession()` both already
+   * existed — nothing in the site called either, so a salon that signed up
+   * could never pay. This page said "start a plan from your business portal"
+   * and the portal's Billing tab linked straight back here, so the two halves
+   * pointed at each other and neither reached Stripe.
+   *
+   * `location.assign`, not `window.open`: Checkout must replace the tab so
+   * Stripe's own success_url/cancel_url bring the merchant back to THIS page
+   * (billing.service.ts builds both from APP_URL). A popup would strand the
+   * return on a tab the merchant never sees, and is blocked by default anyway
+   * because this runs after an await rather than inside the click.
+   */
+  async function startCheckout() {
+    setBusy('checkout');
+    setError(null);
+    try {
+      const { url } = await createCheckoutSession(plan);
+      if (!url) throw new Error('Stripe did not return a checkout URL.');
+      window.location.assign(url);
+    } catch (err) {
+      setError(err.message);
+      setBusy(null); // on success the tab is leaving, so only reset on failure
     }
   }
 
@@ -207,8 +237,48 @@ export default function BillingManager({ banner }) {
                 </button>
               )
             ) : (
-              <p className="note">Start a plan from your business portal.</p>
+              <div className="plan-picker">
+                <div className="plan-picker-label">Choose a plan</div>
+                {[
+                  ['MONTHLY', 'Monthly', '$49.99', 'per month'],
+                  ['ANNUAL', 'Annual', '$479.99', 'per year — about 20% off'],
+                ].map(([value, name, price, per]) => (
+                  <label
+                    key={value}
+                    className={'plan-option' + (plan === value ? ' selected' : '')}
+                  >
+                    <input
+                      type="radio"
+                      name="plan"
+                      value={value}
+                      checked={plan === value}
+                      onChange={() => setPlan(value)}
+                      disabled={busy !== null}
+                    />
+                    <span className="plan-name">{name}</span>
+                    <span className="plan-price">{price}</span>
+                    <span className="plan-per">{per}</span>
+                  </label>
+                ))}
+                <button
+                  className="btn btn-primary"
+                  disabled={busy !== null}
+                  onClick={startCheckout}
+                >
+                  {busy === 'checkout' ? 'Opening Stripe…' : 'Start plan'}
+                </button>
+                <p className="note">
+                  Your free trial starts now — you will not be charged until it ends.
+                </p>
+              </div>
             )}
+
+            {/* The billing page is a separate document from the SPA, so there
+                was no way back to the portal except the browser's Back button
+                — which, before [F51] was fixed, also looked like a logout. */}
+            <a className="btn btn-quiet btn-link" href="/">
+              Back to portal
+            </a>
 
             <button className="btn btn-quiet" disabled={busy !== null} onClick={logOut}>
               Log out

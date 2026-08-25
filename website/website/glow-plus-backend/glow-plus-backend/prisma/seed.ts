@@ -52,7 +52,7 @@ async function main() {
     where: { email: SEED.merchant.email },
     update: { status: 'ACTIVE', emailVerifiedAt: new Date() },
     create: {
-      businessName: 'Glow Salon (Seed)',
+      businessName: 'Glow Salon',
       email: SEED.merchant.email,
       passwordHash: merchantHash,
       status: 'ACTIVE',

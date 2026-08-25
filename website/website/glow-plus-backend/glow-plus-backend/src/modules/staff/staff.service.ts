@@ -1,4 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { StaffRole } from '@prisma/client';
 import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -86,11 +92,34 @@ export class StaffService {
     });
 
     const inviteUrl = `${APP_URL}/staff/accept-invite?token=${rawToken}`;
-    await sendEmail({
-      to: email,
-      template: 'staff-invite',
-      data: { inviteUrl, businessName: merchant.businessName, role },
-    });
+
+    // [F59] — the invite row above is already COMMITTED. Before this, a failed
+    // send propagated straight out as a bare 500, which left the worst of both
+    // outcomes: a live, valid, 7-day invite sitting in the database while the
+    // owner was told the request had failed. They would retry (stacking rows),
+    // and an address that never receives anything — a typo like
+    // `stylist@gmial.com`, the single most likely way this fails in real use —
+    // was indistinguishable from the server being broken.
+    //
+    // Prisma cannot span the mail call in a transaction, so the invite is
+    // revoked on failure instead: the token can never be used, which is what
+    // "no invite was created" has to mean from the caller's side. Revoking
+    // rather than deleting keeps the audit row, matching revokeInvite().
+    try {
+      await sendEmail({
+        to: email,
+        template: 'staff-invite',
+        data: { inviteUrl, businessName: merchant.businessName, role },
+      });
+    } catch (err) {
+      await this.prisma.staffInvite.update({
+        where: { id: invite.id },
+        data: { revokedAt: new Date() },
+      });
+      throw new ServiceUnavailableException(
+        `Could not send the invite email to ${email}. Check the address is correct and try again — no invite is outstanding.`,
+      );
+    }
 
     return invite;
   }

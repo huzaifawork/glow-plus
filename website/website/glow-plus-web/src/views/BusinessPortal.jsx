@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
 import { useAsyncData } from '../lib/useAsyncData.js';
@@ -13,6 +13,9 @@ import {
   logVisit,
   setRewardRuleActive,
   setStyleActive,
+  updateStyle,
+  getMyBusinessHours,
+  setBusinessHours,
 } from '../lib/api.js';
 import { formatDay } from '../lib/helpers.js';
 import T from '../components/T.jsx';
@@ -204,25 +207,62 @@ function StylesPanel({ active }) {
   const nameRef = useRef(null);
   const typeRef = useRef(null);
   const pointsRef = useRef(null);
+  const durationRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  // The style currently loaded into the form for editing, or null when the
+  // form is in "add" mode. One form serves both: a second editor panel would
+  // duplicate four fields and their validation, and at 390px there is no room
+  // to show them side by side anyway.
+  const [editing, setEditing] = useState(null);
 
   const styles = usePortalData(() => listStyles(), []);
+
+  // The four inputs are uncontrolled (they were built that way for the add
+  // form, where `form.reset()` is the whole story), so loading a style into
+  // them has to be imperative. Keyed on `editing.id` rather than the object so
+  // that a background refresh from `bumpData` cannot silently overwrite what
+  // the user is halfway through typing.
+  useEffect(() => {
+    if (!editing) return;
+    nameRef.current.value = editing.name;
+    typeRef.current.value = editing.type;
+    pointsRef.current.value = editing.pointsPerVisit;
+    durationRef.current.value = editing.durationMinutes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing && editing.id]);
+
+  function cancelEdit() {
+    setEditing(null);
+    formRef.current.reset();
+    pointsRef.current.value = 40;
+    durationRef.current.value = 30;
+  }
 
   async function submitStyle(ev) {
     ev.preventDefault();
     const name = nameRef.current.value.trim();
     const type = typeRef.current.value;
     const pointsPerVisit = parseInt(pointsRef.current.value, 10);
-    if (!name || !pointsPerVisit) return;
+    // [F55] — how long the appointment actually takes. This is NOT cosmetic:
+    // it is the step the booking calendar walks the day in and the window it
+    // tests overlaps against, so before this field existed every style was
+    // 30 minutes and a salon offering a 90-minute service was offering it
+    // every half hour and triple-booking the chair.
+    const durationMinutes = parseInt(durationRef.current.value, 10);
+    if (!name || !pointsPerVisit || !durationMinutes) return;
+
+    const fields = { name, type, pointsPerVisit, durationMinutes };
 
     setBusy(true);
-    const created = await run(() => createStyle({ name, type, pointsPerVisit }));
+    const saved = editing
+      ? await run(() => updateStyle(editing.id, fields))
+      : await run(() => createStyle(fields));
     setBusy(false);
-    if (!created) return;
+    if (!saved) return;
 
-    formRef.current.reset();
-    pointsRef.current.value = 40;
-    toast(t('toast_style_added_prefix') + name);
+    const wasEditing = Boolean(editing);
+    cancelEdit();
+    toast((wasEditing ? t('toast_style_updated_prefix') : t('toast_style_added_prefix')) + name);
   }
 
   function toggleStyle(s) {
@@ -233,28 +273,69 @@ function StylesPanel({ active }) {
     <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-styles">
       <div className="panel-grid">
         <div className="panel-form">
-          <T as="h4" k="styles_form_title" />
-          <T as="div" className="hint" k="styles_form_hint" />
+          <h4>{editing ? t('styles_form_title_edit') : t('styles_form_title')}</h4>
+          {/* In edit mode the add-form's hint ("your own menu — no global
+              catalog") is answering a question nobody asked; naming the style
+              under edit is what the user actually needs, especially on a phone
+              where the card they clicked is scrolled off. */}
+          {editing ? (
+            <div className="editing-chip">
+              <span aria-hidden="true">✎</span>
+              <span className="name">{editing.name}</span>
+            </div>
+          ) : (
+            <T as="div" className="hint" k="styles_form_hint" />
+          )}
           <form id="styleForm" ref={formRef} onSubmit={submitStyle}>
             <T as="label" htmlFor="sName" k="label_style_name" />
             <input type="text" id="sName" ref={nameRef} placeholder="Balayage" required />
+            {/* Type moved out of the pair to make room for the duration field
+                without a three-column row, which at 390px would have given
+                each control ~110px. `.row2` is the only grid the stylesheet
+                has and it stays two-up at every width. */}
+            <T as="label" htmlFor="sType" k="label_type" />
+            <select id="sType" ref={typeRef} defaultValue="HAIR">
+              <option value="HAIR">{t('cat_hair')}</option>
+              <option value="NAIL">{t('cat_nail_opt')}</option>
+              <option value="SPA">{t('cat_spa')}</option>
+            </select>
             <div className="row2">
-              <div>
-                <T as="label" htmlFor="sType" k="label_type" />
-                <select id="sType" ref={typeRef} defaultValue="HAIR">
-                  <option value="HAIR">{t('cat_hair')}</option>
-                  <option value="NAIL">{t('cat_nail_opt')}</option>
-                  <option value="SPA">{t('cat_spa')}</option>
-                </select>
-              </div>
               <div>
                 <T as="label" htmlFor="sPoints" k="label_points_per_visit" />
                 <input type="number" id="sPoints" ref={pointsRef} min="1" defaultValue="40" required />
               </div>
+              <div>
+                {/* `step="15"` matches SLOT_GRANULARITY_MINUTES on the server —
+                    a 40-minute style would occupy two and two-thirds slots and
+                    leave unbookable gaps between appointments. */}
+                <T as="label" htmlFor="sDuration" k="label_duration_minutes" />
+                <input
+                  type="number"
+                  id="sDuration"
+                  ref={durationRef}
+                  min="15"
+                  max="480"
+                  step="15"
+                  defaultValue="30"
+                  required
+                />
+              </div>
             </div>
-            <button className="btn btn-primary auth-submit" type="submit" disabled={busy}>
-              {busy ? 'Saving…' : t('styles_submit')}
-            </button>
+            <div className={'form-actions' + (editing ? ' pair' : '')}>
+              <button className="btn btn-primary auth-submit" type="submit" disabled={busy}>
+                {busy ? 'Saving…' : editing ? t('styles_submit_edit') : t('styles_submit')}
+              </button>
+              {editing ? (
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={busy}
+                >
+                  {t('action_cancel')}
+                </button>
+              ) : null}
+            </div>
           </form>
         </div>
         <div id="stylesList">
@@ -262,19 +343,33 @@ function StylesPanel({ active }) {
             <div className="empty">No styles yet — add your first one on the left.</div>
           ) : (
             styles.map((s) => (
-              <div className="list-card" key={s.id}>
+              <div
+                className={'list-card' + (editing && editing.id === s.id ? ' editing' : '')}
+                key={s.id}
+              >
                 <div>
                   <div className="lc-name">
                     {s.name} <span className={'tag ' + s.type}>{s.type.toLowerCase()}</span>
                   </div>
-                  <div className="lc-meta">{s.pointsPerVisit} pts / visit</div>
+                  <div className="lc-meta">
+                    {s.pointsPerVisit} pts / visit · {s.durationMinutes} min
+                  </div>
                 </div>
-                <button
-                  className={'toggle ' + (s.active !== false ? 'active' : 'inactive')}
-                  onClick={() => toggleStyle(s)}
-                >
-                  {s.active !== false ? 'Active' : 'Inactive'}
-                </button>
+                {/* `.lc-actions` is T38's wrapper for a card with more than one
+                    decision on it — the buttons keep their size and the text
+                    column shrinks, so a long style name wraps instead of
+                    pushing the row sideways at 390px. */}
+                <div className="lc-actions">
+                  <button className="toggle edit" type="button" onClick={() => setEditing(s)}>
+                    {t('action_edit')}
+                  </button>
+                  <button
+                    className={'toggle ' + (s.active !== false ? 'active' : 'inactive')}
+                    onClick={() => toggleStyle(s)}
+                  >
+                    {s.active !== false ? 'Active' : 'Inactive'}
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -671,6 +766,137 @@ function LedgerPanel({ active }) {
    profile editor at all. Recorded in TASKS.md under T37 so the client can ask
    for editing knowingly.
    ============================================================ */
+
+/* ============================================================
+   Opening hours tab  [F52]
+   ============================================================
+
+   `PUT /business-hours` shipped in T13 and no client ever called it, so a
+   salon that signed up through the website had zero BusinessHours rows — and
+   `AvailabilityService` returns an empty slot list for any day without one
+   (`if (!hours || hours.closed) return []`). Every real salon was therefore
+   unbookable, permanently, while the seeded salon worked because seed.ts
+   inserts those rows directly. That is the whole reason this panel exists.
+
+   Reads `/business-hours/me` rather than the public `/business-hours/:id`,
+   because the public route refuses a salon that is not ACTIVE and a PENDING
+   salon has to be able to set its hours while it waits for approval [F54].
+   ============================================================ */
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function HoursPanel({ active }) {
+  const { toast } = useApp();
+  const run = usePortalAction();
+  const onError = useApiError();
+  const [days, setDays] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  // Loaded once on mount rather than through usePortalData: this form is
+  // EDITABLE, and re-reading it on every dataVersion bump would throw away
+  // whatever the user had typed but not yet saved.
+  useEffect(() => {
+    let cancelled = false;
+    getMyBusinessHours()
+      .then((rows) => {
+        if (!cancelled) setDays(rows);
+      })
+      .catch((err) => onError(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [onError]);
+
+  function update(dayOfWeek, patch) {
+    setDays((current) =>
+      current.map((d) => (d.dayOfWeek === dayOfWeek ? { ...d, ...patch } : d)),
+    );
+  }
+
+  async function save() {
+    setBusy(true);
+    const saved = await run(() =>
+      setBusinessHours(
+        days.map((d) => ({
+          dayOfWeek: d.dayOfWeek,
+          closed: d.closed,
+          openTime: d.openTime,
+          closeTime: d.closeTime,
+        })),
+      ),
+    );
+    setBusy(false);
+    if (saved) {
+      setDays(saved);
+      toast('Opening hours saved.');
+    }
+  }
+
+  return (
+    <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-hours">
+      <div className="panel-card">
+        <h3>Opening hours</h3>
+        <p className="punch-note" style={{ marginBottom: '14px' }}>
+          Customers can only book appointments inside these hours. A day marked
+          closed offers no times at all.
+        </p>
+
+        {days === null ? (
+          <div className="empty">Loading your hours…</div>
+        ) : (
+          <>
+            <div id="hoursList">
+              {days.map((d) => (
+                <div
+                  key={d.dayOfWeek}
+                  className="hours-row"
+                  data-day={d.dayOfWeek}
+                >
+                  <span className="hours-day">{DAY_NAMES[d.dayOfWeek]}</span>
+                  <label className="hours-closed">
+                    <input
+                      type="checkbox"
+                      checked={!d.closed}
+                      onChange={(e) => update(d.dayOfWeek, { closed: !e.target.checked })}
+                    />
+                    <span>Open</span>
+                  </label>
+                  <input
+                    type="time"
+                    className="hours-time"
+                    value={d.openTime}
+                    disabled={d.closed}
+                    onChange={(e) => update(d.dayOfWeek, { openTime: e.target.value })}
+                    aria-label={DAY_NAMES[d.dayOfWeek] + ' opening time'}
+                  />
+                  <span className="hours-sep">to</span>
+                  <input
+                    type="time"
+                    className="hours-time"
+                    value={d.closeTime}
+                    disabled={d.closed}
+                    onChange={(e) => update(d.dayOfWeek, { closeTime: e.target.value })}
+                    aria-label={DAY_NAMES[d.dayOfWeek] + ' closing time'}
+                  />
+                </div>
+              ))}
+            </div>
+            <button
+              className="btn btn-primary auth-submit"
+              type="button"
+              onClick={save}
+              disabled={busy}
+              style={{ marginTop: '14px' }}
+            >
+              {busy ? 'Saving…' : 'Save opening hours'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProfilePanel({ active }) {
   const profile = usePortalData(() => getMerchantProfile(), []);
 
@@ -765,6 +991,7 @@ export default function BusinessPortal({ active }) {
     ['styles', t('tab_styles')],
     ['rules', t('tab_rules')],
     ['ledger', t('tab_ledger')],
+    ['hours', 'Opening hours'],
     ['profile', 'Profile'],
     ['team', 'Team'],
     ['billing', 'Billing'],
@@ -802,13 +1029,14 @@ export default function BusinessPortal({ active }) {
       <StylesPanel active={tab === 'styles'} />
       <RulesPanel active={tab === 'rules'} />
       <LedgerPanel active={tab === 'ledger'} />
+      <HoursPanel active={tab === 'hours'} />
       <ProfilePanel active={tab === 'profile'} />
       <LinkOutPanel
         id="ptab-team"
         active={tab === 'team'}
         title="Your team"
         blurb="Invite receptionists and stylists, set who is an owner, and remove people who have left. Staff can log visits and see your reward rules; only an owner can change them or touch billing."
-        href="/team"
+        href="/business/staff"
         cta="Open team management"
         note="The team page asks you to sign in separately — it also accepts staff logins, which have fewer rights than this owner session."
       />

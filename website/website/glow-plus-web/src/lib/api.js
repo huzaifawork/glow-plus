@@ -208,8 +208,17 @@ export async function apiRequest(path, { method = 'GET', body, auth = true, toke
   } catch (networkError) {
     // fetch only rejects for network-level failures. Saying so plainly beats
     // "Failed to fetch", which reads to a user as though the app is broken.
+    //
+    // Split dev/production deliberately. The old single message named the API
+    // origin and asked whether "the backend" was running — useful on a laptop,
+    // but in production it is shown to a salon owner or a customer, tells them
+    // to check a server they do not operate, and prints the API host into the
+    // UI of every failed request. `import.meta.env.DEV` is compiled out of a
+    // production build, so only one of these two ever ships.
     throw new ApiError(
-      `Could not reach the Glow+ API at ${API_BASE_URL}. Is the backend running?`,
+      import.meta.env.DEV
+        ? `Could not reach the Glow+ API at ${API_BASE_URL}. Is the backend running?`
+        : 'We could not reach Glow+. Please check your internet connection and try again.',
       0,
     );
   }
@@ -438,6 +447,18 @@ export function getMyRewards() {
   return apiRequest('/me/rewards', { tokenKey: CONSUMER_TOKEN_KEY });
 }
 
+/**
+ * The signed-in consumer's own profile — `GET /me`  [F51]
+ *
+ * Added so a stored consumer token can be turned back into a session on page
+ * load. Without it the app knew a token existed but not whose it was, so it
+ * rendered every refresh as a logout while a perfectly valid token sat in
+ * localStorage.
+ */
+export function getConsumerProfile() {
+  return apiRequest('/me', { tokenKey: CONSUMER_TOKEN_KEY });
+}
+
 /** Full visit history across every salon, newest first (T45). */
 export function listMyVisits() {
   return apiRequest('/visits/me', { tokenKey: CONSUMER_TOKEN_KEY });
@@ -450,6 +471,11 @@ export async function adminLogin(email, password) {
   const data = await apiRequest('/admin/login', { method: 'POST', auth: false, body: { email, password } });
   writeSession(ADMIN_TOKEN_KEY, data);
   return data;
+}
+
+/** The signed-in admin's own profile — `GET /admin/me` [F51]. Same purpose as getConsumerProfile. */
+export function getAdminProfile() {
+  return apiRequest('/admin/me', { tokenKey: ADMIN_TOKEN_KEY });
 }
 
 export function listPendingMerchants() {
@@ -588,8 +614,33 @@ export function listStyles() {
   return apiRequest('/styles');
 }
 
-export function createStyle({ name, type, pointsPerVisit }) {
-  return apiRequest('/styles', { method: 'POST', body: { name, type, pointsPerVisit } });
+// [F55] — `durationMinutes` is destructured here as well as sent, because
+// this signature is the third place the field had to be named explicitly (the
+// DTO and the service's `data:` list being the other two). A spread would have
+// been shorter, but the explicit shape is what stops an unvalidated key from
+// the caller reaching the API.
+export function createStyle({ name, type, pointsPerVisit, durationMinutes }) {
+  return apiRequest('/styles', {
+    method: 'POST',
+    body: { name, type, pointsPerVisit, durationMinutes },
+  });
+}
+
+/**
+ * Edit an existing style.
+ *
+ * `PATCH /styles/:id` shipped in T29 and, like `PUT /business-hours` before
+ * [F52], no client ever called it — so a salon that mistyped a style name, or
+ * filed a pedicure under HAIR, or set the wrong appointment length, was stuck
+ * with it forever. Every field UpdateStyleDto accepts is sent, because a
+ * partial PATCH here would be indistinguishable from "leave it alone" and the
+ * form always shows all four.
+ */
+export function updateStyle(id, { name, type, pointsPerVisit, durationMinutes }) {
+  return apiRequest(`/styles/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { name, type, pointsPerVisit, durationMinutes },
+  });
 }
 
 export function setStyleActive(id, active) {
@@ -618,6 +669,31 @@ export function setRewardRuleActive(id, active) {
   return apiRequest(`/reward-rules/${encodeURIComponent(id)}/${active ? 'activate' : 'deactivate'}`, {
     method: 'PATCH',
   });
+}
+
+/**
+ * Opening hours  [F52]
+ *
+ * `PUT /business-hours` has existed since T13 and nothing ever called it, so
+ * no salon that signed up through the website could set opening hours — and
+ * `GET /bookings/availability` returns an EMPTY slot list for any day with no
+ * BusinessHours row. The booking feature was therefore dead for every real
+ * salon; only the seeded one worked, because seed.ts writes those rows
+ * directly.
+ *
+ * The read is `/merchants/me/business-hours`, not the public
+ * `/business-hours/:id`: the public route refuses a salon that is not ACTIVE,
+ * and a PENDING salon must be able to set its hours while it waits for
+ * approval [F54]. It also cannot live under `/business-hours/` at all — that
+ * whole prefix is excluded from AuthMiddleware for GET, so a route there
+ * arrives with no session and is refused 403 even with a valid token.
+ */
+export function getMyBusinessHours() {
+  return apiRequest('/merchants/me/business-hours');
+}
+
+export function setBusinessHours(days) {
+  return apiRequest('/business-hours', { method: 'PUT', body: { days } });
 }
 
 /** The merchant's visit ledger, newest first, with style and client included. */

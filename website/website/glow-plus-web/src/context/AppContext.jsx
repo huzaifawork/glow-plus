@@ -6,7 +6,40 @@ import {
   useRef,
   useState,
 } from 'react';
-import { logoutAdmin, logoutConsumer, logoutMerchant } from '../lib/api.js';
+import {
+  getAdminProfile,
+  getAdminToken,
+  getConsumerProfile,
+  getConsumerToken,
+  getMerchantProfile,
+  getToken,
+  logoutAdmin,
+  logoutConsumer,
+  logoutMerchant,
+} from '../lib/api.js';
+
+/**
+ * The view the user was last on, per TAB  [F51]
+ *
+ * sessionStorage, not localStorage, and deliberately: a brand-new tab should
+ * open on the marketing page the way a first-time visitor sees it, while a
+ * RELOAD of a tab that was mid-session should come back where it was. A
+ * restored view is only applied if the session it needs actually came back —
+ * otherwise a signed-out reload would land on an empty portal.
+ */
+const VIEW_KEY = 'glowplus:view';
+const VIEW_REQUIRES = {
+  'view-business-portal': 'merchant',
+  'view-consumer-dashboard': 'consumer',
+};
+
+function readStoredView() {
+  try {
+    return window.sessionStorage.getItem(VIEW_KEY);
+  } catch {
+    return null;
+  }
+}
 
 const AppContext = createContext(null);
 
@@ -28,6 +61,9 @@ export function AppProvider({ children }) {
   // the odd one out in the same shell. The token survives; the session state
   // does not. (Making all three survive a refresh is T47's territory.)
   const [currentAdmin, setCurrentAdmin] = useState(null);
+  // False until the token-restore pass below has finished. Views that need to
+  // tell "signed out" from "not asked yet" read this.
+  const [hydrated, setHydrated] = useState(false);
 
   // Bumped after every write. Views re-read through useAsyncData, which stands
   // in for the prototype's habit of calling render*() straight after a save.
@@ -39,6 +75,11 @@ export function AppProvider({ children }) {
 
   const showView = useCallback((id) => {
     setView(id);
+    try {
+      window.sessionStorage.setItem(VIEW_KEY, id);
+    } catch {
+      /* private-mode browsers throw; navigation must still work */
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -52,6 +93,109 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  /**
+   * Restore sessions from stored tokens on load  [F51]
+   *
+   * Before this, all three sessions lived only in React state: a valid access
+   * token and a 30-day refresh token sat in localStorage while the app
+   * rendered its signed-out shell, so a refresh, the browser Back button, the
+   * Glow+ logo, or the return trip from Stripe Checkout all looked like being
+   * logged out. (The Stripe success page's "log in again to see your updated
+   * status" line existed only to paper over this.)
+   *
+   * Each role is restored by ASKING THE SERVER who the token belongs to,
+   * rather than by caching the profile locally. That matters beyond
+   * tidiness: `Merchant.status` changes underneath the client — an admin
+   * approves it, or a completed checkout flips it to ACTIVE — and a cached
+   * copy would keep showing the pending banner to a salon that is already
+   * live.
+   *
+   * The three calls are independent and each carries its own token key, so
+   * they cannot replay one another's refresh token (`refreshSession` is
+   * single-flight per key). A failure is swallowed on purpose: `apiRequest`
+   * has already cleared a session it could not refresh, and the correct
+   * outcome for the user is simply the signed-out view they would have got
+   * anyway.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restore() {
+      const jobs = [];
+
+      if (getToken()) {
+        jobs.push(
+          getMerchantProfile()
+            .then((m) => {
+              if (cancelled) return;
+              setCurrentMerchant({
+                id: m.id,
+                businessName: m.businessName,
+                status: m.status,
+                foundingMember: m.foundingMember,
+                createdAt: Date.parse(m.createdAt) || Date.now(),
+              });
+            })
+            .catch(() => {}),
+        );
+      }
+
+      if (getConsumerToken()) {
+        jobs.push(
+          getConsumerProfile()
+            .then((u) => {
+              if (cancelled) return;
+              setCurrentConsumer({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                emailVerified: u.emailVerified,
+              });
+            })
+            .catch(() => {}),
+        );
+      }
+
+      if (getAdminToken()) {
+        jobs.push(
+          getAdminProfile()
+            .then((a) => {
+              if (cancelled) return;
+              setCurrentAdmin({ id: a.id, email: a.email });
+            })
+            .catch(() => {}),
+        );
+      }
+
+      if (jobs.length === 0) return;
+      await Promise.all(jobs);
+    }
+
+    restore().finally(() => {
+      if (!cancelled) setHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Put the tab back on the view it was showing, once we know which sessions
+   * survived. Runs after hydration so it can refuse to restore a view whose
+   * session did not come back.
+   */
+  useEffect(() => {
+    if (!hydrated) return;
+    const stored = readStoredView();
+    if (!stored || stored === view) return;
+    const needs = VIEW_REQUIRES[stored];
+    if (needs === 'merchant' && !currentMerchant) return;
+    if (needs === 'consumer' && !currentConsumer) return;
+    setView(stored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   // T35 — real sessions, so a real logout must drop the real token, not just
   // the local view state (the fake data.js flow had no token to worry about).
@@ -88,6 +232,7 @@ export function AppProvider({ children }) {
     currentAdmin,
     setCurrentAdmin,
     signOutAdmin,
+    hydrated,
     dataVersion,
     bumpData,
     toast,

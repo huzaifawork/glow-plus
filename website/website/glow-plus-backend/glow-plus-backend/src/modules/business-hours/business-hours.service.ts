@@ -14,6 +14,28 @@ export class BusinessHoursService {
     // happens to be closed" rather than "not open to customers".
     await assertMerchantVisible(this.prisma, merchantId);
 
+    return this.read(merchantId);
+  }
+
+  /**
+   * The merchant's OWN hours, with no visibility check  [F54]
+   *
+   * `get()` above is the public route and refuses a salon that is not ACTIVE.
+   * Reusing it for the owner's own read-back was wrong twice over:
+   *
+   *   - `set()` ended with `return this.get(merchantId)`, so a PENDING salon
+   *     saving its hours had the transaction COMMIT and then received a 404.
+   *     The write succeeded and the UI reported failure.
+   *   - the portal has to show a salon its hours before approval, which is
+   *     exactly what the pending banner invites it to do.
+   *
+   * So the shared read lives here and each caller decides its own rule.
+   */
+  async readOwn(merchantId: string) {
+    return this.read(merchantId);
+  }
+
+  private async read(merchantId: string) {
     const hours = await this.prisma.businessHours.findMany({
       where: { merchantId },
       orderBy: { dayOfWeek: 'asc' },
@@ -73,6 +95,7 @@ export class BusinessHoursService {
       ),
     );
 
-    return this.get(merchantId);
+    // NOT `this.get()` — see readOwn's comment [F54].
+    return this.read(merchantId);
   }
 }

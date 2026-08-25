@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
 
@@ -8,6 +8,21 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly merchants: MerchantsService,
   ) {}
+
+  /**
+   * The signed-in admin's own profile  [F51]
+   *
+   * Never the Prisma row: Admin holds `passwordHash`. Only id and email
+   * leave, which is all a console needs to say who is signed in.
+   */
+  async profile(adminId: string) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, email: true },
+    });
+    if (!admin) throw new NotFoundException('Admin not found');
+    return admin;
+  }
 
   pendingMerchants() {
     return this.merchants.listByStatus('PENDING');

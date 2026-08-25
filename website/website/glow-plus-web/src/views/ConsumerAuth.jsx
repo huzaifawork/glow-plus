@@ -24,6 +24,11 @@ export default function ConsumerAuth({ active }) {
   const [signupNotice, setSignupNotice] = useState(null); // email string once signup succeeds
   const [resendBusy, setResendBusy] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const [resetHint, setResetHint] = useState(false);
+
+  // Carries whatever they have already typed, so the reset form opens prefilled.
+  const forgotHref =
+    '/forgot-password' + (email.trim() ? '?email=' + encodeURIComponent(email.trim()) : '');
 
   async function submit(ev) {
     ev.preventDefault();
@@ -58,6 +63,9 @@ export default function ConsumerAuth({ active }) {
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
+      // A 409 on signup means the address is already an account — which for a
+      // walk-in is the *expected* answer, not a mistake they made. [F56]
+      setResetHint(err instanceof ApiError && err.status === 409 && mode === 'signup');
     } finally {
       setBusy(false);
     }
@@ -138,6 +146,18 @@ export default function ConsumerAuth({ active }) {
           {error ? (
             <p className="err" role="alert">
               {error}
+              {/* A bare "already exists" is a dead end for the one group most
+                  likely to hit it — walk-ins whose salon created the account
+                  for them. Name the way out in the same breath. */}
+              {resetHint ? (
+                <>
+                  {' '}
+                  {t('signup_email_taken_hint')}{' '}
+                  <a className="link-btn" href={forgotHref}>
+                    {t('forgot_password_link')}
+                  </a>
+                </>
+              ) : null}
             </p>
           ) : null}
 
@@ -157,10 +177,24 @@ export default function ConsumerAuth({ active }) {
             onClick={() => {
               setMode(mode === 'signup' ? 'login' : 'signup');
               setError(null);
+              setResetHint(false);
             }}
           >
             {mode === 'signup' ? t('auth_toggle_to_login') : t('auth_toggle_to_signup')}
           </button>
+        </div>
+
+        {/* [F56] — `/forgot-password` shipped in T21, is routed in both
+            vite.config.js and vercel.json, and NOTHING on the site linked to
+            it: the page was reachable only by typing the URL. That is not just
+            a missing convenience. `POST /visits` creates a lightweight account
+            for a walk-in with a 128-bit random password they never see, so
+            signup answers them 409 and login is impossible — a reset was
+            their ONLY way in, and it was unreachable. */}
+        <div className="switch-role">
+          <a className="link-btn" href={forgotHref}>
+            {t('forgot_password_link')}
+          </a>
         </div>
 
         <div className="switch-role">

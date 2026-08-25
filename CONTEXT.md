@@ -112,6 +112,12 @@ joziilunga-attachments/
 | **F12** | JWT is hand-rolled HS256, fixed 7-day, **no refresh token**. |
 | **F13** | No `/health` endpoint. |
 
+**F49–F54 live in the SESSION 26 block in §8** — five of the six are fixed;
+**[F50]** (paying bypasses admin approval) is open and needs a **client decision**, not code.
+**F55–F59 are newer still and live in the SESSION 27 block in §8** — all four real ones
+(F55, F56, F57, F59) are **fixed and verified live**; **[F58] was raised and WITHDRAWN**
+(it is a documented decision at `TASKS.md:986` — do not re-raise it).
+
 **The design is a genuine asset** — 6 complete views, ~247 lines CSS, 11 render functions, and **8 languages including Arabic with RTL**. The rebuild is *"swap the data layer, keep the design,"* not a redesign.
 
 ## 7. Where the client's doc is wrong
@@ -126,10 +132,248 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 25 (2026-08-25): 52 of 65 done. PHASE 7 IS CLOSED —
+> **State as of session 27 (2026-08-25): 52 of 65 done. PHASE 7 IS CLOSED —
 > T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. PHASE 8 IS UNDERWAY: T52 ✅ (and
 > T60 ✅, done early). Next is T53. Remaining: T53–T59, T61–T63, T64–T66.**
-> Backend suite **396 passing**, 25 suites.
+> Backend suite **407 passing, 26 suites** (session 27 added `common/salon-time.spec.ts`, 11).
+>
+> ⚠️ **THE MANUAL TEST RUN IS THE ACTIVE PIECE OF WORK, NOT A TASK NUMBER.**
+> Read the SESSION 27 block immediately below — it says exactly which journey
+> to start on and what state the local DB is in. Do not start a T-number task
+> without checking there first.
+>
+> ---
+>
+> ---
+>
+> ## 🟢 SESSION 27 (2026-08-25) — MANUAL TEST RUN: **THE WHOLE MERCHANT SIDE IS DONE**
+>
+> Same working mode as session 26 and it must continue: **one case at a time,
+> given click-by-click in chat, the user executes it in a real browser, Claude
+> verifies Postgres/Stripe/Resend itself, and any defect is FIXED before the
+> next case.** No test-plan file. No batching. Read UI labels out of
+> `src/i18n/translations.js` before quoting them — inventing one cost time in
+> session 26.
+>
+> ### ✅ Merchant/salon surface — COMPLETE (M1–M9)
+>
+> | Case | Covered | Result |
+> |---|---|---|
+> | **M1** | Portal shell, session restore, stats on a blank salon | ✅ |
+> | **M2** | Styles: create ×3, deactivate, public-menu split | ✅ found **[F55]** |
+> | **M3** | Reward rules: all three reward types + scope dropdowns | ✅ |
+> | **M4** | Log a visit ×4, walk-in account creation, rule firing, Resend emails | ✅ found **[F56]** |
+> | **M5** | Visit ledger | ✅ |
+> | **M6** | Profile tab | ✅ |
+> | **M7** | Opening hours — the [F52] fix, on a salon with 0 rows | ✅ found **[F57]** |
+> | **M8** | Team: invite → email → accept → staff-limited view → role change → remove | ✅ found **[F59]** |
+> | **M9** | Refusal matrix, 33 probes | ✅ all correct |
+>
+> **M9 in full** — 6 merchant routes with a consumer token → **403**; the same 6
+> with no token → **401** (401 vs 403 correctly distinguished, including
+> `/merchants/me/business-hours`, the route that was silently unauthenticated
+> when it lived under `/business-hours/`); 3 writes with a consumer token →
+> **403**; 2 admin routes with a merchant token → **403**; 4 owner-only staff
+> routes with a **STAFF** token → **403**, and not-403 for a staff-OWNER token;
+> `GET /staff` roster with a staff token → **403**; day-to-day routes with a
+> staff token → **200**. The staff half was run by inserting a throwaway
+> `MerchantStaff` row (bcryptjs hash) rather than re-running the invite flow;
+> **both probe rows and their invites were deleted afterwards.**
+>
+> ### Four findings — F55–F59, ALL FIXED AND VERIFIED LIVE
+>
+> | # | Finding | Status |
+> |---|---|---|
+> | **F55** | **`Style.durationMinutes` drove every booking calculation and no client could set it.** `availability.service.ts` steps the day by it AND uses it as the overlap window; `bookings.service.ts` derives `endTime` from it. It was absent from `CreateStyleDto`, from `UpdateStyleDto` and from the portal form, so every style created through the app kept the schema default of **30 forever**, while the seeded salon varied 45–90 because `seed.ts` writes the column directly. A 90-minute balayage was offered every 30 minutes — the salon triple-books the chair. **Same shape as [F52]: the column existed, the booking layer depended on it, nothing could reach it.** | ✅ **FIXED** — needed the field named in **three** places (DTO, the service's explicit `data:` list, and `createStyle()`'s destructure in `api.js`); adding it to the DTO alone would silently have done nothing. Bounds 15–480, `step=15` matching `SLOT_GRANULARITY_MINUTES`. Omitting it still yields 30, so **the RN app's existing call shape is unchanged** |
+> | **F56** | **`/forgot-password` existed, was routed in BOTH `vite.config.js` and `vercel.json`, and NOTHING on the site linked to it.** Only reference in the whole tree was the page calling its own API. Not merely a missing convenience: `POST /visits` creates a walk-in account with a **128-bit random password the customer never sees**, so signup answers them **409** and login is impossible — password reset was their ONLY way in and it was unreachable. **Every walk-in a salon ever logged was permanently locked out of the consumer app**, which is the whole loyalty loop and Order 2's audience | ✅ **FIXED** — `Forgot your password?` on **both** auth forms, a 409-specific hint naming the walk-in case, and the typed email carried through as `?email=` so the reset form opens prefilled |
+> | **F57** | **Opening hours had no timezone.** `availability.service.ts` resolved `"09:00"` with `d.setHours()`, which reads **the Node process's** zone — invisible locally and it *changes meaning on deploy*. Dev machine (Asia/Karachi) turned it into 04:00Z; **Vercel runs UTC**, so the same row becomes 09:00Z and a Toronto salon's 9am–6pm is offered to customers as 5am–2pm local. `Merchant` has **no timezone column** (grepped). NB this is **not** about the Supabase region — `timestamptz` stores absolute instants; the bad conversion happens in Node before anything reaches Postgres | ✅ **FIXED** — new `src/common/salon-time.ts`. `SALON_TIMEZONE` env var, **default `America/Toronto`** (prices are CAD; an unset var must not degrade to a value wrong for every real salon). Two-pass offset resolution so DST-transition days don't land an hour out. The old `timeToDate()` **deleted**, not left beside the new one. `bookings.service.ts` needed no change — it already parses a real ISO instant. **11 specs incl. both 2026 DST boundaries**, asserted against a fixed IANA zone so they fail identically whatever TZ the runner is in |
+> | **F59** | **`POST /staff/invites` committed the invite row, THEN awaited `sendEmail`.** A send failure propagated as a bare **500** while leaving a **live, valid, 7-day invite in the database** — the owner is told it failed, retries, and a real token is outstanding that nobody knows about. Likeliest real trigger is a typo (`stylist@gmial.com`). **Exactly the [F27] shape, in a module F27 never touched** | ✅ **FIXED** — send wrapped; on failure the invite is **revoked** (not deleted — keeps the audit row, matches `revokeInvite()`) and the caller gets **503** naming the address. Verified live; the pre-fix orphaned `revokedAt IS NULL` row was visible in Postgres as proof |
+>
+> ### ❌ [F58] was RAISED AND WITHDRAWN — do not re-raise it
+>
+> Style writes and `PUT /business-hours` sit on `RequireMerchantGuard` (staff
+> may write) while reward-rule writes sit on `RequireMerchantOwnerGuard`. That
+> asymmetry looks like an omission and **is not** — **`TASKS.md:986` states it
+> as a decision**: *"a deliberate divergence from `styles.controller.ts`, where
+> staff may write: mispricing a style costs the points on one visit, not a
+> recurring giveaway."* `MAX_POINTS_PER_VISIT = 10_000` bounds the blast
+> radius, and the evaluator only fires on an exact multiple so it cannot
+> cascade. Opening hours follow the same principle — operational, not
+> financial. **No code change. Read TASKS.md:986 before touching those guards.**
+>
+> ### Also done this session
+>
+> - **Style editing.** `PATCH /styles/:id` shipped in T29 and — like
+>   `PUT /business-hours` before [F52] — **no client ever called it**, so a
+>   mistyped style name or a wrong duration was permanent. Added an `Edit`
+>   button per card that loads the style into the same form (heading becomes
+>   `Edit style`, submit becomes `Save changes`, a `Cancel` appears), plus a
+>   `.editing-chip` naming the style, an accent ring on the card being edited,
+>   and `.toggle.edit` styling so an **action** doesn't look like the
+>   `Active`/`Inactive` **state** pill beside it. `type` was added to
+>   `UpdateStyleDto` too — a pedicure filed under HAIR had been permanent.
+> - **A `DELETE /styles/:id` was built and then BACKED OUT** at the user's
+>   call: `Inactive` already is the remove, and it is the safer semantic. Worth
+>   remembering *why* it was also the wrong shape — a `Style` is referenced from
+>   four places and **not one cascades**: `Visit.styleId` and `Booking.styleId`
+>   are required relations (a raw delete surfaces as a P2003 500), and
+>   **`freeServiceStyleId` is a bare `String?` with no foreign key at all**, so
+>   nothing in the DB would stop a delete leaving a "free Balayage" rule
+>   pointing at a style that no longer exists.
+> - **`seed.ts` salon renamed `Glow Salon (Seed)` → `Glow Salon`** — the suffix
+>   was rendering in the public salon directory. Live row updated too.
+> - **`Visit.loggedBy` is a bare `String` with no FK** (noted, not fixed).
+>   Removing a staff member hard-deletes the `MerchantStaff` row, so audit rows
+>   point at a dead id. Audit-only field; low severity.
+> - **Translation coverage is partial and that is pre-existing**: the seven
+>   non-English blocks do **not** define every key (`auth_toggle_to_login`,
+>   `label_password`, `business_login_submit` appear **once** in the whole
+>   file). `I18nContext`'s `t()` falls back per key to English. When adding a
+>   key to all 8 blocks, anchor on one that actually exists 8 times —
+>   `customer_login_link` and `business_auth_title` do.
+>
+> ### ⚠️ Supabase / production readiness — CHECKED
+>
+> **Nothing this session changed the schema.** `git status` shows no
+> `schema.prisma` edit and no new migration; `durationMinutes` was **already**
+> migrated — what was missing was any way for a client to *write* it. Verified
+> against the live project: **`8 migrations found`, `Database schema is up to
+> date!`, zero drift.**
+>
+> ⚠️ **`prisma migrate status` first failed with `P1001 Can't reach database
+> server` and it was a FALSE ALARM.** DNS resolved and **both 5432 and 6543
+> were open at TCP level** — it was purely Prisma's **default 5-second connect
+> timeout** being too short for a ~1.2s-latency link plus TLS. It connects fine
+> with `connect_timeout=45` appended. On Vercel `iad1` the DB is same-region so
+> this will not bite in production, but **T58's CI runner may need it**, and if
+> anyone sees P1001 that is the first thing to check — **not** a paused project.
+>
+> ### ➡️ RESUME HERE — the consumer side, J3 onward
+>
+> J1 ✅ J2 ✅ (session 26) · **the whole merchant side ✅ (session 27)**. Left:
+>
+> | # | Journey | Notes for whoever picks this up |
+> |---|---|---|
+> | **J3** | consumer signup → visit → points → **redeem** | Includes the **double-redemption 400** and *unverified-login-succeeds-by-design*. Sign up fresh with **`+client`** — it is deliberately unused. `+walkin` already exists as a **walk-in** account and is a different case |
+> | **J4** | booking at **ACTIVE vs SUSPENDED** [F47] | **NOW UNBLOCKED** — Manual Test Salon finally has 7 `BusinessHours` rows. Availability already verified live: **27 slots** on a Wednesday, **19** on Saturday, **`[]`** on the closed Sunday, and 90-minute slots for `Balyage` (F55 working end to end). Suspend the salon via admin and re-check all four public salon-scoped routes |
+> | **J5** | forgot password → reset → login | **HALF DONE.** [F56]'s link and the prefilled `?email=` are verified; the user stopped at `Send reset link`. The token → `Choose a new password` → `Password updated` → login half is NOT run. Remember **a reset revokes every session predating it** |
+> | **J6** | 15-min expiry → silent refresh + **replay revokes the family** | Read T47's TASKS.md entry first. The SPA resets to the marketing view on reload, so **reloading proves nothing** — drive `await import('/src/lib/api.js')` in the page instead. Authenticated responses carry an **ETag**, so a good retry is **304**, not 200 |
+> | **J7** | admin approve/suspend | Feeds J4's SUSPENDED half — run J7 first or at least the suspend step |
+> | **J8** | every view at **390px** | The long pole; touches all 8 languages incl. **Arabic RTL** |
+>
+> ### Local DB state left behind (NOT seed-clean)
+>
+> - **`Manual Test Salon`** / `augmenthuzaifa+salon@gmail.com`, id
+>   `cmt8s49ae0000o0exrvzne28c`, ACTIVE, founding, TRIALING to 2026-10-01.
+>   Now has **4 styles** (`Balyage` HAIR 40pts **90min**, `Gel Manicure` NAIL
+>   25pts **INACTIVE**, `Deep Tissue Massage` SPA 60pts, `Full Highlights` HAIR
+>   80pts 60min), **3 reward rules** (`Loyal Client Discount` VISIT_COUNT 3 →
+>   PERCENT_OFF 20; `Ten Dollars Off` POINTS_THRESHOLD 200 → FLAT_DISCOUNT
+>   **1000 cents**; `Fifth Visit Free` VISIT_COUNT 5 scoped to `Full Highlights`
+>   → FREE_SERVICE `Deep Tissue Massage`), **4 visits**, **7 BusinessHours rows**
+>   (Sun closed, Mon 09:00–18:00, Tue–Fri 09:00–17:00, Sat 10:00–16:00),
+>   **0 staff**.
+> - **`walk In Tester`** / `augmenthuzaifa+walkin@gmail.com` — a **walk-in**
+>   `User` created by `POST /visits`, so its password is 128 random bits and it
+>   has **no usable login until a password reset is completed** (that is [F56]'s
+>   whole point). 4 visits / **200 points** / 2 rewards already unlocked — which
+>   makes it a ready-made subject for a redeem test once J5 finishes.
+> - One accepted `StaffInvite` for `augmenthuzaifa+staff@gmail.com` remains;
+>   its `MerchantStaff` row was removed as the last step of M8.
+> - `Glow Salon` (seeded) untouched apart from the rename.
+>
+> ---
+>
+> ## 🟡 SESSION 26 (2026-08-25) — J1 + J2 (superseded by SESSION 27 above)
+>
+> The user asked for a human-executed, click-by-click test plan covering 8
+> journeys, run **interactively in chat** (not written to a file): one case at
+> a time, they click, Claude verifies Postgres/Stripe/Resend, and any defect is
+> **fixed before moving on**. That is the working mode — do not batch.
+>
+> **Route count is now 69** (was 66): three endpoints were added this session.
+>
+> ### Journeys completed
+>
+> | Journey | Result |
+> |---|---|
+> | **J1 — merchant signup → Resend email → verify link → login** | ✅ **6/6 passed** |
+> | **J2 — Stripe checkout (4242) → webhook → Subscription in DB → cancel → resume** | ✅ **4/4 passed** |
+>
+> J1 detail: signup → `PENDING` + `emailVerifiedAt NULL` + real `cus_…`;
+> verification link → `Merchant.emailVerifiedAt` and `EmailVerification.verifiedAt`
+> written with **identical millisecond timestamps** (one transaction); replay of
+> the link → 400 single-use; duplicate signup → 409 **with no orphan Stripe
+> customer**; wrong password → 401 generic; login → `expiresIn: 900`, JWT
+> `exp-iat = 900s`, founding banner rendered (so **[F44] has not regressed**).
+>
+> J2 detail: `trialDays: 37` (7 + 30 founding), shown by Stripe as "37 days
+> free"; **13 webhook deliveries, 0 non-200**; `Subscription` = TRIALING /
+> MONTHLY / 4999 / trialEnd 2026-10-01, `currentPeriodStart/End` both populated
+> (T17's `readPeriod()` holding); cancel → resume verified against **both**
+> Postgres and the live Stripe API, which agreed.
+>
+> ### ⚠️ Journeys NOT yet run
+>
+> **The rest of the merchant surface** (portal shell/stats, Log a visit,
+> Styles, Reward rules, Visit ledger, Profile, Team, staff invite/accept,
+> **Opening hours**), then **J3** consumer signup→visit→points→redeem, **J4**
+> booking ACTIVE vs SUSPENDED ([F47]), **J5** password reset, **J6** 15-min
+> expiry → silent refresh + replay revokes family, **J7** admin approve/suspend,
+> **J8** every view at 390px.
+>
+> The user's instruction at the point of handoff: **test the whole merchant /
+> salon side before moving to the consumer side.**
+>
+> ### Six new findings — F49–F54
+>
+> | # | Finding | Status |
+> |---|---|---|
+> | **F49** | **A salon could not start a subscription anywhere on the website.** `POST /billing/checkout` and `createCheckoutSession()` both existed; **nothing called either**. `/business/billing` said "start a plan from your business portal" and the portal's Billing tab linked back to `/business/billing` — circular, so no salon could ever pay. | ✅ **FIXED** — plan picker (Monthly $49.99 / Annual $479.99) + "Start plan" in `BillingManager.jsx`, verified end to end with a real 4242 checkout |
+> | **F50** | **Paying bypasses admin approval entirely.** `onCheckoutCompleted` sets `Merchant.status = ACTIVE` unconditionally, so a PENDING salon that completes checkout is live and publicly listed with **no admin review**. The approval queue is therefore not a gate. | ⚠️ **OPEN — client decision**, not a code bug. Raise it |
+> | **F51** | **The SPA never restored a session.** All three sessions lived only in React state, so a refresh, the Glow+ logo, the Back button, or the return trip from Stripe all rendered as a logout while a valid token pair sat in localStorage. The AppContext comment admitted it ("Making all three survive a refresh is T47's territory"). | ✅ **FIXED** — see below |
+> | **F52** | **No opening-hours UI existed, so no real salon could ever be booked.** `PUT /business-hours` shipped in T13 and **no client ever called it**. `AvailabilityService` returns `[]` for any day with no `BusinessHours` row, so every salon signing up through the website is unbookable forever. Only the seeded salon works — `seed.ts` writes those 7 rows directly. Proven: Manual Test Salon had **0 hours rows**. | ✅ **FIXED** — "Opening hours" tab added |
+> | **F53** | The portal's **Team** tab linked to `href="/team"`, which is in neither `vite.config.js` nor `vercel.json`. Falls through to the landing page in dev; would **404 on Vercel**. The real route is `/business/staff`. | ✅ **FIXED** — one line |
+> | **F54** | `BusinessHoursService.set()` ended with `return this.get()`, and `get()` runs the **public** visibility check — so a **PENDING** salon saving its hours had the transaction **commit** and then received a **404**. The write succeeded and the UI reported failure. Exactly the flow the pending banner invites. | ✅ **FIXED** — `read()` split out; `set()` and the owner read no longer go through the public check |
+>
+> ### Three endpoints added (66 → 69 routes)
+>
+> - **`GET /v1/me`** — the signed-in consumer's profile (`{id,name,email,emailVerified,createdAt}`). Explicit field list: `User` holds `passwordHash`, the AES-GCM `phone` ciphertext and its blind index. This existed for merchants (`/merchants/me`) but **not** for consumers, which is why [F51] could not be fixed without it. Order 2 will want it too.
+> - **`GET /v1/admin/me`** — `{id,email}` only.
+> - **`GET /v1/merchants/me/business-hours`** — the salon's own hours.
+>
+> ⚠️ **The path of that last one is load-bearing and cost time.** It was first
+> built as `GET /business-hours/me` and **did not work**: `app.module.ts`
+> excludes **`business-hours/(.*)` (GET)** from AuthMiddleware, so the route
+> arrived with **no session at all** — RequireMerchantGuard answered **403 even
+> with a valid merchant token**, and answered an anonymous caller **403 instead
+> of 401**. **Any GET route added under `/business-hours/` is silently
+> unauthenticated.** Same class of trap as T48's exact-path exclusions.
+> Verified after the move: merchant token **200**, no token **401**, consumer
+> token **403**.
+>
+> ### Frontend changes this session
+>
+> - `BillingManager.jsx` — plan picker + `startCheckout()` ([F49]); **"Back to portal"** link (there was no way back from the billing page except the browser).
+> - `AppContext.jsx` — restores all three sessions on mount by **asking the server** who each stored token belongs to, never by caching the profile. Caching would be wrong: `Merchant.status` changes underneath the client (admin approval, or checkout flipping it to ACTIVE), and a cached copy keeps showing the pending banner to a live salon. Also remembers the last view **per tab** in `sessionStorage` — a reload returns to it, a new tab still opens on the landing page, and a view is only restored if the session it needs came back.
+> - `useNav.js` — "My rewards" / "For salons" are session-aware; an already-signed-in salon goes to the portal, not the sign-in form.
+> - `BusinessPortal.jsx` — **"Opening hours"** tab (7 days, Open toggle, time inputs → `PUT /business-hours`); Team link fixed.
+> - **Production copy cleanup** — four places shipped developer text to real customers, all now `import.meta.env.DEV`-gated and **proven absent from `dist/`**: the billing success card told customers to check `stripe listen`; `api.js`'s network error said *"Could not reach the Glow+ API at <url>. Is the backend running?"* on every page; the verify-email failure card said *"Make sure your Glow+ backend is running at …"*; and **[F26]** — the footer, **in all 8 languages**, read *"Working prototype · data is shared & persisted live for everyone previewing this page"*, which on a loyalty app reads as a privacy disclosure and was no longer even true. **[F26] is now closed.**
+> - The Stripe success card's *"log in again to see your updated status"* is gone — that copy existed only to paper over [F51].
+>
+> ### Two things to raise with the client
+>
+> 1. **[F50]** — paying bypasses admin approval (above).
+> 2. **`Subscription.priceCents` is a hardcoded constant** (`4999`/`47999`), never read back from Stripe, and there is **no currency column**. The live Stripe price is in **CAD**. If the client ever changes the price in Stripe, the database and the billing page keep showing the old figure. Separately, Stripe Checkout **overwrites the customer name with the cardholder's name**, so salons appear in the client's Stripe dashboard under an individual's personal name rather than the business name.
+>
+> ### Test state left behind (local DB, NOT seed-clean)
+>
+> - **`Manual Test Salon`** / `augmenthuzaifa+salon@gmail.com` — `ACTIVE`, verified, founding member, id `cmt8s49ae0000o0exrvzne28c`, Stripe `cus_V8ctObsF1C9jVk` / `sub_1U8LsnIFlQyiM4Ff2PTHPNX6` **TRIALING to 2026-10-01**. 0 styles, 0 rules, 0 hours at handoff.
+> - Extra `RefreshToken` rows for the three seeded accounts from CLI verification calls.
+> - Test emails use Gmail `+tags` on `augmenthuzaifa@gmail.com` — `+salon`, `+client`, `+salon2`, `+staff`. **Purely a testing convenience, not a product requirement** — real users type their own address and nothing parses `+`.
+> - `stripe listen` was running and its signing secret **matched** `.env`; restart it before resuming any Stripe work.
+>
+> ---
 >
 > ⚠️ **T52: PRODUCTION POSTGRES EXISTS — Supabase `us-east-1`, Postgres 17.6,
 > all 8 migrations applied, schema verified IDENTICAL to local (126 columns,

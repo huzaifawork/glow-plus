@@ -6,11 +6,17 @@ import { useApp } from '../context/AppContext.jsx';
  * own data, so these are pure navigation.
  */
 export function useNav() {
-  const { showView } = useApp();
+  const { showView, currentConsumer, currentMerchant } = useApp();
   return {
     goHome: () => showView('view-marketing'),
-    enterConsumerFlow: () => showView('view-consumer-auth'),
-    enterBusinessFlow: () => showView('view-business-auth'),
+    // [F51] — with sessions now restored from stored tokens, "My rewards" and
+    // "For salons" must go to the signed-in destination when there IS a
+    // session. Sending an already-signed-in salon back to the sign-in form is
+    // what made the Glow+ logo and the Back button feel like a logout.
+    enterConsumerFlow: () =>
+      showView(currentConsumer ? 'view-consumer-dashboard' : 'view-consumer-auth'),
+    enterBusinessFlow: () =>
+      showView(currentMerchant ? 'view-business-portal' : 'view-business-auth'),
     enterAdmin: () => showView('view-admin'),
   };
 }

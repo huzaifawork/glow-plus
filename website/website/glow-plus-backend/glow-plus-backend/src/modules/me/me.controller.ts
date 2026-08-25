@@ -16,6 +16,13 @@ import { RequireConsumerGuard } from '../../common/guards/require-consumer.guard
 export class MeController {
   constructor(private readonly me: MeService) {}
 
+  /** Who am I? Lets a client restore a consumer session from a stored token [F51]. */
+  @Get()
+  @UseGuards(RequireConsumerGuard)
+  profile(@Req() req: ConsumerRequest) {
+    return this.me.profile(req.accountId);
+  }
+
   @Get('rewards')
   @UseGuards(RequireConsumerGuard)
   rewards(@Req() req: ConsumerRequest) {
