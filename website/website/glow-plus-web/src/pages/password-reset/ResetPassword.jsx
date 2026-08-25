@@ -5,6 +5,24 @@ const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span></div>
 );
 
+/**
+ * A way out of a standalone page.  [F66]
+ *
+ * These pages are separate HTML entry points, so nothing on them belonged to
+ * the SPA's nav — every one of them was a cul-de-sac whose only exit was the
+ * browser's Back button. The worst was the SUCCESS card: a customer finishes
+ * setting a new password and is shown a screen with nowhere to sign in.
+ * Same defect [F49] fixed on the billing page ("there was no way back from
+ * the billing page except the browser"), in three more places.
+ */
+const BackToSignIn = ({ label = 'Go to sign in' }) => (
+  <p style={{ marginTop: '18px' }}>
+    <a className="link-btn" href="/?view=view-consumer-auth">
+      {label}
+    </a>
+  </p>
+);
+
 export default function ResetPassword() {
   const token = new URLSearchParams(window.location.search).get('token');
 
@@ -89,6 +107,12 @@ export default function ResetPassword() {
         <div className="icon">⚠️</div>
         <h1>Missing reset link</h1>
         <p>This link looks incomplete. Please use the link from your email exactly as it was sent.</p>
+        <p style={{ marginTop: '18px' }}>
+          <a className="btn btn-primary" href="/forgot-password">
+            Request a new link
+          </a>
+        </p>
+        <BackToSignIn />
       </div>
     );
   }
@@ -114,6 +138,7 @@ export default function ResetPassword() {
             Request a new link
           </a>
         </p>
+        <BackToSignIn />
       </div>
     );
   }
@@ -125,6 +150,17 @@ export default function ResetPassword() {
         <div className="icon">✅</div>
         <h1>Password updated</h1>
         <p>Your password has been changed. You can now sign in with your new password.</p>
+        <p style={{ marginTop: '18px' }}>
+          <a className="btn btn-primary" href="/?view=view-consumer-auth">
+            Sign in
+          </a>
+        </p>
+        <p className="hint" style={{ marginTop: '10px' }}>
+          Signing in to a salon account instead?{' '}
+          <a className="link-btn" href="/?view=view-business-auth">
+            Salon portal
+          </a>
+        </p>
       </div>
     );
   }
@@ -165,6 +201,7 @@ export default function ResetPassword() {
         </button>
         {error && <div className="err">{error}</div>}
       </form>
+      <BackToSignIn label="Cancel and sign in" />
     </div>
   );
 }

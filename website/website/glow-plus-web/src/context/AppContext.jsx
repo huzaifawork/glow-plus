@@ -41,6 +41,32 @@ function readStoredView() {
   }
 }
 
+/**
+ * Which view a standalone page asked us to open.  [F66]
+ *
+ * The reset, forgot-password and verify-email pages are separate HTML entry
+ * points, not SPA views, so they cannot call `showView()` — they can only link.
+ * Linking to `/` would land someone who has just set a new password on the
+ * marketing page, leaving them to work out that "My rewards" is the way in.
+ * `/?view=view-consumer-auth` puts them on the sign-in form they were always
+ * headed for.
+ *
+ * Allow-listed rather than trusted: `view` comes off the URL, so anyone can
+ * put anything in it. Only the two AUTH views are permitted — a link must
+ * never be able to open the portal or the dashboard, which is what
+ * VIEW_REQUIRES guards for the restore path.
+ */
+const LINKABLE_VIEWS = ['view-consumer-auth', 'view-business-auth'];
+
+function readRequestedView() {
+  try {
+    const asked = new URLSearchParams(window.location.search).get('view');
+    return LINKABLE_VIEWS.includes(asked) ? asked : null;
+  } catch {
+    return null;
+  }
+}
+
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
@@ -188,6 +214,15 @@ export function AppProvider({ children }) {
    */
   useEffect(() => {
     if (!hydrated) return;
+    // [F66] — an explicit ?view= beats the remembered one. Someone arriving
+    // from "Password updated" wants the sign-in form, not wherever this tab
+    // happened to be before.
+    const requested = readRequestedView();
+    if (requested) {
+      setView(requested);
+      return;
+    }
+
     const stored = readStoredView();
     if (!stored || stored === view) return;
     const needs = VIEW_REQUIRES[stored];

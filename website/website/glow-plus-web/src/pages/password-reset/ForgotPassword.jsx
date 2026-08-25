@@ -51,6 +51,15 @@ export default function ForgotPassword() {
         <div className="icon">✉️</div>
         <h1>Check your email</h1>
         <p>If an account exists for {email}, we've sent a link to reset your password. The link expires in 1 hour.</p>
+        {/* [F66] — this page is a standalone entry point, so nothing on it
+            belonged to the SPA's nav and its only exit was the browser's Back
+            button. Someone who mistyped their address, or who remembered the
+            password while reading this, had nowhere to go. */}
+        <p style={{ marginTop: '18px' }}>
+          <a className="link-btn" href="/?view=view-consumer-auth">
+            Back to sign in
+          </a>
+        </p>
       </div>
     );
   }
@@ -76,6 +85,11 @@ export default function ForgotPassword() {
         </button>
         {error && <div className="err">{error}</div>}
       </form>
+      <p style={{ marginTop: '18px' }}>
+        <a className="link-btn" href="/?view=view-consumer-auth">
+          Remembered it? Sign in
+        </a>
+      </p>
     </div>
   );
 }

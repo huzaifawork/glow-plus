@@ -72,6 +72,14 @@ export default function AcceptInvitePage() {
             <h1>This invite can&rsquo;t be used</h1>
             <p className="err" data-testid="load-error">{loadError}</p>
             <p>Invites expire after 7 days, and each one can only be used once. Ask the salon to send a new one.</p>
+            {/* [F66] — the success branch below has always had a way out and
+                this one never did, so the ONE state a person reaches by
+                accident was the cul-de-sac. Staff already on the team land
+                here when they re-open an old invite link, and their sign-in
+                page is exactly where they want to be. */}
+            <p style={{ marginTop: '18px' }}>
+              <a className="btn btn-primary btn-link" href="/business/staff">Go to sign in</a>
+            </p>
           </>
         ) : done ? (
           <>

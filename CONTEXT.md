@@ -112,6 +112,10 @@ joziilunga-attachments/
 | **F12** | JWT is hand-rolled HS256, fixed 7-day, **no refresh token**. |
 | **F13** | No `/health` endpoint. |
 
+**F60–F66 live in the SESSION 28 block in §8** — **seven** found across J3–J6;
+**six are FIXED and verified live** (F60, F61, F62, F64, F65, F66) and
+**[F63] is OPEN** (appointment times render in the browser timezone, not the
+salon's — the display twin of [F57]).
 **F49–F54 live in the SESSION 26 block in §8** — five of the six are fixed;
 **[F50]** (paying bypasses admin approval) is open and needs a **client decision**, not code.
 **F55–F59 are newer still and live in the SESSION 27 block in §8** — all four real ones
@@ -132,15 +136,133 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> **State as of session 27 (2026-08-25): 52 of 65 done. PHASE 7 IS CLOSED —
+> **State as of session 28 (2026-08-26): 52 of 65 done. PHASE 7 IS CLOSED —
 > T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. PHASE 8 IS UNDERWAY: T52 ✅ (and
 > T60 ✅, done early). Next is T53. Remaining: T53–T59, T61–T63, T64–T66.**
-> Backend suite **407 passing, 26 suites** (session 27 added `common/salon-time.spec.ts`, 11).
+> Backend suite **432 passing, 28 suites** (session 28 added
+> `modules/auth/password-reset.service.spec.ts` 17 and `common/free-service.spec.ts` 8).
 >
 > ⚠️ **THE MANUAL TEST RUN IS THE ACTIVE PIECE OF WORK, NOT A TASK NUMBER.**
-> Read the SESSION 27 block immediately below — it says exactly which journey
+> Read the SESSION 28 block immediately below — it says exactly which journey
 > to start on and what state the local DB is in. Do not start a T-number task
 > without checking there first.
+>
+> ### ➡️ RESUME HERE — **J6, J7, J8**
+>
+> **J1 ✅ J2 ✅ (s26) · the whole merchant side ✅ (s27) · J3 ✅ J4 ✅ J5 ✅ (s28).**
+>
+> | # | Journey | Notes for whoever picks this up |
+> |---|---|---|
+> | **J6** | 15-min expiry → silent refresh + **replay revokes the family** | Read T47's TASKS.md entry first. The SPA resets to the marketing view on reload, so **reloading proves nothing** — drive `await import('/src/lib/api.js')` in the page instead. Authenticated responses carry an **ETag**, so a good retry is **304**, not 200. **`+walkin` is the ready subject: 0 live sessions, password `Walkin456!`.** J5.5 already proved reset-revokes-all; J6 is the *rotation/replay* half |
+> | **J7** | admin approve/suspend | **MOSTLY DONE ALREADY in J4.6/J4.7** — suspend → all four public salon-scoped routes 404 + `POST /bookings` 404, reactivate → all restored, 6/6. What is left is the **PENDING → approve** half on a genuinely pending salon; both local salons are ACTIVE, so one has to be created or set back |
+> | **J8** | every view at **390px** | The long pole; touches all 8 languages incl. **Arabic RTL**. Note [F43]: 18 keys exist only in the `en` block and several tab labels are hardcoded English — pre-existing, belongs to T40 |
+>
+> ⚠️ **Two admin surfaces exist and they are NOT the same.** `/admin`
+> (standalone, T22) reads `GET /admin/merchants/pending` — **PENDING only**, so
+> an ACTIVE salon never appears and it cannot suspend one. The **SPA nav →
+> Admin** view reads `GET /admin/merchants` (all statuses) and is the one with
+> approve/suspend/reactivate. This cost time in J4.6; use the SPA view. Same
+> "superseded standalone page" situation as `/consumer/rewards`. Cleanup to
+> raise with the client, **not** a defect.
+>
+> ---
+>
+> ---
+>
+> ---
+>
+> ---
+>
+> ## 🟢 SESSION 28 (2026-08-26) — **J3, J4, J5, J6 ALL CLOSED. Seven findings.**
+>
+> Same working mode, unchanged and it must continue: **one case at a time,
+> given click-by-click in chat, the user executes it in a real browser, Claude
+> verifies Postgres itself, and any defect is FIXED before the next case.**
+>
+> ### Journeys
+>
+> | Journey | Result |
+> |---|---|
+> | **J3** — consumer signup → visit → points → redeem | ✅ **8/8** — found [F60], [F62] |
+> | **J4** — booking at ACTIVE vs SUSPENDED | ✅ **7/7** — found **[F64]**, [F63] |
+> | **J5** — forgot password → reset → login | ✅ **5/5** — found [F61], [F65], [F66] |
+> | **J6** — 15-min expiry → silent refresh → replay revokes the family | ✅ **4/4** — clean |
+>
+> Backend suite **407 → 432, 26 → 28 suites.**
+>
+> ### Seven findings — F60–F66, six FIXED, one open
+>
+> | # | Finding | Status |
+> |---|---|---|
+> | **F64** | **`POST /bookings` never consulted `BusinessHours` at all.** `isSlotStillAvailable()` only looks for a clashing booking, so opening hours were enforced by nothing but the slot grid the browser drew — **and a grid is a suggestion.** Proved live: the closed Sunday, 7am (two hours before opening), a 4:30pm start for a 90-minute service running an hour past close, and an off-grid 9:07am were **all accepted with 201**. This is the **mirror of the check already in that function** — T48/[F47] re-validated merchant visibility there precisely *"because a client can POST straight to this one"* | ✅ **FIXED** — `AvailabilityService.assertBookable()`. Grid alignment is **membership in the slots the generator itself would offer**, not a re-derived modulo, so the write path cannot drift from the read path. New `salonDateFor()` resolves which salon day governs an instant. ⚠️ **The conflict check must run FIRST** — `assertBookable` also refuses taken slots, and running it first made *"just booked by someone else"* unreachable. 12/12 probes |
+> | **F61** | **A walk-in could never become verified.** `resetPassword()` left `emailVerifiedAt` NULL, and the resend button renders only off `signupNotice` — set by a *successful* signup, which a walk-in cannot do (409). So the verify banner followed them forever with **no control anywhere in the product able to clear it** | ✅ **FIXED** — a spent reset token stamps `emailVerifiedAt`. `updateMany … where emailVerifiedAt: null`, so an already-verified account keeps its **original** timestamp. **Proved on the real walk-in in J5.3** |
+> | **F65** | **A dead reset link still showed the "Choose a new password" form.** `ResetPassword.jsx` checked only that a `token` query param was PRESENT. Someone re-opening an old link sets what they believe is their new password and is locked out not knowing why | ✅ **FIXED** — new `GET /v1/auth/reset-password/:token`, mirroring `GET /staff/invites/:token`. **Same three rejections, same order, same wording** as `resetPassword()`; a spec asserts that equality. A **network failure is deliberately not** treated as a dead token |
+> | **F66** | **Every standalone page was a cul-de-sac** — reset, forgot-password, verify-email and accept-invite had **no link back into the site**, only the browser's Back button. Worst was the **success** card: finish setting a password, land on a screen with nowhere to sign in. Verify-email said *"you can close this tab"*, which is an instruction, not an exit — useless from a phone mail app. Same defect [F49] fixed on the billing page, in **seven** more places. **Found by the user, not by a probe** | ✅ **FIXED** — the SPA now honours **`/?view=view-consumer-auth`**. ⚠️ **Allow-listed, not trusted**: only the two AUTH views are linkable, so a URL can never open the portal or dashboard |
+> | **F62** | **`FREE_SERVICE` rewards rendered as "0 free"** — such a rule holds its value in `freeServiceStyleId` and leaves `rewardValue` at 0, and **no endpoint ever sent the id**, so no client could name the service. Unlocked, it read `Ready — 0 free` beside a Redeem button | ✅ **FIXED** — `common/free-service.ts`, one query and **none at all** when no such rule exists. Wired into `/me/rewards`, `/redemptions/available`, `GET /redemptions` and `GET /reward-rules` so all four agree |
+> | **F60** | **The salon had no screen for redemptions.** `GET /redemptions` shipped in T23 **with the client's name and email** (`TASKS.md:387`) and no client ever called it — T23's only frontend was `/consumer/rewards`, built that way because T35's auth UI did not exist yet. A customer redeemed 20% off, saw a toast that vanished, and the salon had nowhere to check | ✅ **FIXED** — read-only **Redemptions** tab in the portal. Marking one "used at the counter" needs a column that does not exist; that is the client's call, not a schema decision made from a UI |
+>
+> ### ⚠️ [F63] IS STILL OPEN — the only one left from these journeys
+>
+> **Slot times render in the BROWSER's timezone, not the salon's.** `formatSlot()`
+> in `helpers.js` uses `toLocaleTimeString(undefined, …)`. On the dev machine
+> (Asia/Karachi) the salon's **9:00 AM Toronto** slot shows as **6:00 PM**, and
+> the last three chips read `12:00 AM`/`12:15 AM`/`12:30 AM` — **times that appear
+> to fall on the next day from the date the customer selected.** [F57] fixed
+> *derivation*; display was never fixed, so the customer and the salon hold
+> **different times for the same appointment**.
+>
+> **Calibrated severity:** most Toronto salons have Toronto customers, so browser
+> zone = salon zone and it mostly comes out right. It bites travellers, wrong
+> device clocks, and anyone browsing from another zone. Real, worth fixing, not
+> urgent.
+>
+> **The fix needs a backend piece.** `Merchant` has **no timezone column** and
+> `SALON_TIMEZONE` is a server-side env var the browser cannot read, so the API
+> must expose the zone — cleanest as an **additive field on the public merchant
+> payload**, which the Book tab already loads. Do **NOT** change the availability
+> endpoint's **bare-array** shape; T43/T44/T50 protect that for the RN app.
+> `formatDateTime()` has the same problem on the Appointments tab.
+>
+> ### Two API notes worth knowing before Order 2
+>
+> - **`remaining` is `triggerValue − (progress % triggerValue)`, so on an
+>   *unlocked* rule it reads `3`, never `0`.** Clients must branch on
+>   **`eligible`**, never on `remaining === 0`. Both services compute it
+>   identically (T42 made that deliberate), and the web UI never shows it when
+>   eligible — so nothing is wrong on screen. The RN app does not consume
+>   `/me/rewards` yet.
+> - **Redemption is a MILESTONE model, not a currency one.** The walk-in redeemed
+>   a 200-point rule and **still holds 200 points**; the rule re-locked and needs
+>   **400** to fire again. If the client expects points to be *spent*, that is a
+>   product conversation, not a bug.
+>
+> ### Local DB state left behind (changed from session 27)
+>
+> - **`augmenthuzaifa+client@gmail.com` / `Client123!`** — `Client Tester`,
+>   **deliberately UNVERIFIED** (J3.2 proves unverified login succeeds by
+>   design — `TASKS.md:940` records it). 3 × `Balyage` visits, **120 pts**,
+>   1 redemption (`Loyal Client Discount`), 1 **CANCELLED** booking. **Its
+>   refresh-token family was revoked by J6.4** — sign in again to use it.
+> - **`augmenthuzaifa+walkin@gmail.com` / `Walkin456!`** ⚠️ **password changed
+>   twice in J5; `Walkin123!` is dead.** Now **VERIFIED** (by [F61], via the
+>   reset — it could never have verified any other way). 4 visits / **200 pts**,
+>   1 redemption (`Ten Dollars Off`), `Loyal Client Discount` **still READY**.
+> - **`Redemption` table: 2 rows** (was 0 — J3 was the first redemption ever on
+>   this database).
+> - **Manual Test Salon: 1 booking**, CANCELLED, Aug 26 9:00 AM salon time.
+>   Status back to **ACTIVE** after J4.6/J4.7 suspend → reactivate.
+> - `refreshToken` rows have accumulated from probing (54 rows, 35 live).
+>   Harmless, but **clear the account under test before any J6-style family
+>   counting**, or the arithmetic is meaningless.
+>
+> ### ⚠️ Two admin surfaces exist and they are NOT the same — cost time in J4.6
+>
+> `/admin` (standalone, T22) reads `GET /admin/merchants/pending` — **PENDING
+> only** — so an **ACTIVE salon never appears there and cannot be suspended from
+> it.** The **SPA nav → Admin** view reads `GET /admin/merchants` (all statuses)
+> and is the one with approve/suspend/reactivate. Same "superseded standalone
+> page" situation as `/consumer/rewards`. Cleanup to raise with the client,
+> **not** a defect.
 >
 > ---
 >

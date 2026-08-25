@@ -79,7 +79,20 @@ export default function VerifyEmail() {
         <Brand />
         <div className="icon">✅</div>
         <h1>Email confirmed!</h1>
-        <p>Your {who} is now verified. You can close this tab and continue.</p>
+        <p>Your {who} is now verified.</p>
+        {/* [F66] — "you can close this tab and continue" was the only exit,
+            and it is an instruction rather than a way out: a customer who
+            opened the link from their phone's mail app has no other tab to
+            continue in. The destination depends on which kind of account was
+            just verified, which this page already knows. */}
+        <p style={{ marginTop: '18px' }}>
+          <a
+            className="btn btn-primary"
+            href={view.accountType === 'MERCHANT' ? '/?view=view-business-auth' : '/?view=view-consumer-auth'}
+          >
+            Sign in to Glow+
+          </a>
+        </p>
       </div>
     );
   }
@@ -91,6 +104,11 @@ export default function VerifyEmail() {
         <div className="icon">⚠️</div>
         <h1>{view.title}</h1>
         <p>{view.message}</p>
+        <p style={{ marginTop: '18px' }}>
+          <a className="link-btn" href="/?view=view-consumer-auth">
+            Go to sign in
+          </a>
+        </p>
       </div>
     );
   }
