@@ -29,5 +29,11 @@
   // is outside rootDir. Vercel compiles it with its own toolchain. api/index.ts
   // is a single re-export precisely because being excluded here means it is
   // never type-checked — the code it forwards to (src/serverless.ts) is.
-  ,"exclude": ["node_modules", "dist", "prisma", "jest.setup.ts", "api"]
+  //
+  // `scripts/` joins them for the same reason (F70's create-admin.ts): it is
+  // an operator tool run through ts-node, which does not use this include
+  // list, so nothing is lost by excluding it — and leaving it in breaks
+  // `vercel-build`, which runs this very typecheck. That is not hypothetical:
+  // adding create-admin.ts failed a production deploy before this line existed.
+  ,"exclude": ["node_modules", "dist", "prisma", "jest.setup.ts", "api", "scripts"]
 }

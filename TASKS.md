@@ -1390,7 +1390,22 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       ⬜ **The one assumption not verifiable locally:** that Vercel's catch-all rewrite preserves the **original** `req.url` rather than passing `/api`. It does for the standard Express-on-Vercel pattern, but if it did not, every route would 404 — so it is **smoke-test item #1** on first deploy (**T63**). `vercel dev` would settle it, but it needs an interactive login to the user's account.
 
       ⬜ **`ScheduleModule.forRoot()` still registers the four `@Cron()` timers** in the serverless app, where they add cold-start cost and never meaningfully fire. **T54** removes them.
-- [ ] **T57 — Re-verify the Stripe webhook raw body** under the serverless adapter — local `stripe listen` passing proves nothing about the deployed endpoint.
+- [x] **T57 — Re-verify the Stripe webhook raw body under the serverless adapter.** ✅ **VERIFIED 2026-08-26 — and it needed NO code change.** Nest's `rawBody: true` plus `billing.module.ts`'s versioned `express.raw()` mount already survive Vercel intact.
+
+      | Case (against the **deployed** endpoint) | Result |
+      |---|---|
+      | Correctly signed `checkout.session.completed` | **200** `{"received":true}` |
+      | No `stripe-signature` header | **400** |
+      | Wrong signature | **400** |
+      | Correct signature, **timestamp 1 hour old** | **400** *"Timestamp outside tolerance"* — replay protection live |
+
+      ⚠️ **Recorded because it cost two wrong deploys and would cost them again.** The first production test failed, and it was concluded that Vercel was draining the request stream before Express saw it. **That was wrong, and the fault was in the test.** `vercel env pull` writes **`[SENSITIVE]`** in place of any secret-visibility variable, so the signature was being computed with the literal string `"[SENSITIVE]"`. The local-versus-deployed "differential test" was therefore comparing a valid secret against a garbage one and proved nothing.
+
+      **What exposed it:** a temporary `x-raw-body-bytes` response header showed **27** for a 27-byte probe — the bytes had been arriving intact all along.
+
+      **Two fixes were written and both were then REVERTED, deliberately:** `export const config = { api: { bodyParser: false } }` (not honoured for standalone Vercel functions) and a hand-rolled raw-body capture in `serverless.ts`. Once a real secret was in place, the capture was **disabled and redeployed** to test whether it was load-bearing — production still returned **200**, so it was dead complexity wrapped around the most fragile path in the app and was removed. ⚠️ **If a raw-body capture is ever reintroduced, `req._body = true` must be set with it** — body-parser throws `stream is not readable` on a drained stream and the route 500s.
+
+      **The real lesson: to test a signed webhook you need the secret Stripe issued, which it returns exactly once, at creation.** It is now kept in the gitignored `.env` as `STRIPE_WEBHOOK_SECRET`. Endpoint `we_1U8fn3IFlQyiM4FfRyNlZwbH`, **test mode**, 5 events.
 - [ ] **T58 — Run migrations from CI.** `Dockerfile.api` ran `migrate deploy` on boot; there's no boot step on Vercel.
 - [ ] **T59 — Replace all localhost URLs/origins** with production values.
 - [x] **T60 — Domain + Resend domain verification.** ✅ **DONE & VERIFIED 2026-08-24.** Pulled forward out of phase order because it blocked T6, T19, T20, T21 and T35, and because it was the direct cause of [F27].
@@ -1410,7 +1425,8 @@ Vercel runs the backend **serverless**, a different model from a long-running No
   **[R6] is now lifted** — email is no longer capped at the Resend account owner's address. **T19/T20 can be tested against real recipients.**
   ⬜ Still open for production: `APP_URL` and links still point at localhost → **T59**; and `EMAIL_FROM` must be set as a Vercel env var → **T53**.
 
-- [ ] **T61 — Production Stripe webhook endpoint** registered.
+- [~] **T61 — Production Stripe webhook endpoint.** ⚠️ **HALF DONE 2026-08-26.** A **test-mode** endpoint is registered and verified end to end by T57: `we_1U8fn3IFlQyiM4FfRyNlZwbH` → `https://glow-plus-api.vercel.app/v1/billing/webhook`, subscribed to the five events `billing.service.ts` actually switches on (`checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `customer.subscription.trial_will_end`).
+      ⬜ **What remains needs the CLIENT, not code:** swap `sk_test_` for live keys, re-create the endpoint in **live** mode (a test-mode endpoint does not receive live events, and the signing secret differs), and update `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` on Vercel. Until then **no real money can move**, which is the correct state for a validation deployment.
 - [ ] **T62 — Backups, monitoring, logging.**
 - [x] **T63 — Full production smoke test.** ✅ **DONE 2026-08-26.** Driven against the **live** stack (`glow-plus-api.vercel.app` + Supabase), not a local one. **26 cases, every write path exercised, 22 rows written and then removed.**
 
