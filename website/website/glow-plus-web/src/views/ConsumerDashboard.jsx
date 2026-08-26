@@ -8,6 +8,7 @@ import {
   getAvailability,
   getMyRewards,
   listMyBookings,
+  listMyRedemptions,
   listMyVisits,
   listPublicMerchants,
   listPublicStyles,
@@ -173,7 +174,7 @@ function RewardsPanel({ active, blocks }) {
     setRedeeming(rule.ruleId);
     try {
       await redeemReward(rule.ruleId);
-      toast(`Redeemed: ${rule.name}. Show this to the salon.`);
+      toast(`Redeemed: ${rule.name}. It is saved under Redeemed.`);
       // Re-reads /me/rewards, which is what re-locks the card — eligibility is
       // re-derived server-side from real Redemption rows, never assumed here.
       bumpData();
@@ -594,6 +595,72 @@ function VisitsPanel({ active }) {
   );
 }
 
+/**
+ * What the customer has actually claimed.  [F75]
+ *
+ * **Why this exists.** Redeeming raised a toast reading *"Show this to the
+ * salon"* — and then the toast vanished and there was nothing to show. The SPA
+ * dashboard had no redemption history at all, so the one instruction the
+ * product gave the customer was not actionable.
+ *
+ * `GET /redemptions/me` and `listMyRedemptions()` both already existed; the
+ * only client calling them was `/consumer/rewards`, a standalone page built
+ * before T35's auth UI and never linked from the SPA. So the data was
+ * reachable and the customer was not.
+ *
+ * This is [F60] with the roles reversed. That finding read: *"a customer
+ * redeemed 20% off, saw a toast that vanished, and the salon had nowhere to
+ * check."* The salon got its Redemptions tab; the customer never got theirs.
+ */
+function RedeemedPanel({ active }) {
+  const { dataVersion, currentConsumer } = useApp();
+  const redemptions = useApiData(
+    () => (currentConsumer ? listMyRedemptions() : Promise.resolve(null)),
+    [dataVersion, currentConsumer],
+  );
+
+  if (redemptions && redemptions.length === 0) {
+    return (
+      <div className={'ptab-panel' + (active ? ' active' : '')} id="ctab-redeemed">
+        <div className="empty">
+          Nothing redeemed yet. <b>Unlocked rewards appear here once you claim them.</b>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={'ptab-panel' + (active ? ' active' : '')} id="ctab-redeemed">
+      <div className="punch-note" style={{ marginBottom: '10px' }}>
+        Show this screen at the counter — your salon can also see every
+        redemption on their side.
+      </div>
+      {/* Same scroll box as the visit ledger: a table cannot fit 390px, and
+          the page must never scroll sideways because of one. */}
+      <div className="table-scroll">
+        <table className="ledger">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Salon</th>
+              <th>Reward</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(redemptions || []).map((r) => (
+              <tr key={r.id}>
+                <td>{formatDay(r.redeemedAt)}</td>
+                <td>{r.businessName || (r.rewardRule && r.rewardRule.businessName) || '—'}</td>
+                <td>{(r.rewardRule && r.rewardRule.name) || r.name || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    The view
    ============================================================ */
@@ -611,6 +678,7 @@ export default function ConsumerDashboard({ active }) {
     ['book', 'Book'],
     ['bookings', 'Appointments'],
     ['visits', 'Visit history'],
+    ['redeemed', 'Redeemed'],
   ];
 
   return (
@@ -662,6 +730,7 @@ export default function ConsumerDashboard({ active }) {
       <BookPanel active={tab === 'book'} />
       <BookingsPanel active={tab === 'bookings'} />
       <VisitsPanel active={tab === 'visits'} />
+      <RedeemedPanel active={tab === 'redeemed'} />
     </section>
   );
 }

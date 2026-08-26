@@ -32,12 +32,47 @@ export class RedemptionsService {
     );
   }
 
+  /**
+   * What THIS CUSTOMER has claimed, newest first.  [F75]
+   *
+   * `businessName` is included deliberately. Without it the response names the
+   * reward but not the salon, and this is a cross-salon history — a customer
+   * on Glow+ collects at several. "20% off" with no salon beside it is not
+   * something anyone can act on at a counter.
+   *
+   * It is the twin of the omission in [F60]: that one shipped the endpoint
+   * with no screen; this one had the screen reading a payload missing the one
+   * field the screen needed.
+   */
   async history(userId: string) {
-    return this.prisma.redemption.findMany({
+    const rows = await this.prisma.redemption.findMany({
       where: { userId },
-      include: { rewardRule: { select: { name: true, rewardType: true, rewardValue: true, merchantId: true } } },
+      include: {
+        rewardRule: {
+          select: {
+            name: true,
+            rewardType: true,
+            rewardValue: true,
+            merchantId: true,
+            merchant: { select: { businessName: true } },
+          },
+        },
+      },
       orderBy: { redeemedAt: 'desc' },
     });
+
+    // Flattened onto the row rather than left nested two levels down, so the
+    // client reads `businessName` the same way it does everywhere else.
+    return rows.map(({ rewardRule, ...rest }) => ({
+      ...rest,
+      businessName: rewardRule.merchant?.businessName ?? null,
+      rewardRule: {
+        name: rewardRule.name,
+        rewardType: rewardRule.rewardType,
+        rewardValue: rewardRule.rewardValue,
+        merchantId: rewardRule.merchantId,
+      },
+    }));
   }
 
   /**
