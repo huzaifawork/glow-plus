@@ -1,31 +1,25 @@
 /**
  * Admin team — T77.
  *
- * **Scope, and why it is this narrow.** There is exactly one way to gain an
- * admin account through this panel: promoting an existing customer. Creating
- * an admin outright, and removing one, are deliberately NOT here — they remain
- * operator actions done in Supabase or via `scripts/create-admin.ts`.
+ * **How someone becomes an admin.** Either an owner promotes a customer here,
+ * or an operator changes `User.role` in the Supabase table editor. Both do the
+ * identical thing — set one column — and the database triggers in migration
+ * 20260827020000_user_role_sync_admin create or remove the matching `Admin`
+ * row. There is deliberately no "create an admin" form and no delete button:
+ * a web form that mints platform administrators is reachable by anything that
+ * can reach a logged-in owner's browser, and keeping the number of ways to
+ * mint an admin low is worth more than the convenience of another one.
  *
- * That is a deliberate limit on blast radius, not an oversight. A web form
- * that mints platform administrators is reachable by anything that can reach a
- * logged-in owner's browser; a SQL console is reachable only by someone
- * holding database credentials. Keeping the count of ways to mint an admin as
- * low as possible is worth more than the convenience of a second one.
- *
- * Promotion earns its place because it is the only path that never creates a
- * credential: the server reuses the customer's existing password hash, so the
- * new admin signs in with the password they already have. Nobody invents a
- * password and nobody has to transmit one — which is how this project's other
- * credentials ended up in a chat log.
+ * Promotion never creates a credential. The promoted customer signs in with
+ * the password they already have, so nobody invents a password and nobody has
+ * to send one — which is how this project's other credentials leaked.
  *
  * Promotion is owner-only on the server (RequireAdminOwnerGuard). A plain
- * ADMIN is shown the explanation rather than a blank space, because a missing
- * button is indistinguishable from a bug.
+ * ADMIN is told so rather than shown a blank space, because a missing control
+ * is indistinguishable from a bug.
  *
- * Changing your own password is open to every admin. Before T77 nobody could:
- * `forgot-password` only ever looked up User and Merchant, and answered
- * `{ ok: true }` regardless — so an admin who lost their password waited for
- * an email that was never going to arrive.
+ * Changing your own password is open to every admin, and writes the User row
+ * so the panel and the customer account never drift onto different passwords.
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -36,6 +30,12 @@ import {
   listUsersForPromotion,
   promoteUserToAdmin,
 } from '../../lib/api.js';
+
+const RoleBadge = ({ role }) => (
+  <span className={role === 'OWNER' ? 'role-badge is-owner' : 'role-badge'}>
+    {role === 'OWNER' ? 'Owner' : 'Admin'}
+  </span>
+);
 
 export default function AdminTeam() {
   const [me, setMe] = useState(null);
@@ -52,11 +52,11 @@ export default function AdminTeam() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         // Signed in, but not an owner. Still load the profile so the password
-        // form below renders — that part is open to every admin.
+        // form renders — that part is open to every admin.
         try {
           setMe(await getAdminProfile());
         } catch {
-          /* the password form handles its own failures */
+          /* the password form reports its own failures */
         }
         setAdmins([]);
         setError('owner-only');
@@ -76,48 +76,47 @@ export default function AdminTeam() {
     <div className="card">
       <h2>Admin team</h2>
 
-      {error && error !== 'owner-only' && <p className="err" role="alert">{error}</p>}
-      {notice && <p className="ok" role="status">{notice}</p>}
+      {error && error !== 'owner-only' ? (
+        <p className="err" role="alert">{error}</p>
+      ) : null}
+      {notice ? <p className="ok" role="status">{notice}</p> : null}
 
       {error === 'owner-only' ? (
-        <p className="muted">
+        <p className="empty-note">
           Only an <strong>owner</strong> can promote customers to admin. You can still change
           your own password below.
         </p>
       ) : admins === null ? (
-        <p className="muted">Loading…</p>
+        <p className="empty-note">Loading…</p>
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Added</th>
-            </tr>
-          </thead>
-          <tbody>
-            {admins.map((a) => (
-              <tr key={a.id}>
-                <td>
+        <div className="merchant-list">
+          {admins.map((a) => (
+            <div className="merchant-row" key={a.id}>
+              <div className="merchant-info">
+                <div className="merchant-name">
                   {a.email}
-                  {a.id === me?.id && <span className="muted"> (you)</span>}
-                </td>
-                <td>{a.role === 'OWNER' ? 'Owner' : 'Admin'}</td>
-                <td>{new Date(a.createdAt).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {a.id === me?.id ? ' (you)' : ''}
+                </div>
+                <div className="merchant-email">
+                  Added {new Date(a.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="merchant-actions">
+                <RoleBadge role={a.role} />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      {isOwner && (
+      {isOwner ? (
         <PromoteCustomer
           onDone={(msg) => {
             setNotice(msg);
             refresh();
           }}
         />
-      )}
+      ) : null}
       <ChangeMyPassword />
     </div>
   );
@@ -126,11 +125,9 @@ export default function AdminTeam() {
 /**
  * Promote an existing customer to admin.
  *
- * No password is invented here and none is transmitted: the server copies the
- * customer's existing hash, so they sign in with the password they already
- * use. The customer's own account is left intact — being an admin does not
- * stop someone being a customer, and their visits, bookings and points stay
- * attached to it.
+ * Their customer account is left intact: being an admin does not stop someone
+ * being a customer, and their visits, bookings and points stay on that row.
+ * The two share one password — changing it in either place moves both.
  */
 function PromoteCustomer({ onDone }) {
   const [q, setQ] = useState('');
@@ -170,44 +167,62 @@ function PromoteCustomer({ onDone }) {
   return (
     <div className="subsection">
       <h3>Promote a customer to admin</h3>
-      <p className="muted">They keep their existing password — nothing is generated or sent to them.</p>
-      <form onSubmit={search}>
+      <p className="empty-note">
+        They keep their existing password — nothing is generated or sent to them.
+      </p>
+
+      <form onSubmit={search} className="search-row">
         <input
           type="search"
           value={q}
           placeholder="Search by name or email"
           onChange={(e) => setQ(e.target.value)}
         />
-        <button className="btn btn-small" disabled={busy}>
+        <button className="btn btn-quiet btn-small" type="submit" disabled={busy}>
           {busy ? 'Searching…' : 'Search'}
         </button>
       </form>
-      {err && <p className="err" role="alert">{err}</p>}
-      {results && results.length === 0 && <p className="muted">No customers matched.</p>}
-      {results && results.length > 0 && (
-        <ul>
+
+      {err ? <p className="err" role="alert">{err}</p> : null}
+      {results && results.length === 0 ? (
+        <p className="empty-note">No customers matched.</p>
+      ) : null}
+
+      {results && results.length ? (
+        <div className="merchant-list" style={{ marginTop: 12 }}>
           {results.map((u) => (
-            <li key={u.id}>
-              {u.name} — {u.email}{' '}
-              {u.role && u.role !== 'CONSUMER' ? (
-                <span className="muted">already {u.role === 'OWNER' ? 'an owner' : 'an admin'}</span>
-              ) : (
-                <button className="btn btn-small" disabled={busy} onClick={() => promote(u)}>
-                  Make admin
-                </button>
-              )}
-            </li>
+            <div className="merchant-row" key={u.id}>
+              <div className="merchant-info">
+                <div className="merchant-name">{u.name}</div>
+                <div className="merchant-email">{u.email}</div>
+              </div>
+              <div className="merchant-actions">
+                {u.role && u.role !== 'CONSUMER' ? (
+                  <RoleBadge role={u.role} />
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-sage btn-small"
+                    disabled={busy}
+                    onClick={() => promote(u)}
+                  >
+                    Make admin
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
-        </ul>
-      )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /**
- * Every admin can rotate their own password. The server revokes their other
- * refresh tokens in the same transaction, so a change made because "someone
- * may have my password" actually ends the other party's session.
+ * Every admin can rotate their own password. The server writes the User row
+ * where there is one, so the admin panel and the customer account never end up
+ * on different passwords, and revokes both sessions — "someone may know my
+ * password" is the reason this gets used.
  */
 function ChangeMyPassword() {
   const [currentPassword, setCurrent] = useState('');
@@ -236,29 +251,33 @@ function ChangeMyPassword() {
   return (
     <div className="subsection">
       <h3>Change my password</h3>
-      <form onSubmit={submit}>
-        <label>
-          Current password
+      <form onSubmit={submit} className="form">
+        <label className="field">
+          <span>Current password</span>
           <input
             type="password"
             required
+            autoComplete="current-password"
             value={currentPassword}
             onChange={(e) => setCurrent(e.target.value)}
+            placeholder="••••••••"
           />
         </label>
-        <label>
-          New password
+        <label className="field">
+          <span>New password</span>
           <input
             type="password"
             required
             minLength={8}
+            autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNew(e.target.value)}
+            placeholder="At least 8 characters"
           />
         </label>
-        {err && <p className="err" role="alert">{err}</p>}
-        {ok && <p className="ok" role="status">{ok}</p>}
-        <button className="btn" disabled={busy}>
+        {err ? <p className="err" role="alert">{err}</p> : null}
+        {ok ? <p className="ok" role="status">{ok}</p> : null}
+        <button className="btn btn-primary" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Change password'}
         </button>
       </form>

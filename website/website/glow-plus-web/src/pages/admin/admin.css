@@ -76,3 +76,30 @@ p{color:var(--ink-soft);font-size:14px;line-height:1.55;margin:0 0 8px;}
   .card{padding:22px 18px;}
   .merchant-row{flex-direction:column;align-items:flex-start;}
 }
+
+/* T77 — admin team. Reuses .card/.form/.field/.merchant-* wherever they fit;
+   these are only the pieces the panel had no equivalent for. */
+.subsection{
+  margin-top:24px;padding-top:20px;border-top:1px solid #ececee;text-align:left;
+}
+.subsection h3{font-size:14px;font-weight:700;margin:0 0 4px;}
+.subsection .form{margin-top:12px;}
+
+/* The success twin of .err, which already exists. */
+.ok{font-size:13px;color:var(--sage);margin:10px 0 0;}
+
+.role-badge{
+  font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-soft);border:1px solid #d9d9de;border-radius:999px;
+  padding:3px 9px;white-space:nowrap;
+}
+.role-badge.is-owner{color:var(--accent);border-color:var(--accent);}
+
+.search-row{display:flex;gap:8px;margin-top:12px;}
+.search-row input{
+  flex:1;min-width:0;font-family:var(--font);font-size:14.5px;color:var(--ink);
+  padding:11px 13px;border:1px solid #d9d9de;border-radius:10px;background:var(--white);
+}
+.search-row input:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.15);
+}
