@@ -346,14 +346,18 @@ function PendingQueue() {
               <div>
                 <div className="lc-name">{m.businessName}</div>
                 <div className="lc-meta">
+                  {/* [F74] — the free first month is a FOUNDING-member benefit
+                      (7 standard trial days + 30 bonus), not something every
+                      salon gets. The badge two lines up was already gated on
+                      it; this suffix was not, so an admin reviewing salon #51
+                      was told they get a free month when they get seven days. */}
                   {(m.foundingMember ? t('badge_founding_50') + ' · ' : '') +
                     m.email +
                     ' · ' +
                     t('meta_applied') +
                     ' ' +
                     formatDay(m.createdAt) +
-                    ' · ' +
-                    t('meta_first_month_free')}
+                    (m.foundingMember ? ' · ' + t('meta_first_month_free') : '')}
                 </div>
               </div>
               <div className="lc-actions">
