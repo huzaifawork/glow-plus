@@ -584,6 +584,65 @@ export function getPlatformStats() {
 }
 
 /* --------------------------------------------------------------------------
+   Admin team management (T77)
+
+   Every one of these except changeAdminPassword is owner-only on the server
+   (RequireAdminOwnerGuard). A plain ADMIN calling them gets a 403 with a
+   message naming the tier, which the panel surfaces rather than hiding the
+   feature entirely — "you can't do this" is more useful than a screen that
+   silently lacks a button.
+   -------------------------------------------------------------------------- */
+
+/** Every admin account. */
+export function listAdmins() {
+  return apiRequest('/admin/admins', { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+/** Customers, for the promote picker. Server caps this at 50 rows. */
+export function listUsersForPromotion(q) {
+  const qs = q && q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+  return apiRequest(`/admin/users${qs}`, { tokenKey: ADMIN_TOKEN_KEY });
+}
+
+/** Create an admin that isn't tied to an existing customer account. */
+export function createAdmin(email, password, role) {
+  return apiRequest('/admin/admins', {
+    method: 'POST',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { email, password, role },
+  });
+}
+
+/**
+ * Promote a customer. Deliberately sends no password: the server reuses the
+ * user's existing hash, so they sign in here with the password they already
+ * have and nobody has to transmit a new one.
+ */
+export function promoteUserToAdmin(userId, role) {
+  return apiRequest('/admin/admins/promote', {
+    method: 'POST',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { userId, role },
+  });
+}
+
+export function deleteAdmin(id) {
+  return apiRequest(`/admin/admins/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    tokenKey: ADMIN_TOKEN_KEY,
+  });
+}
+
+/** Change your own admin password. Revokes your other sessions server-side. */
+export function changeAdminPassword(currentPassword, newPassword) {
+  return apiRequest('/admin/me/password', {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { currentPassword, newPassword },
+  });
+}
+
+/* --------------------------------------------------------------------------
    Endpoints used by the team / staff page (T24)
    -------------------------------------------------------------------------- */
 

@@ -1,6 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
+import { ChangeAdminPasswordDto, CreateAdminDto, PromoteUserDto } from './admin-management.dto';
+
+/** T77 — the same cost the auth services and create-admin.ts use. An admin hash weaker than a customer's would be exactly backwards. */
+const SALT_ROUNDS = 12;
+
+/** Never let a passwordHash leave this service. [F31] */
+const ADMIN_SELECT = { id: true, email: true, role: true, createdAt: true } as const;
 
 @Injectable()
 export class AdminService {
@@ -18,7 +26,10 @@ export class AdminService {
   async profile(adminId: string) {
     const admin = await this.prisma.admin.findUnique({
       where: { id: adminId },
-      select: { id: true, email: true },
+      // T77 — `role` joins id and email here because the panel has to know
+      // whether to render the team controls at all. Still never the row:
+      // Admin holds passwordHash.
+      select: { id: true, email: true, role: true },
     });
     if (!admin) throw new NotFoundException('Admin not found');
     return admin;
@@ -89,5 +100,183 @@ export class AdminService {
       totalVisits: visitCount,
       totalPointsIssued: pointsIssued._sum.pointsEarned ?? 0,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Admin team management  (T77)
+  //
+  // Before this, the ONLY ways to obtain an admin account were the CLI script
+  // and a hand-written INSERT — both needing production database access. That
+  // left the client permanently dependent on a developer for something they
+  // will genuinely need: a second administrator, or a replacement for one who
+  // has left. Both original routes still work and are untouched; these add a
+  // supported path that does not hand a business owner a SQL console.
+  // -------------------------------------------------------------------------
+
+  /** Every admin, oldest first. Owner-only — this is the platform's key list. */
+  listAdmins() {
+    return this.prisma.admin.findMany({
+      select: ADMIN_SELECT,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Customers, for the promote picker. Optional case-insensitive search over
+   * name and email.
+   *
+   * Selects four columns explicitly rather than returning the row: User holds
+   * `passwordHash`, and `phone` is AES-256-GCM ciphertext that would be
+   * meaningless here anyway. An allow-list means a column added to User later
+   * cannot leak through this route by default — [F31] was exactly that shape.
+   */
+  listUsers(q?: string) {
+    const search = q?.trim();
+    return this.prisma.user.findMany({
+      where: search
+        ? {
+            OR: [
+              { email: { contains: search, mode: 'insensitive' } },
+              { name: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : undefined,
+      select: { id: true, email: true, name: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  /** Create a fresh admin account that is not tied to an existing customer. */
+  async createAdmin(dto: CreateAdminDto) {
+    const email = dto.email.trim().toLowerCase();
+
+    // Checked before hashing: bcrypt at cost 12 is ~250ms of deliberate work,
+    // and there is no reason to spend it on a request that cannot succeed.
+    const clash = await this.prisma.admin.findUnique({ where: { email } });
+    if (clash) throw new ConflictException('An admin with that email already exists');
+
+    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+    return this.prisma.admin.create({
+      data: { email, passwordHash, role: dto.role ?? 'ADMIN' },
+      select: ADMIN_SELECT,
+    });
+  }
+
+  /**
+   * Promote an existing customer to admin.
+   *
+   * **The password is not touched, generated, or transmitted.** The new Admin
+   * row reuses the User's own `passwordHash`, so the person signs in to the
+   * panel with the credentials they already have. That removes the worst part
+   * of granting admin access — an operator inventing a password and then
+   * having to get it to a human safely, which is how this project's other
+   * credentials ended up in a chat log [R4].
+   *
+   * The User row is left alone: being an admin does not stop someone being a
+   * customer, and deleting their consumer account would orphan their visits,
+   * bookings and points.
+   */
+  async promoteUser(dto: PromoteUserDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+      select: { id: true, email: true, passwordHash: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const clash = await this.prisma.admin.findUnique({ where: { email: user.email } });
+    if (clash) throw new ConflictException('That user is already an admin');
+
+    return this.prisma.admin.create({
+      data: {
+        email: user.email,
+        passwordHash: user.passwordHash,
+        role: dto.role ?? 'ADMIN',
+      },
+      select: ADMIN_SELECT,
+    });
+  }
+
+  /**
+   * Delete an admin, and revoke their sessions in the same transaction.
+   *
+   * Two refusals, both of which exist to prevent an unrecoverable state:
+   *
+   *  - **Not yourself.** An owner deleting their own account mid-session is
+   *    the single likeliest way to lock a platform out, and it reads as a
+   *    misclick far more often than as an intention.
+   *  - **Not the last owner.** Creating an owner requires being one, so a
+   *    platform with zero owners can never grant admin access again without
+   *    dropping back to raw SQL — the exact dependency T77 removes.
+   */
+  async deleteAdmin(targetId: string, callerId: string) {
+    if (targetId === callerId) {
+      throw new BadRequestException('You cannot delete your own admin account');
+    }
+
+    const target = await this.prisma.admin.findUnique({
+      where: { id: targetId },
+      select: { id: true, role: true },
+    });
+    if (!target) throw new NotFoundException('Admin not found');
+
+    if (target.role === 'OWNER') {
+      const owners = await this.prisma.admin.count({ where: { role: 'OWNER' } });
+      if (owners <= 1) {
+        throw new BadRequestException(
+          'This is the last owner account — promote another owner before deleting it',
+        );
+      }
+    }
+
+    // Their access token stays syntactically valid until it expires; the
+    // refresh tokens are what would otherwise let a deleted admin keep
+    // renewing a session indefinitely. RequireAdminOwnerGuard also fails
+    // closed on a missing row, so the two together close both halves.
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.updateMany({
+        where: { accountId: targetId, accountType: 'ADMIN', revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      this.prisma.admin.delete({ where: { id: targetId } }),
+    ]);
+
+    return { ok: true };
+  }
+
+  /**
+   * An admin changes their own password.
+   *
+   * Closes a real gap: `forgotPassword` only ever looked up User and Merchant,
+   * so an admin who lost their password had no route back at all — and the
+   * endpoint answers `{ ok: true }` either way, so they would have sat waiting
+   * for an email that was never going to arrive.
+   *
+   * Every other session is revoked, in the same transaction as the new hash,
+   * for the reason password-reset gives: a change that succeeded while the
+   * revocation failed would leave open the gap being closed.
+   */
+  async changeOwnPassword(adminId: string, dto: ChangeAdminPasswordDto) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, passwordHash: true },
+    });
+    if (!admin) throw new NotFoundException('Admin not found');
+
+    if (!(await bcrypt.compare(dto.currentPassword, admin.passwordHash))) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.admin.update({ where: { id: adminId }, data: { passwordHash } }),
+      this.prisma.refreshToken.updateMany({
+        where: { accountId: adminId, accountType: 'ADMIN', revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return { ok: true };
   }
 }

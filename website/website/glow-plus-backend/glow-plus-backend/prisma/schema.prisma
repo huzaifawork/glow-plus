@@ -260,15 +260,32 @@ model Redemption {
 }
 
 // ---------------------------------------------------------------------------
-// Admin accounts — T22 [F7]. Not self-service: created directly (seed/CLI),
-// since anyone who could sign up as admin would defeat the guard entirely.
+// Admin accounts — T22 [F7]. Not self-service: there is still no signup route,
+// and there must not be one. T77 adds the two supported ways to gain an admin
+// account, both of which require an existing OWNER or direct database access:
+// an OWNER creates one from the panel, or an operator inserts a row directly.
 // ---------------------------------------------------------------------------
 
 model Admin {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
-  createdAt    DateTime @default(now())
+  role         AdminRole @default(ADMIN)
+  createdAt    DateTime  @default(now())
+}
+
+/// T77 — Two tiers, because "any admin can mint an admin" makes one stolen
+/// admin session a permanent, self-replicating foothold: the attacker creates
+/// a second account and revoking the first changes nothing. Only an OWNER may
+/// create, promote or delete admins; an ADMIN does the day-to-day work of
+/// approving and suspending salons.
+///
+/// The default is deliberately the WEAKER role, so that a row inserted by hand
+/// in a database console cannot silently grant the strongest privilege in the
+/// platform. An operator who wants an OWNER has to say so explicitly.
+enum AdminRole {
+  OWNER
+  ADMIN
 }
 
 // ---------------------------------------------------------------------------

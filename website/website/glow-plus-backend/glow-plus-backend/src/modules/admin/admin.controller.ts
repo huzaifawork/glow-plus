@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -6,6 +6,8 @@ import { AdminLoginDto } from './login.dto';
 import { AdminMerchantsQueryDto } from './merchants-query.dto';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
 import { AuthedRequest } from '../../middleware/auth.middleware';
+import { RequireAdminOwnerGuard } from '../../common/guards/require-admin-owner.guard';
+import { ChangeAdminPasswordDto, CreateAdminDto, PromoteUserDto } from './admin-management.dto';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -84,5 +86,71 @@ export class AdminController {
   @Get('metrics/platform')
   platform() {
     return this.admin.platformStats();
+  }
+
+  // -------------------------------------------------------------------------
+  // Admin team management  (T77)
+  //
+  // Guarded by RequireAdminOwnerGuard, not RequireAdminGuard: approving a
+  // salon and deciding who administers the platform are different powers, and
+  // an admin who can mint admins makes one stolen session permanent.
+  //
+  // The CLI script and a direct database INSERT both still work and are
+  // deliberately unchanged — they are the bootstrap path for the very first
+  // owner, which by definition cannot be created through a route that
+  // requires already being one.
+  // -------------------------------------------------------------------------
+
+  @UseGuards(RequireAdminOwnerGuard)
+  @Get('admins')
+  listAdmins() {
+    return this.admin.listAdmins();
+  }
+
+  /**
+   * Customers, for the promote picker. Owner-only and capped at 50 rows:
+   * scoped to the one job it exists for, rather than becoming a general
+   * customer directory that every admin can page through.
+   */
+  @UseGuards(RequireAdminOwnerGuard)
+  @Get('users')
+  listUsers(@Query('q') q?: string) {
+    return this.admin.listUsers(q);
+  }
+
+  @ThrottleCredentials()
+  @UseGuards(RequireAdminOwnerGuard)
+  @Post('admins')
+  createAdmin(@Body() dto: CreateAdminDto) {
+    return this.admin.createAdmin(dto);
+  }
+
+  /** Promote an existing customer; reuses their password, never issues one. */
+  @UseGuards(RequireAdminOwnerGuard)
+  @Post('admins/promote')
+  promoteUser(@Body() dto: PromoteUserDto) {
+    return this.admin.promoteUser(dto);
+  }
+
+  @UseGuards(RequireAdminOwnerGuard)
+  @Delete('admins/:id')
+  deleteAdmin(@Param('id') id: string, @Req() req: AuthedRequest) {
+    // The caller's own id comes from the token, never from the body — this is
+    // what makes the "cannot delete yourself" check meaningful rather than
+    // something the client could simply lie about.
+    return this.admin.deleteAdmin(id, req.accountId!);
+  }
+
+  /**
+   * Change your own password. RequireAdminGuard, not the owner guard: every
+   * admin must be able to rotate their own credential, and before T77 none of
+   * them could — `forgot-password` never looked at the Admin table, and
+   * answered `{ ok: true }` anyway, so the failure was silent.
+   */
+  @ThrottleCredentials()
+  @UseGuards(RequireAdminGuard)
+  @Patch('me/password')
+  changePassword(@Req() req: AuthedRequest, @Body() dto: ChangeAdminPasswordDto) {
+    return this.admin.changeOwnPassword(req.accountId!, dto);
   }
 }

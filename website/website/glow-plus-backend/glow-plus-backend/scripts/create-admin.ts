@@ -75,7 +75,14 @@ async function main() {
 
     const total = await prisma.admin.count();
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const admin = await prisma.admin.create({ data: { email, passwordHash } });
+    // T77 — the FIRST admin on a database is always an OWNER; later ones default
+    // to ADMIN. This is the bootstrap and it has to be an owner: creating an owner
+    // through the API requires already being one, so a database whose first admin
+    // was a plain ADMIN could never grow a second without coming back to this
+    // script. Later runs take the weaker role because by then the panel exists and
+    // an owner can grant the stronger one deliberately.
+    const role = total === 0 ? 'OWNER' : 'ADMIN';
+    const admin = await prisma.admin.create({ data: { email, passwordHash, role } });
 
     // eslint-disable-next-line no-console
     console.log(

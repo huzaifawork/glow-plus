@@ -23,6 +23,7 @@ import {
   listPendingMerchants,
   suspendMerchant,
 } from '../../lib/api.js';
+import AdminTeam from './AdminTeam.jsx';
 
 const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span> <span style={{ fontWeight: 400 }}>Admin</span></div>
@@ -57,6 +58,7 @@ export default function AdminPage() {
       </div>
       <Metrics />
       <PendingMerchants />
+      <AdminTeam />
     </div>
   );
 }
