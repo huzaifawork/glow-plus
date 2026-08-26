@@ -171,11 +171,17 @@ None of these are defects. Each is a product question the code cannot answer.
 | **F50** | Paying bypasses admin approval — should a salon that pays go live without review? |
 | **F71** | A customer keeps seeing points and a **Redeem button** at a salon that stopped paying. Should points survive a salon leaving? Should the reward stay redeemable, or read *"no longer on Glow+"*? |
 | **F72** | Salon signup calls Stripe **before** writing the row, so a **Stripe outage blocks all signups**. Deferring customer creation to checkout would remove that dependency. |
-| **F63** | Appointment times render in the **browser's** timezone, not the salon's. |
+| **F74(b)** | **The trial length.** Non-founding salons get **7 days**; the first 50 get **37**. All copy now says 7 days truthfully — but if the intended offer was "first month free for everyone", raise `STANDARD_TRIAL_DAYS` to 30. That is revenue, not code. |
+| **Translations** | The 7 non-English languages now say **less** than English about the founding offer — nothing false, but the fuller wording needs a translator. |
 | **T32** | **There is no M-Pesa/Daraja code in the repository at all.** The requirements document describes securing its webhook as though it exists. This is a from-scratch build and unpriced. |
 | **T67** | Business registration — client action, not development work. |
 
 ---
+
+> **Fixed during the production run, no longer decisions:** [F63] (times now render in the salon's
+> timezone, with the zone named), [F74(a)] (no language promises a free month it will not grant),
+> [F74(c)] (an approved salon is not listed until it starts a plan — and is told so), [F75] (the
+> customer can see what they redeemed), [F76] (the salon can see its own appointments).
 
 ## E. Known gaps, deliberately not closed
 
