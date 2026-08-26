@@ -4,9 +4,12 @@ import { useI18n } from '../i18n/I18nContext.jsx';
 import { useAsyncData } from '../lib/useAsyncData.js';
 import {
   ApiError,
+  cancelMerchantBooking,
+  confirmMerchantBooking,
   createRewardRule,
   createStyle,
   getMerchantProfile,
+  listMerchantBookings,
   listMerchantRedemptions,
   listMerchantVisits,
   listRewardRules,
@@ -783,6 +786,107 @@ function LedgerPanel({ active }) {
    second state this table does not have a column for, and inventing one here
    would be a schema decision made from a UI. Recorded for the client instead.
    ============================================================ */
+/**
+ * The salon's appointment book.  [F76]
+ *
+ * **Why this did not exist until now.** `GET /bookings` (merchant-guarded,
+ * paginated, date-filtered) shipped with T18, and `PATCH /:id/confirm` and
+ * `PATCH /:id/cancel` beside it — and **no client ever called any of them**.
+ * The portal had nine tabs and not one was Appointments, so a customer could
+ * book 9am Monday and the salon had no screen anywhere on which to find out.
+ *
+ * Third instance of the same shape as [F60] (the salon could not see
+ * redemptions) and [F75] (the customer could not see their own). This one is
+ * the most serious of the three: a redemption is a record of something that
+ * already happened, but a booking is a commitment about the future, and a
+ * salon that cannot see it does not keep it.
+ *
+ * Defaults to **today onward** rather than the whole history — an appointment
+ * book is a forward-looking document, and last month's bookings are not what
+ * anyone opens this tab to find.
+ */
+function BookingsPanel({ active }) {
+  const { toast } = useApp();
+  const run = usePortalAction();
+  // Local midnight, so "today" means the salon's today rather than UTC's.
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  const rows = usePortalData(() => listMerchantBookings({ from: from.toISOString() }), []) || [];
+
+  async function act(id, fn, verb) {
+    const ok = await run(() => fn(id));
+    if (ok) toast(`Appointment ${verb}.`);
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-bookings">
+        <div className="empty">
+          No upcoming appointments. <b>Customers book these from your salon page.</b>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-bookings">
+      <div className="table-scroll">
+        <table className="ledger">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Client</th>
+              <th>Service</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((b) => (
+              <tr key={b.id}>
+                <td>{formatDateTime(b.startTime)}</td>
+                <td>
+                  {b.user ? b.user.name : '—'}
+                  {/* The email is the salon's only way to reach them: the phone
+                      is AES-GCM encrypted at rest (T31b) and deliberately not
+                      returned by the API. */}
+                  <div className="lc-meta">{b.user ? b.user.email : ''}</div>
+                </td>
+                <td>{b.style ? b.style.name : '—'}</td>
+                <td>
+                  <span className={'tag ' + String(b.status).toLowerCase()}>
+                    {String(b.status).toLowerCase()}
+                  </span>
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {b.status === 'PENDING' ? (
+                    <button
+                      type="button"
+                      className="navbtn"
+                      onClick={() => act(b.id, confirmMerchantBooking, 'confirmed')}
+                    >
+                      Confirm
+                    </button>
+                  ) : null}
+                  {b.status === 'PENDING' || b.status === 'CONFIRMED' ? (
+                    <button
+                      type="button"
+                      className="navbtn ghost"
+                      onClick={() => act(b.id, cancelMerchantBooking, 'cancelled')}
+                    >
+                      Cancel
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function RedemptionsPanel({ active }) {
   const rows = usePortalData(() => listMerchantRedemptions(), []) || [];
 
@@ -1073,6 +1177,7 @@ export default function BusinessPortal({ active }) {
     ['styles', t('tab_styles')],
     ['rules', t('tab_rules')],
     ['ledger', t('tab_ledger')],
+    ['bookings', 'Appointments'],
     ['redemptions', 'Redemptions'],
     ['hours', 'Opening hours'],
     ['profile', 'Profile'],
@@ -1112,6 +1217,7 @@ export default function BusinessPortal({ active }) {
       <StylesPanel active={tab === 'styles'} />
       <RulesPanel active={tab === 'rules'} />
       <LedgerPanel active={tab === 'ledger'} />
+      <BookingsPanel active={tab === 'bookings'} />
       <RedemptionsPanel active={tab === 'redemptions'} />
       <HoursPanel active={tab === 'hours'} />
       <ProfilePanel active={tab === 'profile'} />

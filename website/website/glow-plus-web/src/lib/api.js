@@ -428,6 +428,33 @@ export function createBooking({ merchantId, styleId, startTime, notes }) {
   });
 }
 
+/**
+ * The salon's own appointment book.  [F76]
+ *
+ * `GET /bookings` (merchant-guarded, paginated, date-filtered) and the
+ * confirm/cancel routes beside it shipped in T18 and **no client ever called
+ * them** — the portal had nine tabs and not one of them was Appointments. A
+ * customer could book 9am Monday and the salon had no screen anywhere on which
+ * to find out. Third instance of the same shape as [F60] and [F75].
+ */
+export function listMerchantBookings({ from, to, limit, offset } = {}) {
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  if (limit != null) qs.set('limit', String(limit));
+  if (offset != null) qs.set('offset', String(offset));
+  const suffix = qs.toString();
+  return apiRequest('/bookings' + (suffix ? `?${suffix}` : ''), {});
+}
+
+export function confirmMerchantBooking(id) {
+  return apiRequest(`/bookings/${encodeURIComponent(id)}/confirm`, { method: 'PATCH' });
+}
+
+export function cancelMerchantBooking(id) {
+  return apiRequest(`/bookings/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
+}
+
 export function listMyBookings() {
   return apiRequest('/bookings/me', { tokenKey: CONSUMER_TOKEN_KEY });
 }
