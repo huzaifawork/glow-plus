@@ -141,7 +141,7 @@ export class AdminService {
             ],
           }
         : undefined,
-      select: { id: true, email: true, name: true, createdAt: true },
+      select: { id: true, email: true, name: true, role: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -164,21 +164,24 @@ export class AdminService {
   async promoteUser(dto: PromoteUserDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
-      select: { id: true, email: true, passwordHash: true },
+      select: { id: true, email: true, role: true },
     });
     if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'CONSUMER') throw new ConflictException('That user is already an admin');
 
-    const clash = await this.prisma.admin.findUnique({ where: { email: user.email } });
-    if (clash) throw new ConflictException('That user is already an admin');
-
-    return this.prisma.admin.create({
-      data: {
-        email: user.email,
-        passwordHash: user.passwordHash,
-        role: dto.role ?? 'ADMIN',
-      },
-      select: ADMIN_SELECT,
+    // Sets ONE column, exactly as changing the dropdown in the Supabase table
+    // editor does. The Admin row is created by the `user_role_sync_admin`
+    // trigger, not here — see migration 20260827020000_user_role_sync_admin.
+    //
+    // Writing it this way is the point: the panel and the database console are
+    // now the same operation, so they cannot drift apart or disagree about
+    // what promotion means.
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { role: dto.role ?? 'ADMIN' },
     });
+
+    return this.prisma.admin.findUnique({ where: { email: user.email }, select: ADMIN_SELECT });
   }
 
   /**

@@ -189,9 +189,13 @@ function PromoteCustomer({ onDone }) {
           {results.map((u) => (
             <li key={u.id}>
               {u.name} — {u.email}{' '}
-              <button className="btn btn-small" disabled={busy} onClick={() => promote(u)}>
-                Make admin
-              </button>
+              {u.role && u.role !== 'CONSUMER' ? (
+                <span className="muted">already {u.role === 'OWNER' ? 'an owner' : 'an admin'}</span>
+              ) : (
+                <button className="btn btn-small" disabled={busy} onClick={() => promote(u)}>
+                  Make admin
+                </button>
+              )}
             </li>
           ))}
         </ul>

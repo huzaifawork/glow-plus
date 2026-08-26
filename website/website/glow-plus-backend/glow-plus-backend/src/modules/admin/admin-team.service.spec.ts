@@ -23,7 +23,11 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
       delete: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({}),
     },
-    user: { findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+    user: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({}),
+    },
     refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     $transaction: jest.fn().mockResolvedValue([]),
     ...overrides,
@@ -37,17 +41,35 @@ function makeService(prisma: any) {
 
 describe('AdminService — team management (T77)', () => {
   describe('promoteUser', () => {
-    it('reuses the customer’s existing hash — no password is generated or transmitted', async () => {
+    function withUser(prisma: any, role = 'CONSUMER') {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u_1', email: 'c@y.com', role });
+    }
+
+    it('sets User.role and lets the trigger create the Admin row — the same gesture as the Supabase dropdown', async () => {
       const prisma = makePrisma();
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
-        id: 'u_1',
-        email: 'c@y.com',
-        passwordHash: '$2b$12$theirExistingHash',
-      });
+      withUser(prisma);
       await makeService(prisma).promoteUser({ userId: 'u_1' });
-      const { data } = (prisma.admin.create as jest.Mock).mock.calls[0][0];
-      expect(data.passwordHash).toBe('$2b$12$theirExistingHash');
-      expect(data.email).toBe('c@y.com');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u_1' },
+        data: { role: 'ADMIN' },
+      });
+      // The service must NOT write the Admin table itself; two mechanisms
+      // doing the same job is how they drift apart.
+      expect(prisma.admin.create).not.toHaveBeenCalled();
+    });
+
+    it('defaults a promoted customer to ADMIN, never OWNER', async () => {
+      const prisma = makePrisma();
+      withUser(prisma);
+      await makeService(prisma).promoteUser({ userId: 'u_1' });
+      expect((prisma.user.update as jest.Mock).mock.calls[0][0].data.role).toBe('ADMIN');
+    });
+
+    it('honours an explicit OWNER', async () => {
+      const prisma = makePrisma();
+      withUser(prisma);
+      await makeService(prisma).promoteUser({ userId: 'u_1', role: 'OWNER' });
+      expect((prisma.user.update as jest.Mock).mock.calls[0][0].data.role).toBe('OWNER');
     });
 
     it('404s on an unknown user', async () => {
@@ -57,17 +79,13 @@ describe('AdminService — team management (T77)', () => {
       );
     });
 
-    it('refuses to promote someone who is already an admin', async () => {
+    it('refuses someone who is already an admin, without touching the row', async () => {
       const prisma = makePrisma();
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
-        id: 'u_1',
-        email: 'c@y.com',
-        passwordHash: 'h',
-      });
-      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_1' });
+      withUser(prisma, 'ADMIN');
       await expect(makeService(prisma).promoteUser({ userId: 'u_1' })).rejects.toThrow(
         ConflictException,
       );
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 
@@ -129,6 +147,12 @@ describe('AdminService — team management (T77)', () => {
       const { select } = (prisma.user.findMany as jest.Mock).mock.calls[0][0];
       expect(select).not.toHaveProperty('passwordHash');
       expect(select).not.toHaveProperty('phone');
+    });
+
+    it('does surface role, so the picker can tell who is already an admin', async () => {
+      const prisma = makePrisma();
+      makeService(prisma).listUsers();
+      expect((prisma.user.findMany as jest.Mock).mock.calls[0][0].select.role).toBe(true);
     });
 
     it('caps the user list so it cannot become a full customer export', async () => {

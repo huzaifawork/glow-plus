@@ -52,12 +52,32 @@ model User {
   phoneFingerprint String?   @unique
   name             String
   passwordHash     String
+  /// T77 — flip this to ADMIN or OWNER (in the Supabase table editor, or from
+  /// the admin panel) and a matching `Admin` row appears automatically; flip it
+  /// back to CONSUMER and it is removed. The syncing is done by DATABASE
+  /// TRIGGERS defined in migration 20260827020000_user_role_sync_admin, not by
+  /// application code — see that file before changing anything here.
+  ///
+  /// Being an admin does not stop someone being a customer: their visits,
+  /// bookings and points stay on this row.
+  role             UserRole  @default(CONSUMER)
   emailVerifiedAt  DateTime?
   createdAt        DateTime  @default(now())
 
   visits      Visit[]
   redemptions Redemption[]
   bookings    Booking[]
+}
+
+/// T77 — the one control that grants or removes admin access.
+///
+/// Deliberately the SAME two admin tiers as AdminRole plus CONSUMER, so the
+/// value maps across one-to-one and a person reading either table sees the
+/// same words. CONSUMER means "not an admin".
+enum UserRole {
+  CONSUMER
+  ADMIN
+  OWNER
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +290,7 @@ model Admin {
   id           String    @id @default(cuid())
   email        String    @unique
   passwordHash String
-  role         AdminRole @default(ADMIN)
+  role         AdminRole @default(OWNER)
   createdAt    DateTime  @default(now())
 }
 
