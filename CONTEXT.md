@@ -133,59 +133,57 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **THE APP IS LIVE. Phase 8: T57, T58, T61, T62, T63 remain.**
+## 8. EXACTLY where to resume — **ALL 65 TASKS CLOSED. What remains is handover + client decisions.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
 > ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. THE APP IS DEPLOYED AND LIVE.**
 >
-> **State: 59 of 65 done — THE APP IS LIVE AND SMOKE-TESTED.** PHASE 7 CLOSED.
-> **PHASE 8: T52 ✅ T52b ✅ T53 ✅ T54 ✅ T55 ✅ T56 ✅ T59 ✅ T60 ✅ T63 ✅.**
-> Backend suite **459 passing, 29 suites**.
-> **Remaining in Phase 8: T57, T58, T61, T62.** Next is **T57** (Stripe raw body).
->
-> ⚠️ **[F70] — THE PRODUCTION ADMIN.** T63 found that production had **no way to
-> create an admin at all**: there is no signup route (deliberately) and the only
-> `prisma.admin.create` lives in `seed.ts`, which refuses non-local databases
-> (also deliberately). Between two right decisions was a gap that made the
-> product non-functional — every salon signs up PENDING and only an admin can
-> approve one. Fixed with **`npm run create-admin <email> <password>`**.
-> **An admin now exists on production: `admin@glowplusmember.com`. Its password
-> is in the gitignored `.env` under `# PRODUCTION ADMIN` — move it to a password
-> manager and hand it to the client.**
->
-> ⚠️ **[F69] — two ungated fetches**, both fixed. Every view is mounted from
-> first paint, so `ConsumerDashboard` and `BusinessPortal`'s `HoursPanel` called
-> protected routes for anonymous visitors and toasted *"Missing bearer token"* on
-> the landing page. **The gate belongs to the FETCH, not the hook** — a bare
-> `useEffect` calling a protected route from an always-mounted view needs one too.
-> Found by the user on the live site; **no local test could catch it**, because a
-> developer's browser always holds a token from an earlier sign-in.
+> **State: EVERY TASK CLOSED — 65 of 65.** Nothing remains in `[ ]`. What is
+> left is **blocked on the client**, not on work: **T61** (live Stripe keys +
+> live-mode webhook), **T67** (business registration), **T32** (is M-Pesa in
+> scope at all), **T31c** (major-version upgrades, deliberately deferred),
+> **T27** (secrets out of plaintext `.env`).
+> Backend suite **474 passing, 30 suites** — 459 unit + **15 integration**.
+> **CI is green on all three jobs.**
 >
 > | | Live URL |
 > |---|---|
 > | **API** | **https://glow-plus-api.vercel.app** |
 > | **Website** | **https://glow-plus-web-eight.vercel.app** |
+> | Privacy / Terms | `/privacy.html` · `/terms.html` |
+>
+> ### ➡️ RESUME HERE — the remaining work is a HANDOVER, not development
+>
+> 1. **Deploy to the client's Vercel** (their token). Two projects, Root
+>    Directories as below. ⚠️ **The frontend must be REBUILT, not re-pointed** —
+>    Vite inlines `VITE_API_BASE_URL` at build time.
+> 2. **Transfer the Supabase project** to the client's org (a project transfer,
+>    not a re-migration).
+> 3. **Hand over the admin password** — `admin@glowplusmember.com`, currently
+>    only in the gitignored `.env` under `# PRODUCTION ADMIN`.
+> 4. **Client decisions outstanding:** [F50], [F71], [F72], [F63], and the
+>    Supabase **Pro plan** (~$25/mo) — the free tier has **no backups at all**.
 >
 > ⚠️ **The website host is `glow-plus-web-EIGHT`.** The plain
-> `glow-plus-web.vercel.app` was taken and belongs to **an unrelated "Glow+" SPA
-> that returns 200 for every path** — which made one round of checks look green
-> while hitting a stranger's site. Never hardcode the un-suffixed host.
+> `glow-plus-web.vercel.app` is **an unrelated "Glow+" SPA that returns 200 for
+> every path**, which made one round of checks look green while hitting a
+> stranger's site. Never hardcode the un-suffixed host.
 >
-> ⚠️ **Deployed to the DEVELOPER's Vercel account** (`huzaifas-projects-eabfae35`)
-> for validation. **Re-deploy to the client's account at handover**, alongside
-> the Supabase project transfer. Stripe is still on **`sk_test_`** — live keys
-> are **T61**, on the client's say-so.
->
-> ⚠️ **Always put the `cd` in the SAME command as `vercel --prod`.** A deploy run
-> from the repo root uploaded **130MB** (the git-ignored 129MB `website.zip` —
+> ⚠️ **Always put the `cd` in the SAME command as `vercel --prod`.** A deploy
+> from the repo root uploaded **130MB** (the git-ignored `website.zip` —
 > **Vercel honours `.vercelignore`, NOT `.gitignore`**) and created a stray
-> project. A root `.vercelignore` now exists, but the directory is the real fix.
+> project.
+>
+> ⚠️ **`vercel env pull` writes `[SENSITIVE]` in place of secret values.** That
+> cost two wrong deploys in T57: a webhook signature was computed with the
+> literal string `"[SENSITIVE]"` and the failure was misread as Vercel eating
+> the request body. **It does not** — the webhook works untouched.
 >
 > **[T53] settled T56's one open assumption:** Vercel's catch-all rewrite **does**
-> preserve the original `req.url`, so every route resolves. And **T52's latency
-> prediction was right** — `/health/ready` went **1,798ms → 19ms** once the
-> function and database sat in the same region.
+> preserve the original `req.url`. And **T52's latency prediction was right** —
+> `/health/ready` went **1,798ms → 19ms** once the function and database sat in
+> the same region.
 > localhost survives in `src/`), so it happens *inside* T53. **T57 and T58 can
 > only be done after a live URL exists.**
 >
