@@ -37,7 +37,7 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25; **`RefreshToken` added T47**, and `AccountType` gained a fourth value `STAFF`) |
 | Production DB | ✅ **T52 — Supabase, project `xhyoeiltwcciqowlwyov`, region `us-east-1`, Postgres 17.6, free plan.** 8/8 migrations applied; schema diffed against local at column+type level: **126 vs 126, zero drift**. `.env` is switched **back to local Docker** — the Supabase pair sits commented beneath it. `npm run seed` **refuses** to run against it (local-DB guard). Latency from here is ~1,170ms and that is **distance, not config** (raw TCP RTT to the pooler is 240ms); on Vercel `iad1` the DB is same-region. Account is the developer's → **transfer at handover**. **T52b (2026-08-26): the Supabase Data API is now CLOSED against the app tables** — RLS **16/16** and `anon`/`authenticated` revoked, two independent locks, via migration `20260826120000_lock_down_supabase_data_api`. It is a **no-op off Supabase** (guarded on `pg_roles`), and there is deliberately **no `FORCE ROW LEVEL SECURITY`** — `FORCE` would subject the owner to policies and lock the backend out. Do **not** "tidy" either of those away |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T56: there are now TWO entry points and neither may configure the app itself — `src/bootstrap.ts` (`createApp()`) is the ONLY place that happens. `main.ts` = `createApp()` + `listen()` for local; `src/serverless.ts` = `createApp()` + `init()` and exports the Express instance for Vercel; `api/index.ts` is a one-line re-export and is NOT type-checked (`api` is in tsconfig `exclude`, TS6059 / [F23]). Caching in `serverless.ts` is a PROMISE, not the resolved app — concurrent cold requests would otherwise each bootstrap and race Prisma pools against `connection_limit=1`.** **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
 | Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
 | Tests | ✅ Jest configured, **396 passing** (`npm test`) — 25 suites (T49 added `config/version.spec.ts`, 13): jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
@@ -133,22 +133,58 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5–7 DONE. In PHASE 8 (deployment); T52 done, next is T53.**
+## 8. EXACTLY where to resume — **Phases 5–7 DONE. In PHASE 8 (deployment); T52, T52b, T56 done — next is T54.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
+> ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. T52b + T56 done.**
+>
+> **State: 54 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
+> T56 ✅ T60 ✅.** Backend suite **436 passing, 28 suites** (T56 added 4 guards
+> to `config/version.spec.ts`).
+> **Remaining in Phase 8: T53, T54, T55, T57, T58, T59, T61, T62, T63.**
+>
+> ### ➡️ RESUME HERE — **next task is T54 (cron dispatcher).**
+>
+> **The two things this session settled, both worth not re-deriving:**
+>
+> **1. [T52b] The Supabase Data API was wide open and is now closed.** Not a
+> T52 defect — the Supabase *default*, which Prisma cannot see because Prisma
+> has no concept of RLS. `anon` held full CRUD on all 16 tables, RLS was off,
+> and `/rest/v1/` is live. Now: **RLS 16/16, anon/authenticated revoked**, two
+> independent locks, via migration `20260826120000_lock_down_supabase_data_api`.
+> ⚠️ **Do not add `FORCE ROW LEVEL SECURITY`** (it would subject the owner to
+> policies and lock the backend out) and **do not remove the `pg_roles` guard**
+> (it makes the migration a no-op on local Docker and CI, which T58 needs).
+>
+> **2. [T56] The backend now has a Vercel entry point.** It had none — no
+> `vercel.json`, no `api/`, `main.ts` ended in `app.listen()`. Config moved to
+> **`src/bootstrap.ts`**, which is now **the one place the app is configured**;
+> `main.ts` listens, `src/serverless.ts` inits and exports the Express instance,
+> `api/index.ts` is a one-line re-export. ⚠️ **Never configure the app in an
+> entry point again** — a guard added to one and not the other fails silently
+> and security-shaped, since nothing local exercises the serverless path. Four
+> tests in `version.spec.ts` now enforce this. Cold start **2,855ms → warm 2ms**.
+>
+> ### Decisions taken this session
+>
+> | Decision | Call |
+> |---|---|
+> | **Frontend + backend deploy SEPARATELY**, two Vercel projects, same repo, different Root Directory | The decisive reason is **Order 2**: the RN app calls the API cross-origin from a phone, where there is no same-origin at all. Auth is bearer-token with **zero cookies** (verified), so separate origins cost only a CORS preflight |
+> | **Free `.vercel.app` URLs** for the test deploy | The client's `glowplusmember.com` stays untouched until handover. **Hosting is independent of Resend** — the `mail.` DKIM/SPF records in Hostinger are outbound email only, so email is unaffected by where the app is hosted |
+> | **[F68] does NOT block launch** | Measured: **~224 new keys × 8 languages ≈ 1,792 strings**, more than doubling the existing 191-key dictionary. Session 28 already shipped the valuable half (RTL + `lang`); what remains is bulk copy. Shipping ~672 unreviewed Arabic/CJK strings on a **billing** screen is worse than English. → **T40, post-launch** |
+>
+> ⚠️ **[F63], [F68] and [F50] are all still open and NONE of them blocks
+> deployment.** [F50] needs a client decision, not code.
+>
+> ---
+>
 > **State as of session 28 (2026-08-26): 52 of 65 done. PHASE 7 IS CLOSED —
-> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅. PHASE 8 IS UNDERWAY: T52 ✅ (and
-> T60 ✅, done early). Next is T53. Remaining: T53–T59, T61–T63, T64–T66.**
+> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅.**
 > Backend suite **432 passing, 28 suites** (session 28 added
 > `modules/auth/password-reset.service.spec.ts` 17 and `common/free-service.spec.ts` 8).
 >
-> ⚠️ **THE MANUAL TEST RUN IS THE ACTIVE PIECE OF WORK, NOT A TASK NUMBER.**
-> Read the SESSION 28 block immediately below — it says exactly which journey
-> to start on and what state the local DB is in. Do not start a T-number task
-> without checking there first.
->
-> ### ➡️ RESUME HERE — **THE MANUAL TEST RUN IS COMPLETE. Back to T-numbers: T53.**
+> ### THE MANUAL TEST RUN IS COMPLETE — all eight journeys closed in session 28.
 >
 > **ALL EIGHT JOURNEYS ARE CLOSED.** J1 ✅ J2 ✅ (s26) · the whole merchant
 > side M1–M9 ✅ (s27) · **J3 ✅ J4 ✅ J5 ✅ J6 ✅ J7 ✅ J8 ✅ (s28).**
