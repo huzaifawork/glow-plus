@@ -135,17 +135,29 @@ function PromoteCustomer({ onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  async function search(e) {
-    e.preventDefault();
+  const load = useCallback(async (query) => {
     setBusy(true);
     setErr(null);
     try {
-      setResults(await listUsersForPromotion(q));
+      setResults(await listUsersForPromotion(query));
     } catch (e2) {
-      setErr(e2 instanceof ApiError ? e2.message : 'Search failed.');
+      setErr(e2 instanceof ApiError ? e2.message : 'Could not load customers.');
     } finally {
       setBusy(false);
     }
+  }, []);
+
+  // Show the customers immediately instead of waiting for a search. An empty
+  // list behind a search box is indistinguishable from "there are no
+  // customers", which is exactly how it read on a platform with two of them.
+  // The box now narrows a list you can already see.
+  useEffect(() => {
+    load('');
+  }, [load]);
+
+  async function search(e) {
+    e.preventDefault();
+    await load(q);
   }
 
   async function promote(user) {
@@ -155,8 +167,9 @@ function PromoteCustomer({ onDone }) {
     try {
       await promoteUserToAdmin(user.id);
       onDone(`${user.email} is now an admin — they sign in with their existing password.`);
-      setResults(null);
-      setQ('');
+      // Reload rather than clear: the row should stay visible and flip to an
+      // "Admin" badge, so the promotion is something you can see happen.
+      await load(q);
     } catch (e2) {
       setErr(e2 instanceof ApiError ? e2.message : 'Could not promote that customer.');
     } finally {
@@ -184,8 +197,9 @@ function PromoteCustomer({ onDone }) {
       </form>
 
       {err ? <p className="err" role="alert">{err}</p> : null}
+      {busy && results === null ? <p className="empty-note">Loading customers…</p> : null}
       {results && results.length === 0 ? (
-        <p className="empty-note">No customers matched.</p>
+        <p className="empty-note">{q.trim() ? 'No customers matched.' : 'No customers yet.'}</p>
       ) : null}
 
       {results && results.length ? (
