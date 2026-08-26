@@ -858,7 +858,7 @@ function RedemptionsPanel({ active }) {
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function HoursPanel({ active }) {
-  const { toast } = useApp();
+  const { toast, currentMerchant } = useApp();
   const run = usePortalAction();
   const onError = useApiError();
   const [days, setDays] = useState(null);
@@ -867,7 +867,17 @@ function HoursPanel({ active }) {
   // Loaded once on mount rather than through usePortalData: this form is
   // EDITABLE, and re-reading it on every dataVersion bump would throw away
   // whatever the user had typed but not yet saved.
+  //
+  // [F69] — but opting out of usePortalData also opted out of its SESSION
+  // GATE, and that is the half that mattered. Every view is mounted from
+  // first paint (App.jsx toggles `.view.active`, which is visibility, not
+  // existence), so this panel called the protected `GET /business-hours/me`
+  // while an anonymous visitor was looking at the landing page: 401, and
+  // useApiError toasts the API's own words. Gating on `currentMerchant` is
+  // what usePortalData does; the editable-form reasoning above is a reason to
+  // skip the dataVersion dependency, never a reason to fetch signed out.
   useEffect(() => {
+    if (!currentMerchant) return undefined;
     let cancelled = false;
     getMyBusinessHours()
       .then((rows) => {
@@ -877,7 +887,7 @@ function HoursPanel({ active }) {
     return () => {
       cancelled = true;
     };
-  }, [onError]);
+  }, [onError, currentMerchant]);
 
   function update(dayOfWeek, patch) {
     setDays((current) =>
