@@ -5,7 +5,7 @@ export const LANG_NAMES = {en:'English',es:'Español',fr:'Français',de:'Deutsch
 
 export const I18N = {
 en: {
-  promo_bar: '🎉 <b>First 50 salons &amp; spas</b> get a Founding Member badge — plus every new salon gets their first month free.',
+  promo_bar: '🎉 <b>First 50 salons &amp; spas</b> get a Founding Member badge — plus a free first month on top of the 7-day trial.',
   nav_home:'Home', nav_rewards:'My rewards', nav_admin:'Admin', nav_business:'For salons', nav_menu:'Menu',
   hero_eyebrow:'Loyalty, digitized.',
   hero_headline:'Every visit gets you<br><em>closer</em> to something.',
@@ -28,7 +28,7 @@ en: {
   pricing_title:'Simple pricing for salons',
   pricing_desc:'One flat rate. No per-transaction fees, no per-seat pricing.',
   founding_title:'Founding 50',
-  founding_sub:'Every new salon gets their first month free. The first 50 to sign up also get a permanent "Founding Member" badge.',
+  founding_sub:'Every new salon starts with a 7-day free trial. The first 50 to sign up also get a permanent "Founding Member" badge — and a free first month on top of that trial.',
   founding_checking:'Checking spots left…',
   founding_spots_left_suffix:'of {cap} founding badges left',
   founding_spots_claimed:'All founding badges claimed',
