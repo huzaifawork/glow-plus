@@ -31,6 +31,21 @@ const read = (rel: string) =>
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('fs').readFileSync(require('path').join(__dirname, '..', rel), 'utf8');
 
+/**
+ * `read` with comments stripped.
+ *
+ * Needed for the negative assertions only — "this file must NOT call
+ * `.listen()`". These files explain at length *why* they avoid a thing, so the
+ * forbidden pattern appears in the prose that documents it, and a naive
+ * `not.toMatch` fails on a file that is entirely correct. Positive assertions
+ * keep using `read`: matching a pattern that only exists in a comment is a far
+ * less likely mistake than mentioning one you are avoiding.
+ */
+const readCode = (rel: string): string =>
+  read(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+
 describe('withVersion (T49)', () => {
   it('derives the prefix from the version, so a bump is one edit', () => {
     expect(API_PREFIX).toBe(`v${API_VERSION}`);
@@ -78,10 +93,51 @@ describe('the raw-URL matchers all carry the prefix (T49)', () => {
   });
 
   it('bootstraps URI versioning with the shared constant, not a literal', () => {
-    const src = read('main.ts');
+    // T56 — this moved out of main.ts into bootstrap.ts when the serverless
+    // entry point was added. It is asserted on bootstrap.ts specifically
+    // because that is now the ONE place both entry points configure the app.
+    const src = read('bootstrap.ts');
 
     expect(src).toMatch(/enableVersioning\(\{[^}]*type:\s*VersioningType\.URI/);
     expect(src).toMatch(/defaultVersion:\s*API_VERSION/);
+  });
+
+  // T56 — the reason the assertion above is still meaningful. Versioning being
+  // configured in bootstrap.ts only guarantees anything for an entry point
+  // that actually GOES through bootstrap.ts. If a future edit re-inlines
+  // NestFactory.create() into either entry point, that entry point silently
+  // loses URI versioning — and every route on it moves back off /v1 — while
+  // the test above keeps passing because bootstrap.ts is still correct.
+  //
+  // The serverless path is the dangerous half: nothing in the local dev loop
+  // or the Jest suite exercises it, so on Vercel it would 404 every route and
+  // locally everything would look fine.
+  it.each(['main.ts', 'serverless.ts'])(
+    'entry point %s builds the app through bootstrap.ts, never its own NestFactory',
+    (entry) => {
+      expect(read(entry)).toMatch(/from\s+'\.\/bootstrap'/);
+      expect(read(entry)).toMatch(/createApp\(\)/);
+      // The whole point: neither entry point may construct an app of its own.
+      expect(readCode(entry)).not.toMatch(/NestFactory\.create/);
+    },
+  );
+
+  it('the serverless entry initialises without listening', () => {
+    // app.listen() on Vercel binds a port nothing routes to and holds the
+    // invocation open; app.init() is the half that builds the DI container.
+    expect(read('serverless.ts')).toMatch(/\.init\(\)/);
+    expect(readCode('serverless.ts')).not.toMatch(/\.listen\(/);
+  });
+
+  it('the serverless entry caches the bootstrap promise, not the resolved app', () => {
+    // A cold container can take concurrent requests before the first
+    // bootstrap resolves. Caching the promise makes the later ones await the
+    // in-flight bootstrap; caching only the resolved app lets each start its
+    // own, racing several Prisma pools against connection_limit=1 (T52).
+    expect(read('serverless.ts')).toMatch(/let\s+handlerPromise/);
+    // Assigned before the await, so a second caller finds it already set.
+    expect(read('serverless.ts')).toMatch(/handlerPromise\s*=\s*buildHandler\(\)/);
+    expect(readCode('serverless.ts')).not.toMatch(/handlerPromise\s*=\s*await/);
   });
 });
 

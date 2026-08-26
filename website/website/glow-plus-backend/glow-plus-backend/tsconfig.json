@@ -23,5 +23,11 @@
   // outside rootDir ("./src"), so leaving it in the program fails the build
   // with TS6059. Jest compiles it through ts-jest, which does not use this
   // include list, so nothing is lost.
-  ,"exclude": ["node_modules", "dist", "prisma", "jest.setup.ts"]
+  //
+  // T56 — `api/` joins them for exactly the same reason: it is Vercel's
+  // file-based function directory, so it MUST sit at the project root, which
+  // is outside rootDir. Vercel compiles it with its own toolchain. api/index.ts
+  // is a single re-export precisely because being excluded here means it is
+  // never type-checked — the code it forwards to (src/serverless.ts) is.
+  ,"exclude": ["node_modules", "dist", "prisma", "jest.setup.ts", "api"]
 }

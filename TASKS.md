@@ -1273,7 +1273,46 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 - [ ] **T53 — Deploy backend + website**, env vars in Vercel project settings.
 - [ ] **T54 — Convert all 4 cron jobs to Vercel Cron.** `@Cron()` **never fires** on serverless — this silently kills T19 and T25. Expose each as a route guarded by `CRON_SECRET`; schedule in `vercel.json`.
 - [ ] **T55 — Prisma connection pooling** (PgBouncer / `?pgbouncer=true` / Accelerate). **The most common way Prisma-on-Vercel dies in production.**
-- [ ] **T56 — Cache the Nest app instance** across invocations (cold-start bootstrap can exceed the timeout).
+- [x] **T56 — Cache the Nest app instance across invocations.** ✅ **DONE & VERIFIED 2026-08-26.** This is also the task that gave the backend a Vercel entry point **at all** — before it, there was no `vercel.json`, no `api/`, and `main.ts` ended in `app.listen()`.
+
+      **The split.** Configuration moved out of `main.ts` into **`src/bootstrap.ts`** (`createApp()` / `configureApp()`), so both entry points apply the identical setup:
+      | File | Role |
+      |---|---|
+      | `src/bootstrap.ts` | **the one place** the app is configured — helmet, CORS allow-list, exception filter, `whitelist: true` pipe, URI versioning |
+      | `src/main.ts` | local/long-running — `createApp()` then `listen()` |
+      | `src/serverless.ts` | Vercel — `createApp()` then **`init()`**, exports the Express instance as the handler |
+      | `api/index.ts` | one-line re-export; Vercel's file-based function entry |
+      | `vercel.json` | catch-all rewrite → `/api`, `maxDuration: 30`, `memory: 1024` |
+
+      **Why the config had to be extracted rather than copied.** Two entry points with two copies of the setup would drift, and the drift would be **silent and security-shaped**: add a global guard to one, forget the other, and production runs unguarded while every local test and the whole Jest suite keeps passing — because nothing in the local loop goes through the serverless path.
+
+      ⚠️ **The cached value is a PROMISE, not the resolved app, and that is the single most important line in `serverless.ts`.** A cold container can be handed several concurrent requests before the first bootstrap finishes. If each checks "is the app ready?", finds `undefined` and starts its own, several Nest instances race to open Prisma pools against a database whose pooled string is deliberately `connection_limit=1` (T52). Storing the promise on the first call makes every later caller await the same in-flight bootstrap. A rejected promise is cleared so the next request retries — the likely bootstrap failures (T27/T31b env guards, Prisma unable to reach Supabase) are transient, and a cached rejection would otherwise poison the whole warm container.
+
+      ⚠️ **`init()`, not `listen()`.** On Vercel nothing listens; `listen()` would bind a port the platform never routes to and hold the invocation open. `init()` is the half that builds the DI container.
+
+      ⚠️ **No `@codegenie/serverless-express`, deliberately.** That family exists to convert an AWS API-Gateway *event object* into something Express understands. Vercel hands the function Node's own `IncomingMessage`/`ServerResponse`, and an Express instance **is** a `(req, res)` function — so the adapter would encode the request into a Lambda event and immediately decode it again, whose only real effect is one more chance to mangle the Stripe webhook's raw bytes (**T57**).
+
+      ⚠️ **`api/` is in tsconfig's `exclude`.** `rootDir` is `./src`, so a root-level `.ts` fails `nest build`/`typecheck` with **TS6059** — the same trap already documented for `jest.setup.ts` and `prisma/` ([F23]). Being excluded means `api/index.ts` is **not type-checked**, which is exactly why it is a single re-export with nothing in it to get wrong.
+
+      **Evidence — the handler was driven directly, the way Vercel drives it** (a real `http.createServer` gives the same `IncomingMessage`/`ServerResponse`), against **production Supabase**:
+      | Case | Result |
+      |---|---|
+      | `GET /health` (VERSION_NEUTRAL, unversioned) | **200** |
+      | `GET /health/ready` | **200**, `database.status: "up"` |
+      | `GET /v1/merchants` (public, versioned) | **200** `[]` — routing + versioning both live on the serverless path |
+      | helmet headers on the serverless path | `x-content-type-options: nosniff`, `x-frame-options: DENY`, **`x-powered-by` absent** |
+      | **Cold start** | **2,855 ms** |
+      | **Warm invocations** | **2 ms, 1 ms, 3 ms** — the cache is doing its job |
+      | `npm test` | **436 passing, 28 suites** (was 432 — 4 new guards below) |
+      | `npm run build` / `typecheck` | both clean |
+
+      **Four new guards in `config/version.spec.ts`**, because the split created a failure mode the old tests could not see: versioning being configured in `bootstrap.ts` only means anything for an entry point that actually goes *through* it. They assert both entry points import `createApp` and that **neither** calls `NestFactory.create` itself; that `serverless.ts` calls `init()` and never `listen()`; and that it caches the promise rather than the resolved app. A new `readCode()` helper strips comments first — these files explain at length *why* they avoid `.listen()`, so a naive negative match fails on a file that is entirely correct.
+
+      **Note:** `/merchants` and `/v1/nope` answer **401, not 404** — `AuthMiddleware` runs before route resolution and rejects unmatched paths with "Missing bearer token". Pre-existing, unchanged by T56, and arguably correct since it does not leak which routes exist.
+
+      ⬜ **The one assumption not verifiable locally:** that Vercel's catch-all rewrite preserves the **original** `req.url` rather than passing `/api`. It does for the standard Express-on-Vercel pattern, but if it did not, every route would 404 — so it is **smoke-test item #1** on first deploy (**T63**). `vercel dev` would settle it, but it needs an interactive login to the user's account.
+
+      ⬜ **`ScheduleModule.forRoot()` still registers the four `@Cron()` timers** in the serverless app, where they add cold-start cost and never meaningfully fire. **T54** removes them.
 - [ ] **T57 — Re-verify the Stripe webhook raw body** under the serverless adapter — local `stripe listen` passing proves nothing about the deployed endpoint.
 - [ ] **T58 — Run migrations from CI.** `Dockerfile.api` ran `migrate deploy` on boot; there's no boot step on Vercel.
 - [ ] **T59 — Replace all localhost URLs/origins** with production values.
