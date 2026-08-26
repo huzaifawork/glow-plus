@@ -1406,7 +1406,12 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       **Two fixes were written and both were then REVERTED, deliberately:** `export const config = { api: { bodyParser: false } }` (not honoured for standalone Vercel functions) and a hand-rolled raw-body capture in `serverless.ts`. Once a real secret was in place, the capture was **disabled and redeployed** to test whether it was load-bearing — production still returned **200**, so it was dead complexity wrapped around the most fragile path in the app and was removed. ⚠️ **If a raw-body capture is ever reintroduced, `req._body = true` must be set with it** — body-parser throws `stream is not readable` on a drained stream and the route 500s.
 
       **The real lesson: to test a signed webhook you need the secret Stripe issued, which it returns exactly once, at creation.** It is now kept in the gitignored `.env` as `STRIPE_WEBHOOK_SECRET`. Endpoint `we_1U8fn3IFlQyiM4FfRyNlZwbH`, **test mode**, 5 events.
-- [ ] **T58 — Run migrations from CI.** `Dockerfile.api` ran `migrate deploy` on boot; there's no boot step on Vercel.
+- [x] **T58 — Run migrations from CI.** ✅ **DONE 2026-08-26.** `.github/workflows/ci.yml`, job `migrate`. `Dockerfile.api` ran `migrate deploy` on boot and Vercel has no boot step, so without this a schema change deploys green while the database silently stays behind — the worst kind of drift, because nothing reports it.
+      ⚠️ **`DATABASE_URL` and `DIRECT_URL` are BOTH set to the SESSION pooler (`:5432`)** for this job, never the transaction pooler. Migrations take a **session-level advisory lock** and run DDL in a transaction outliving one statement; through a transaction pooler that lock sits on a connection the pooler may hand to someone else mid-migration, so `migrate deploy` hangs.
+      ⚠️ **And NOT Supabase's "Direct connection" host** (`db.<ref>.supabase.co`) — on the free plan it is **IPv6-only** and GitHub runners are IPv4-only, so it works from a laptop and fails in CI. **T52 flagged this as the exact trap that would break T58**; it is honoured here.
+      ⚠️ **`migrate deploy`, never `migrate dev`** — deploy applies pending migrations and nothing else; dev generates, resets and prompts.
+      **A missing secret SKIPS rather than fails**, with a GitHub notice explaining how to enable it. This repo is handed over: the client's copy will not have `DIRECT_URL` set on day one, and a red tick on every push trains everyone to ignore CI. It also `needs: test`, so migrations never run on code that does not compile.
+      ⬜ **One client action:** set `DIRECT_URL` in **Settings → Secrets and variables → Actions**. Until then the job skips and migrations stay manual (`npx prisma migrate deploy`), which is the current, working state — all 8 are already applied.
 - [ ] **T59 — Replace all localhost URLs/origins** with production values.
 - [x] **T60 — Domain + Resend domain verification.** ✅ **DONE & VERIFIED 2026-08-24.** Pulled forward out of phase order because it blocked T6, T19, T20, T21 and T35, and because it was the direct cause of [F27].
       **Domain:** `mail.glowplusmember.com` (Resend id `abad6d98-…`, region `ap-northeast-1`). **Status: `verified`** — DKIM, SPF MX and SPF TXT all `verified` via the Resend API.
@@ -1464,7 +1469,10 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 
 # PHASE 9 — Testing, CI, legal
 
-- [ ] **T64 — CI pipeline** running tests on push.
+- [x] **T64 — CI pipeline running tests on push.** ✅ **DONE 2026-08-26.** `.github/workflows/ci.yml`, job `test`: install → **`prisma generate`** → typecheck → **459 tests** → build, on every push, every PR, and on demand.
+      ⚠️ **Split from the migrate job deliberately, and this is the important part.** `test` needs **no secrets at all**, so it runs from a fork and from any contributor's branch. A pipeline that cannot run its tests without production credentials is one nobody can run — and it would put a database URL within reach of every workflow run for the sake of a step that matters a few times a year.
+      **`prisma generate` is explicit**, because Prisma's postinstall does not reliably run under `npm ci` — the same thing that broke the first Vercel deploy, whose build log read `allow-scripts @prisma/client (postinstall)`.
+      The three CI-only env vars (`JWT_SECRET`, `ENCRYPTION_KEY`, `DATABASE_URL`) are **deliberately not secrets**: they are obviously-fake values that never touch a real database, and hiding them would imply they protect something. Build runs **after** tests, so a build failure on green tests is distinguishable from a test failure.
 - [ ] **T65 — Integration tests** (auth, authz, billing, webhooks, bookings, rewards) — accumulated per task, not retrofitted.
 - [ ] **T66 — Privacy policy + terms** (docx requirement).
 - [!] **T67 — Business registration** — _client action, not development work._

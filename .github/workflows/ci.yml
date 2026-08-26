@@ -1,0 +1,130 @@
+# Glow+ CI  (T64 + T58)
+#
+# Two jobs with deliberately different risk profiles:
+#
+#   test     runs on every push and PR, needs NO secrets, and is the one that
+#            actually catches regressions.
+#   migrate  runs only on main, needs production database credentials, and is
+#            SKIPPED ENTIRELY unless that secret has been set.
+#
+# Keeping them separate is the point. A pipeline that cannot run its tests
+# without production credentials is a pipeline nobody can run from a fork, and
+# it puts a database URL in reach of every workflow run for the sake of a step
+# that matters a few times a year.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    # Every path below is relative to the backend, which is four directories
+    # down. Setting it once beats repeating it on nine steps.
+    working-directory: website/website/glow-plus-backend/glow-plus-backend
+
+jobs:
+  test:
+    name: typecheck · test · build
+    runs-on: ubuntu-latest
+    env:
+      # T27/T31b — the app refuses to boot without these, and jest.setup.ts
+      # supplies its own. These exist so any step that loads config has
+      # something valid and obviously fake. They are NOT secrets: a CI-only
+      # 32-byte key that never touches a real database is not worth a secret,
+      # and hiding it would imply it protects something.
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-real-0123456789
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/website/glow-plus-backend/glow-plus-backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Prisma's postinstall does not reliably run under `npm ci` in CI -- the
+      # same thing that bit the first Vercel deploy, where the build log said
+      # "allow-scripts @prisma/client (postinstall)" and the client would have
+      # been missing at runtime. Generating explicitly costs a second.
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # Last, because a build failure after green tests is a different and much
+      # rarer problem than a test failure, and this ordering says which.
+      - name: Build
+        run: npm run build
+
+  migrate:
+    name: apply migrations to production
+    # Only after the tests pass. Migrating a database on the strength of code
+    # that does not compile is how a bad afternoon starts.
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/website/glow-plus-backend/glow-plus-backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # A missing secret must SKIP, not fail. This repository is handed over;
+      # the client's fork will not have DIRECT_URL set on day one, and a red
+      # tick on every push would train everyone to ignore CI.
+      - name: Check for database credentials
+        id: creds
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DIRECT_URL is not set — skipping migrations. Set it in Settings → Secrets to enable."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # `migrate deploy` applies pending migrations and does nothing else. It
+      # never generates, never resets, and never prompts -- unlike
+      # `migrate dev`, which does all three and must never appear here.
+      - name: Apply migrations
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          # ⚠️ BOTH must be the SESSION pooler on :5432, not the transaction
+          # pooler on :6543. Migrations take a session-level advisory lock and
+          # run DDL in a transaction that outlives one statement; through a
+          # transaction pooler that lock sits on a connection the pooler may
+          # hand to someone else mid-migration, so `migrate deploy` hangs.
+          #
+          # ⚠️ And NOT Supabase's "Direct connection" host (db.<ref>.supabase.co)
+          # either: on the free plan it is IPv6-ONLY and GitHub runners are
+          # IPv4-only, so it works from a laptop and fails here. T52 flagged
+          # this as the exact trap that would break T58.
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Report
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx prisma migrate status
