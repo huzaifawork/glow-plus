@@ -1306,7 +1306,9 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       | `npm test` | **459 passing, 29 suites** (was 436; `modules/cron/cron.spec.ts` adds 23) |
 
       ⬜ **`CRON_SECRET` must be generated and set as a Vercel env var → T53.** Nothing schedules until it is.
-- [ ] **T55 — Prisma connection pooling** (PgBouncer / `?pgbouncer=true` / Accelerate). **The most common way Prisma-on-Vercel dies in production.**
+- [x] **T55 — Prisma connection pooling.** ✅ **DONE — satisfied by T52, re-verified 2026-08-26.** Not separate work in the end: T52 already routes Prisma Client through Supabase's **transaction pooler on :6543 with `?pgbouncer=true&connection_limit=1`**, and gives the CLI a separate `directUrl` on the **session pooler :5432** for `migrate deploy`. That split *is* this task — see T52 for why each half is mandatory (`?pgbouncer=true` prevents the intermittent `prepared statement "s0" already exists`; the session pooler prevents `migrate deploy` hanging on an advisory lock).
+      **Re-checked for the serverless model specifically:** `PrismaService` calls `$connect()` in `onModuleInit` — which now runs **once per container**, inside T56's cached `app.init()`, not once per request — and `$disconnect()` in `onModuleDestroy`. There is **no `enableShutdownHooks` / `process.on('beforeExit')`**, which is the Nest+Prisma pattern that actually misbehaves on serverless. Nothing to change.
+      ⚠️ The `connection_limit=1` is also why **T54 runs its jobs sequentially rather than `Promise.all`** — parallel jobs would contend for the single connection.
 - [x] **T56 — Cache the Nest app instance across invocations.** ✅ **DONE & VERIFIED 2026-08-26.** This is also the task that gave the backend a Vercel entry point **at all** — before it, there was no `vercel.json`, no `api/`, and `main.ts` ended in `app.listen()`.
 
       **The split.** Configuration moved out of `main.ts` into **`src/bootstrap.ts`** (`createApp()` / `configureApp()`), so both entry points apply the identical setup:

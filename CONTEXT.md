@@ -139,9 +139,15 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >
 > ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. T52b + T56 done.**
 >
-> **State: 55 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
-> T54 ✅ T56 ✅ T60 ✅.** Backend suite **459 passing, 29 suites**.
-> **Remaining in Phase 8: T53, T55, T57, T58, T59, T61, T62, T63.**
+> **State: 56 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
+> T54 ✅ T55 ✅ T56 ✅ T60 ✅.** Backend suite **459 passing, 29 suites**.
+> **Remaining in Phase 8: T53, T57, T58, T59, T61, T62, T63.**
+>
+> **[T55] needed no work** — T52's pooled connection string already was it, and
+> `PrismaService` has no `enableShutdownHooks`/`beforeExit`, the pattern that
+> misbehaves on serverless. **T59 is purely env-var work** (no hardcoded
+> localhost survives in `src/`), so it happens *inside* T53. **T57 and T58 can
+> only be done after a live URL exists.**
 >
 > ### ➡️ RESUME HERE — **next task is T53 (deploy), which needs the user's Vercel login.**
 >
