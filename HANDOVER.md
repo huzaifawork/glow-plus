@@ -99,14 +99,30 @@ A spare Resend key named `glow-plus-dev` exists and has **never been used** — 
 
 The current endpoint is **test mode**, so no real money can move — correct for validation, wrong for launch.
 
-1. Swap `STRIPE_SECRET_KEY` to the live key.
-2. **Create a new webhook endpoint in *live* mode** pointing at `<API origin>/v1/billing/webhook`.
+> **Test mode is not a limitation of the build.** It is the client's own Stripe account, on its test
+> side. The code path, API, webhooks and checkout are identical in both modes — only the money is
+> not real. Going live is configuration, not development.
+
+**Four things change, not two.** The two price IDs are the ones most often missed:
+
+1. Swap `STRIPE_SECRET_KEY` to the **live** key.
+2. ⚠️ **Create the Products and Prices again in *live* mode**, and set **`STRIPE_PRICE_ID_MONTHLY`**
+   and **`STRIPE_PRICE_ID_ANNUAL`** to the **new live IDs**. Live mode has its own objects with
+   **different IDs** — the current ones are `livemode: false` and a live key will reject them,
+   producing a 500 on "Start plan". Match the existing prices: **$49.99 CAD/month** (`Glow+ Monthly`)
+   and **$479.99 CAD/year** (`Glow+ Annual`).
+3. **Create a new webhook endpoint in *live* mode** pointing at `<API origin>/v1/billing/webhook`.
    A test-mode endpoint receives no live events, and its signing secret is different.
-3. Subscribe it to exactly these five events — the only ones the code acts on:
+   Subscribe it to exactly these five events — the only ones the code acts on:
    `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`,
    `invoice.payment_failed`, `customer.subscription.trial_will_end`.
-4. Set the new `STRIPE_WEBHOOK_SECRET` and **redeploy**.
-5. Verify with a real test purchase — the subscription should activate automatically.
+4. Set the new `STRIPE_WEBHOOK_SECRET` and **redeploy** — Vercel does not pick up env changes without one.
+5. Verify with one real purchase — the subscription should activate automatically.
+
+> ⚠️ **When setting any of these, paste the value alone.** The `.env` file keeps inline comments
+> (`STRIPE_PRICE_ID_MONTHLY="price_…"   # $49.99/mo`) and copying the whole line stores the comment as
+> part of the value. That produced a 500 on "Start plan" during testing, and the only visible symptom
+> was a generic *Internal server error*. A Stripe price ID is exactly **30 characters** — check the length.
 
 ---
 
