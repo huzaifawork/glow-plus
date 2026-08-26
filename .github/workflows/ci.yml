@@ -68,11 +68,56 @@ jobs:
       - name: Build
         run: npm run build
 
+  integration:
+    name: integration tests · real Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: glowplus
+          POSTGRES_PASSWORD: glowplus
+          POSTGRES_DB: glowplus
+        ports: ['5432:5432']
+        # Without this the steps start before Postgres accepts connections and
+        # the first migration fails on a race rather than on anything real.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://glowplus:glowplus@localhost:5432/glowplus?schema=public
+      DIRECT_URL: postgresql://glowplus:glowplus@localhost:5432/glowplus?schema=public
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-real-0123456789
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      # T65 — makes an unreachable database FATAL rather than a silent skip.
+      # A suite that passes because it never connected reports green for
+      # precisely the integration it failed to test.
+      E2E_REQUIRE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/website/glow-plus-backend/glow-plus-backend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Generate Prisma Client
+        run: npx prisma generate
+      # The real schema, applied the real way -- so a migration that is broken
+      # is caught here rather than on production.
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+      - name: Integration tests
+        run: npx jest src/e2e.spec.ts --runInBand
+
   migrate:
     name: apply migrations to production
     # Only after the tests pass. Migrating a database on the strength of code
     # that does not compile is how a bad afternoon starts.
-    needs: test
+    needs: [test, integration]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
