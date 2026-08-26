@@ -74,9 +74,29 @@ function useApiError() {
  * until it arrives" contract every panel below is written against.
  */
 function useApiData(loader, deps) {
+  const { currentConsumer } = useApp();
   const onError = useApiError();
   return useAsyncData(
     async () => {
+      // [F69] — THE GATE IS LOAD-BEARING, and its absence is what shipped.
+      //
+      // Every view stays mounted from first paint (App.jsx toggles
+      // `.view.active`, which is visibility, not existence), so this dashboard
+      // runs its loaders while an anonymous visitor is looking at the landing
+      // page. Three of them — bookings, visits and rewards — are protected
+      // routes, so they returned 401 `Missing bearer token`, and useApiError
+      // toasts the API's own words unconditionally. A first-time visitor was
+      // greeted by "Missing bearer token" before clicking anything.
+      //
+      // The sign-out beside it was already guarded on `currentConsumer` for
+      // exactly this reason, and BusinessPortal's usePortalData and Admin's
+      // useAdminData both gate the FETCH as well. This hook was the only one
+      // of the three that guarded the consequence but not the request.
+      //
+      // It survived local testing because a developer's browser almost always
+      // holds a consumer token from a previous sign-in; it needs a genuinely
+      // fresh browser to appear, which is what a production URL provides.
+      if (!currentConsumer) return null;
       try {
         return await loader();
       } catch (err) {
@@ -84,7 +104,7 @@ function useApiData(loader, deps) {
         return null;
       }
     },
-    deps,
+    [...deps, currentConsumer],
     null,
   );
 }
