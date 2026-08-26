@@ -1245,6 +1245,31 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       **`.env` is switched BACK to local Docker**, with the Supabase pair commented directly beneath it. Pointing local development at production would write test signups into the launch database. Swap the comments to flip, and **restart** — `nest start --watch` does not reload `.env`.
 
       ⬜ **Still open, and deliberately:** the connection strings must be added as Vercel env vars (**T53**), the project is on the **free plan** (500 MB, autosuspends after ~1 week idle — flag ~$25/mo to the client before real traffic), and it lives in **the developer's own Supabase account** — **transfer to the client's organisation at handover**, which is a Supabase project-transfer, not a re-migration.
+- [x] **T52b — Close the Supabase Data API against the app tables.** ✅ **DONE & VERIFIED 2026-08-26.** Found while re-verifying T52 on production day; **not** a defect introduced by T52, it is the Supabase default that Prisma has no concept of.
+
+      **What was wrong.** Supabase fronts every project with PostgREST at `https://<ref>.supabase.co/rest/v1/`, exposing the `public` schema. On a fresh project `anon` and `authenticated` hold **ALL** privileges on every table in `public`, and Prisma-created tables inherit that grant. RLS is the only thing in the way — and **Prisma never enables it**, because Prisma does not model RLS at all. Measured before the fix: **RLS OFF on all 16 tables, 0 policies**, `anon` holding SELECT/INSERT/UPDATE/DELETE on all 16, and `GET /rest/v1/User` returning **401** (missing key) rather than 404 — i.e. the route is **live**.
+
+      **Why it mattered.** The anon key is **public by design** — Supabase ships it in browser bundles. Anyone holding it could read `"User"` (bcrypt hashes + AES-GCM phone ciphertext), read `"RefreshToken"` and `"PasswordReset"`, and **INSERT themselves a row in `"Admin"`**. This app never ships that key (Prisma over the pooler, not `supabase-js`), so nothing is known to have leaked — but *"not currently leaked"* is not a security control, and this would have gone to the client that way.
+
+      **The fix** — `prisma/migrations/20260826120000_lock_down_supabase_data_api/`, two independent locks per table: `REVOKE ALL … FROM anon, authenticated` (PostgREST fails **before** RLS is consulted) **and** `ENABLE ROW LEVEL SECURITY` (zero policies = deny-all for anything that cannot bypass). Plus `ALTER DEFAULT PRIVILEGES` so tables added by **future** migrations do not inherit the grant back.
+
+      ⚠️ **There is deliberately NO `FORCE ROW LEVEL SECURITY`.** `FORCE` subjects the table **owner** to policies too — and with zero policies defined that would lock the backend out of its own database. Its absence is the safety, not an oversight. Prisma connects as `postgres`, which **owns** every table *and* has `rolbypassrls = true` (both verified before applying), so RLS is invisible to the app.
+
+      ⚠️ **The migration is a strict no-op off Supabase.** `anon`/`authenticated` are Supabase-managed roles that do not exist on local Docker or a CI service container, where an unguarded `REVOKE` aborts with *"role does not exist"* — breaking **T58** in the most expensive place to find it. The whole body is guarded on `pg_roles`. Local dev gains nothing from RLS anyway: there is no Data API in front of it.
+
+      **Evidence — queried live, not assumed:**
+      | Check | Before | After |
+      |---|---|---|
+      | `anon`/`authenticated` privileges (7 types × 2 roles × 16 tables) | **all granted** | **NONE** |
+      | RLS enabled | **0/16** | **16/16** |
+      | Future tables in `public` inherit the grant | **yes** | **no** — defaults are `postgres` + `service_role` only |
+      | Backend role bypasses RLS | — | `postgres`, `rolbypassrls=true` ✅ |
+      | Prisma reads after lockdown | — | ✅ `User`, `Merchant`, `Booking`, `RefreshToken`, `Style` all queried fine |
+      | `service_role` preserved (Supabase internals need it) | — | ✅ |
+
+      **Note on the `storage` schema:** its default ACLs still grant `anon`/`authenticated`, and that is **correct** — Supabase Storage is unused here and is governed by its own RLS policies on `storage.objects`. A first verification pass flagged it as a leak; the query was too broad, the schema is not in scope.
+
+      Applied to production via the Supabase SQL Editor. The migration file is committed so the lockdown **travels with the repo** and re-applies itself when the client's project is stood up at handover — it is idempotent, so `migrate deploy` re-running it is harmless. Break-glass rollback is recorded in the migration's header comments.
 - [ ] **T53 — Deploy backend + website**, env vars in Vercel project settings.
 - [ ] **T54 — Convert all 4 cron jobs to Vercel Cron.** `@Cron()` **never fires** on serverless — this silently kills T19 and T25. Expose each as a route guarded by `CRON_SECRET`; schedule in `vercel.json`.
 - [ ] **T55 — Prisma connection pooling** (PgBouncer / `?pgbouncer=true` / Accelerate). **The most common way Prisma-on-Vercel dies in production.**
