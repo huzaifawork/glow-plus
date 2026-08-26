@@ -199,7 +199,7 @@ export class AdminService {
   async changeOwnPassword(adminId: string, dto: ChangeAdminPasswordDto) {
     const admin = await this.prisma.admin.findUnique({
       where: { id: adminId },
-      select: { id: true, passwordHash: true },
+      select: { id: true, email: true, passwordHash: true },
     });
     if (!admin) throw new NotFoundException('Admin not found');
 
@@ -208,12 +208,35 @@ export class AdminService {
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+    const now = new Date();
+
+    // An admin who was promoted from a customer account has ONE password, not
+    // two. Writing only the Admin row would leave them signing into the panel
+    // with the new password and into their customer account with the old one
+    // — and the next customer-side password reset would fire the sync trigger
+    // and silently move their admin password back underneath them.
+    //
+    // So write User when there is one and let `user_password_sync_admin`
+    // update the copy, exactly as a customer-side reset does. A standalone
+    // admin, created before promotion existed or straight in the database, has
+    // no User row and is written directly.
+    const user = await this.prisma.user.findUnique({
+      where: { email: admin.email },
+      select: { id: true },
+    });
 
     await this.prisma.$transaction([
-      this.prisma.admin.update({ where: { id: adminId }, data: { passwordHash } }),
+      user
+        ? this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } })
+        : this.prisma.admin.update({ where: { id: adminId }, data: { passwordHash } }),
+      // Both sessions end: the password they share has changed, and "someone
+      // may know my password" is the reason this endpoint gets used.
       this.prisma.refreshToken.updateMany({
-        where: { accountId: adminId, accountType: 'ADMIN', revokedAt: null },
-        data: { revokedAt: new Date() },
+        where: {
+          accountId: { in: user ? [adminId, user.id] : [adminId] },
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
       }),
     ]);
 

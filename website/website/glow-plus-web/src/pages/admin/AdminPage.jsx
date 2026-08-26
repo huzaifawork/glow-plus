@@ -123,8 +123,21 @@ function LoginCard({ onSuccess }) {
   );
 }
 
+/**
+ * Throw away the session when the server says the token is no good.
+ *
+ * 401 ONLY. A 403 used to end up here too, and that was wrong: a 403 is a
+ * *valid* session being refused *one route*, which is exactly what a plain
+ * ADMIN gets from the owner-only team endpoints (T77). Treating it as "your
+ * session is over" would sign a working admin out the moment the panel
+ * rendered a card they are simply not entitled to — and since the reload
+ * re-triggers it, they could never stay signed in at all.
+ *
+ * `api.js` draws the same line for the same reason: 401 clears the session,
+ * 403 is surfaced to whoever asked.
+ */
 function useAdminAuthGuard(err) {
-  if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+  if (err instanceof ApiError && err.status === 401) {
     clearAdminToken();
     window.location.reload();
     return true;

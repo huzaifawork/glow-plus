@@ -112,8 +112,10 @@ describe('AdminService — team management (T77)', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('stores a new hash and revokes every other session together', async () => {
+    it('writes the USER row when the admin was promoted from a customer — one person, one password', async () => {
       const prisma = await prismaWithPassword();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u_1' });
+
       await expect(
         makeService(prisma).changeOwnPassword('a_1', {
           currentPassword: current,
@@ -121,14 +123,38 @@ describe('AdminService — team management (T77)', () => {
         }),
       ).resolves.toEqual({ ok: true });
 
+      // User is written; the sync trigger updates the Admin copy. Writing
+      // Admin here instead would leave the panel on the new password and the
+      // customer account on the old one.
+      const newHash = (prisma.user.update as jest.Mock).mock.calls[0][0].data.passwordHash;
+      expect(await bcrypt.compare('newPassword1', newHash)).toBe(true);
+      expect(prisma.admin.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('falls back to the Admin row for a standalone admin with no customer account', async () => {
+      const prisma = await prismaWithPassword();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await makeService(prisma).changeOwnPassword('a_1', {
+        currentPassword: current,
+        newPassword: 'newPassword1',
+      });
+
       const newHash = (prisma.admin.update as jest.Mock).mock.calls[0][0].data.passwordHash;
       expect(await bcrypt.compare('newPassword1', newHash)).toBe(true);
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { accountId: 'a_1', accountType: 'ADMIN', revokedAt: null },
-        }),
-      );
-      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('revokes BOTH sessions when the two accounts share a password', async () => {
+      const prisma = await prismaWithPassword();
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u_1' });
+      await makeService(prisma).changeOwnPassword('a_1', {
+        currentPassword: current,
+        newPassword: 'newPassword1',
+      });
+      expect((prisma.refreshToken.updateMany as jest.Mock).mock.calls[0][0].where.accountId.in.sort())
+        .toEqual(['a_1', 'u_1']);
     });
   });
 
