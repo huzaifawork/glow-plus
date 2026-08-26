@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<title>Terms of Service — Glow+</title>
+<style>
+  :root { color-scheme: light dark; --ink:#1c1a1e; --bg:#fdfcfb; --muted:#6b6570; --rule:#e6e0e6; --accent:#b5766a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#f2eef2; --bg:#171519; --muted:#a49daa; --rule:#332f36; --accent:#e8b4a0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:44rem; margin:0 auto; padding:3rem 1.25rem 5rem; }
+  h1 { font-size:1.9rem; line-height:1.2; margin:0 0 .35rem; }
+  h2 { font-size:1.15rem; margin:2.4rem 0 .6rem; padding-top:1.2rem; border-top:1px solid var(--rule); }
+  .updated { color:var(--muted); font-size:.9rem; margin:0 0 2rem; }
+  a { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.94rem; display:block; overflow-x:auto; }
+  th,td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th { font-weight:600; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em; }
+  .note { background:color-mix(in srgb, var(--accent) 10%, transparent);
+    border-left:3px solid var(--accent); padding:.85rem 1rem; margin:1.4rem 0; border-radius:0 6px 6px 0; }
+  footer { margin-top:3rem; padding-top:1.2rem; border-top:1px solid var(--rule); color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Terms of Service</h1>
+  <p class="updated">Last updated 26 August 2026</p>
+
+  <div class="note">
+    <strong>Before publishing:</strong> items marked <code>[TO BE COMPLETED]</code> must be filled in by the
+    business operating Glow+, and this document should be reviewed by a lawyer in your jurisdiction. Every
+    figure below matches what the software actually does — it is not legal advice.
+  </div>
+
+  <p>
+    These terms govern your use of Glow+, operated by <code>[TO BE COMPLETED: registered business name]</code>
+    ("we", "us"). By creating an account you agree to them. If you do not, please do not use the service.
+  </p>
+
+  <h2>Two kinds of account</h2>
+  <table>
+    <tr><th>Account</th><th>Who</th><th>Cost</th></tr>
+    <tr><td><strong>Customer</strong></td><td>Someone earning rewards at a salon</td><td><strong>Free</strong></td></tr>
+    <tr><td><strong>Salon</strong></td><td>A business running a loyalty programme</td><td>Subscription — see below</td></tr>
+  </table>
+
+  <h2>Salon subscriptions</h2>
+  <table>
+    <tr><th>Plan</th><th>Price</th><th>Billing</th></tr>
+    <tr><td>Monthly</td><td><strong>$49.99</strong></td><td>Every month, until cancelled</td></tr>
+    <tr><td>Annual</td><td><strong>$479.99</strong></td><td>Once a year — about two months free versus monthly</td></tr>
+  </table>
+  <p>
+    Every new salon gets a <strong>7-day free trial</strong>. The first <strong>50</strong> salons to join
+    also receive a <strong>Founding Member</strong> badge and an <strong>extra 30 days free</strong>, giving
+    them 37 days before the first charge. Founding status is decided when the account is created and cannot
+    be claimed afterwards.
+  </p>
+  <p>
+    Payment is processed by Stripe. Subscriptions renew automatically. Prices are in
+    <code>[TO BE COMPLETED: currency]</code> and exclude any tax that applies where you are.
+  </p>
+
+  <h2>Cancelling, and what happens if payment fails</h2>
+  <p>
+    You may cancel at any time from your billing page. Cancellation takes effect at the end of the period you
+    have already paid for; we do not refund a partial month or year unless the law where you are requires it.
+  </p>
+  <table>
+    <tr><th>Situation</th><th>What happens to your salon</th></tr>
+    <tr><td><strong>Payment fails</strong></td><td>Your account becomes <strong>read-only</strong>. You can still sign in and see everything, but cannot add services, log visits or change rewards. Your salon is hidden from the public directory while this lasts.</td></tr>
+    <tr><td><strong>Payment is not recovered</strong></td><td>The subscription is cancelled and access ends.</td></tr>
+    <tr><td><strong>You cancel</strong></td><td>Access continues to the end of the paid period, then ends.</td></tr>
+  </table>
+  <p>
+    Your data is not deleted when a subscription lapses. If you resubscribe, your services, reward rules and
+    customer visit history are as you left them.
+  </p>
+
+  <h2>Points and rewards</h2>
+  <p>
+    <strong>Rewards are offered by each salon, not by Glow+.</strong> Each salon decides its own services,
+    how many points a visit is worth, and what a reward is. We provide the software that keeps count.
+  </p>
+  <ul>
+    <li>Points have <strong>no cash value</strong>, cannot be exchanged for money, and cannot be transferred between people or between salons.</li>
+    <li>Points expire after <strong>365 days</strong> without a visit to that salon.</li>
+    <li>A reward can be redeemed once per milestone reached. Redeeming is recorded so it cannot be claimed twice.</li>
+    <li>If a salon leaves Glow+, points earned there can no longer be redeemed. We cannot compensate you for them, and we encourage salons to honour outstanding rewards before leaving.</li>
+  </ul>
+
+  <h2>Bookings</h2>
+  <p>
+    An appointment booked through Glow+ is an arrangement <strong>between you and the salon</strong>. We pass
+    the request on; we do not guarantee that a salon will honour it, and we are not party to it. Cancellation
+    and no-show policies are the salon's own. Appointment times are shown in the salon's local time.
+  </p>
+
+  <h2>Your responsibilities</h2>
+  <ul>
+    <li>Give accurate information and keep your password secret. You are responsible for what happens under your account.</li>
+    <li>Salons: only record visits that actually happened, and only enter a customer's details with their knowledge.</li>
+    <li>Do not attempt to access another account, disrupt the service, scrape it, or probe it for weaknesses without our written permission.</li>
+    <li>Do not use Glow+ for anything unlawful.</li>
+  </ul>
+  <p>We may suspend or close an account that breaches these terms. Where it is reasonable to do so, we will tell you why first.</p>
+
+  <h2>Availability</h2>
+  <p>
+    We work to keep Glow+ available but do not promise uninterrupted service. Maintenance, provider outages
+    and faults happen. We are not liable for a salon's lost business during downtime.
+  </p>
+
+  <h2>Liability</h2>
+  <p>
+    Glow+ is provided "as is". To the fullest extent the law allows, our total liability to you for any claim
+    is limited to what you paid us in the <strong>12 months</strong> before it arose — and for customers, who
+    pay nothing, that means we are not financially liable. Nothing here limits liability that cannot lawfully
+    be limited, including for death, personal injury, or fraud.
+  </p>
+
+  <h2>Privacy</h2>
+  <p>Our <a href="/privacy.html">Privacy Policy</a> explains what we collect and how it is protected. It forms part of these terms.</p>
+
+  <h2>Changes</h2>
+  <p>
+    We may update these terms. Material changes will be notified to account holders by email before taking
+    effect, and continuing to use Glow+ afterwards means you accept them.
+  </p>
+
+  <h2>Governing law</h2>
+  <p>
+    These terms are governed by the laws of <code>[TO BE COMPLETED: province/state and country]</code>, and
+    disputes will be heard by its courts.
+  </p>
+
+  <h2>Contact</h2>
+  <p><code>[TO BE COMPLETED: contact email]</code></p>
+
+  <footer>
+    <a href="/">← Back to Glow+</a> · <a href="/privacy.html">Privacy Policy</a>
+  </footer>
+</main>
+</body>
+</html>

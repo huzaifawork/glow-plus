@@ -1474,7 +1474,18 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       **`prisma generate` is explicit**, because Prisma's postinstall does not reliably run under `npm ci` — the same thing that broke the first Vercel deploy, whose build log read `allow-scripts @prisma/client (postinstall)`.
       The three CI-only env vars (`JWT_SECRET`, `ENCRYPTION_KEY`, `DATABASE_URL`) are **deliberately not secrets**: they are obviously-fake values that never touch a real database, and hiding them would imply they protect something. Build runs **after** tests, so a build failure on green tests is distinguishable from a test failure.
 - [ ] **T65 — Integration tests** (auth, authz, billing, webhooks, bookings, rewards) — accumulated per task, not retrofitted.
-- [ ] **T66 — Privacy policy + terms** (docx requirement).
+- [x] **T66 — Privacy policy + terms.** ✅ **DRAFTED & LIVE 2026-08-26.** `public/privacy.html` and `public/terms.html`, linked from the landing-page footer. **Static files, not SPA views** — a privacy policy must be readable without running any JavaScript and must survive being linked from an email or a Stripe checkout page.
+      **https://glow-plus-web-eight.vercel.app/privacy.html** · **https://glow-plus-web-eight.vercel.app/terms.html**
+
+      ⚠️ **Every figure was read out of the code, not the docx** — that distinction is the whole reason this task was risky. Confirmed against source: **$49.99/mo** and **$479.99/yr** (`billing.service.ts:166`), **7-day trial + 30 bonus days for the first 50** (`STANDARD_TRIAL_DAYS`, `FOUNDING_MEMBER_BONUS_DAYS`, `FOUNDING_MEMBER_CAP`), **points expire after 365 days** (`POINTS_EXPIRE_AFTER_DAYS`), **bcrypt cost 12**, **15-minute access tokens**, and **AES-256-GCM** phone encryption.
+
+      ⚠️ **The claim that made this task dangerous is now true.** The docx asserted *"phone numbers are encrypted"* while they were stored in **clear text**. Had T66 been written from the docx before **T31b**, the client would have published a privacy policy asserting protection that did not exist — a compliance exposure, not a backlog item. The policy states encryption because the code now does it; that ordering was not luck.
+
+      **Also stated accurately, because each is a real property of the system:** card numbers never reach Glow+ (Stripe holds them; we keep a customer reference and a status); **no advertising or tracking cookies and no third-party analytics** — session and language live in the browser's own storage; **cross-border processing is disclosed** with a named table of Supabase/Vercel/Stripe/Resend and their regions, which is what PIPEDA actually requires of a Canadian operator (see T52's region reasoning); and deletion is described as **anonymising** a salon's records rather than destroying them, since a customer's deletion request must not corrupt a salon's own history.
+
+      ⚠️ **Deliberately NOT translated.** [F68]'s reasoning applies doubly to legal text: a machine-translated privacy policy is worse than an English one, because it misstates obligations in a language nobody on the team can check.
+
+      ⬜ **Blocked on the client, and marked in the documents themselves** — every gap is a visible `[TO BE COMPLETED]`: registered business name, business address, contact email, currency, governing jurisdiction, and the minimum age for the territory. **Both documents also carry a banner saying a lawyer must review them before publication.** Drafting what the software provably does is engineering; asserting it satisfies a given statute is not, and the distinction is stated on the page rather than assumed.
 - [!] **T67 — Business registration** — _client action, not development work._
 
 ---

@@ -303,6 +303,17 @@ export default function Marketing({ active }) {
       <footer>
         <T as="div" k="footer_copy" />
         <T as="div" k="footer_note" />
+        {/* T66 — these are static pages in public/, not SPA views, so they are
+            plain anchors. A privacy policy has to be reachable without running
+            any JavaScript, and it must survive being linked to from an email
+            or a Stripe checkout page. Deliberately not translated: [F68]'s
+            reasoning applies doubly to legal text, where a machine translation
+            is worse than English. */}
+        <div style={{ marginTop: '10px' }}>
+          <a href="/privacy.html">Privacy Policy</a>
+          {' · '}
+          <a href="/terms.html">Terms of Service</a>
+        </div>
       </footer>
     </section>
   );

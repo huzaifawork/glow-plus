@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<title>Privacy Policy — Glow+</title>
+<style>
+  :root { color-scheme: light dark; --ink:#1c1a1e; --bg:#fdfcfb; --muted:#6b6570; --rule:#e6e0e6; --accent:#b5766a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#f2eef2; --bg:#171519; --muted:#a49daa; --rule:#332f36; --accent:#e8b4a0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:44rem; margin:0 auto; padding:3rem 1.25rem 5rem; }
+  h1 { font-size:1.9rem; line-height:1.2; margin:0 0 .35rem; }
+  h2 { font-size:1.15rem; margin:2.4rem 0 .6rem; padding-top:1.2rem; border-top:1px solid var(--rule); }
+  .updated { color:var(--muted); font-size:.9rem; margin:0 0 2rem; }
+  a { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:.94rem; display:block; overflow-x:auto; }
+  th,td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th { font-weight:600; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em; }
+  .note { background:color-mix(in srgb, var(--accent) 10%, transparent);
+    border-left:3px solid var(--accent); padding:.85rem 1rem; margin:1.4rem 0; border-radius:0 6px 6px 0; }
+  footer { margin-top:3rem; padding-top:1.2rem; border-top:1px solid var(--rule); color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated 26 August 2026</p>
+
+  <div class="note">
+    <strong>Before publishing:</strong> the items marked <code>[TO BE COMPLETED]</code> must be filled in by
+    the business operating Glow+, and this document should be reviewed by a lawyer in your jurisdiction.
+    It describes what the software actually does, accurately and as built — it is not legal advice.
+  </div>
+
+  <p>
+    This policy explains what personal information Glow+ collects, why, where it is stored, how it is
+    protected, and what you can ask us to do with it. Glow+ is a loyalty and booking platform: salons and
+    spas record visits, and customers earn rewards.
+  </p>
+
+  <h2>Who is responsible for your information</h2>
+  <p>
+    Glow+ is operated by <code>[TO BE COMPLETED: registered business name]</code>,
+    <code>[TO BE COMPLETED: business address]</code>. For any privacy question or request, contact
+    <code>[TO BE COMPLETED: contact email]</code>.
+  </p>
+
+  <h2>What we collect</h2>
+  <p>We collect only what the service needs to work. We do not buy personal information from anyone else.</p>
+  <table>
+    <tr><th>Information</th><th>Why</th><th>Required?</th></tr>
+    <tr><td>Name</td><td>To identify you to the salon when you redeem a reward</td><td>Yes</td></tr>
+    <tr><td>Email address</td><td>Sign-in, email verification, password reset, and service notices</td><td>Yes</td></tr>
+    <tr><td>Phone number</td><td>So a salon can reach you about an appointment</td><td><strong>No — optional</strong></td></tr>
+    <tr><td>Password</td><td>To secure your account. Stored only as a one-way hash, never as text</td><td>Yes</td></tr>
+    <tr><td>Visit history</td><td>The service, date and points for each visit — this is what earns rewards</td><td>Created by the salon</td></tr>
+    <tr><td>Bookings</td><td>Appointment time and service</td><td>Only if you book</td></tr>
+    <tr><td>Rewards redeemed</td><td>So a reward cannot be claimed twice</td><td>Only if you redeem</td></tr>
+  </table>
+  <p>
+    For salon accounts we additionally hold the business name and billing details. <strong>Card numbers are
+    never sent to or stored by Glow+</strong> — payment is handled entirely by Stripe, and we retain only a
+    customer reference and the subscription's status.
+  </p>
+
+  <h2>How it is protected</h2>
+  <table>
+    <tr><th>Measure</th><th>What it means</th></tr>
+    <tr><td>Passwords</td><td>Hashed with bcrypt (cost factor 12). They cannot be read or recovered by anyone, including us — a forgotten password can only be reset, never retrieved.</td></tr>
+    <tr><td><strong>Phone numbers</strong></td><td>Encrypted at rest with <strong>AES-256-GCM</strong> before being written to the database. Anyone reading the raw database sees ciphertext, not a number.</td></tr>
+    <tr><td>In transit</td><td>All traffic uses HTTPS/TLS. The service sends HSTS, so browsers refuse to connect insecurely.</td></tr>
+    <tr><td>Access control</td><td>Every request is authenticated with a short-lived token (15 minutes). A salon can only ever see its own customers' visits, never another salon's.</td></tr>
+    <tr><td>Database</td><td>Not reachable from the public internet. Encrypted at rest by the hosting provider, in addition to the field-level encryption above.</td></tr>
+  </table>
+
+  <h2>Where your information is processed</h2>
+  <div class="note">
+    <strong>Cross-border processing.</strong> Glow+ is operated from
+    <code>[TO BE COMPLETED: country]</code>, but your information is stored and processed on servers in the
+    <strong>United States</strong>, and is therefore subject to US law. By using Glow+ you consent to this
+    transfer. If you would rather not, please do not create an account.
+  </div>
+  <table>
+    <tr><th>Provider</th><th>Purpose</th><th>Location</th></tr>
+    <tr><td>Supabase</td><td>Database — everything listed above</td><td>US (N. Virginia)</td></tr>
+    <tr><td>Vercel</td><td>Hosting for the website and API</td><td>US</td></tr>
+    <tr><td>Stripe</td><td>Subscription payments for salons</td><td>US</td></tr>
+    <tr><td>Resend</td><td>Sending verification, reset and reminder emails</td><td>US / EU</td></tr>
+  </table>
+  <p>These providers process information only to deliver their part of the service. We do not sell your personal information, and we do not share it for advertising.</p>
+
+  <h2>How long we keep it</h2>
+  <p>
+    Your account and its visit history are kept for as long as your account exists, because that history is
+    what your rewards are calculated from. Unused points expire after 365 days of inactivity at a salon.
+    Password-reset links expire within an hour of being issued, and sign-in sessions expire far sooner.
+    When you ask us to delete your account, we remove your personal information as described below.
+  </p>
+
+  <h2>Your rights</h2>
+  <p>You can ask us, at any time and free of charge, to:</p>
+  <ul>
+    <li><strong>Show you</strong> the personal information we hold about you.</li>
+    <li><strong>Correct</strong> anything inaccurate.</li>
+    <li><strong>Delete</strong> your account and personal information. Records a salon must keep for its own
+      accounting may be retained in anonymised form — with your name, email and phone number removed — so
+      that deleting your account cannot corrupt a salon's own history.</li>
+    <li><strong>Withdraw consent</strong> and stop using the service.</li>
+  </ul>
+  <p>Write to <code>[TO BE COMPLETED: contact email]</code>. We will respond within 30 days.</p>
+
+  <h2>Cookies and tracking</h2>
+  <p>
+    Glow+ sets <strong>no advertising or tracking cookies</strong> and uses no third-party analytics. Your
+    sign-in session and language preference are kept in your browser's own local storage. Clearing your
+    browser data signs you out and removes them.
+  </p>
+
+  <h2>Children</h2>
+  <p>
+    Glow+ is not intended for children under <code>[TO BE COMPLETED: age, per your jurisdiction]</code>. We do
+    not knowingly collect their information; if we learn that we have, we will delete it.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    If this policy changes materially we will update the date above and notify account holders by email
+    before the change takes effect.
+  </p>
+
+  <footer>
+    <a href="/">← Back to Glow+</a> · <a href="/terms.html">Terms of Service</a>
+  </footer>
+</main>
+</body>
+</html>
