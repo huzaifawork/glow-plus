@@ -1,0 +1,27 @@
+# Vercel honours THIS file, not .gitignore. Anything listed in .gitignore but
+# absent here is still uploaded to the deployment — which is how a git-ignored
+# 129MB zip once reached Vercel from the repo root.
+#
+# Vercel's built-in ignore list already covers node_modules, .git and
+# .env.local / .env.*.local. It does NOT cover a plain `.env`, so without the
+# rules below this deployment would ship live secrets into the client's
+# project. Nest's ConfigModule also reads `.env` from cwd; dotenv never
+# overwrites an existing process.env value, so the dashboard still wins — but
+# uploading keys we are about to rotate is not something to leave to that.
+.env
+.env.*
+.env.deploy
+
+# Test-data snapshot from the pre-handover production run. Real customer rows.
+backups
+
+# Build output. `vercel-build` is `prisma generate && tsc --noEmit`; the
+# function is built by Vercel from api/index.ts, so a stale local dist/ is
+# 2.5MB of upload that nothing reads.
+dist
+tsconfig.tsbuildinfo
+
+# Local Postgres only.
+docker
+
+*.zip

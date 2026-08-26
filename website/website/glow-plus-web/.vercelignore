@@ -1,0 +1,5 @@
+# Vercel honours THIS file, not .gitignore. `vite build` regenerates dist/ on
+# the build machine, so a stale local copy is upload with nothing reading it.
+dist
+.env
+.env.*
