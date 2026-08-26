@@ -1,3 +1,4 @@
+import { SALON_TIMEZONE } from './config.js';
 // Lifted verbatim from the prototype's helper block.
 
 export function genId() {
@@ -37,7 +38,14 @@ export function todayISO() {
 
 /** "2:30 PM" — a slot inside a day the user has already chosen. */
 export function formatSlot(iso) {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  // [F63] — the SALON's clock, not the viewer's, and named so nobody has to
+  // guess. A bare "2:30 PM" is read as local time by everyone who sees it.
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: SALON_TIMEZONE,
+    timeZoneName: 'short',
+  });
 }
 
 /** "Tue, Aug 26, 2:30 PM" — a booking, where the day still has to be stated. */
@@ -48,6 +56,10 @@ export function formatDateTime(iso) {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    // [F63] — an appointment happens at the salon, so it is stated in the
+    // salon's time, with the zone named.
+    timeZone: SALON_TIMEZONE,
+    timeZoneName: 'short',
   });
 }
 
@@ -57,5 +69,9 @@ export function formatDay(iso) {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+    // [F63] — a date alone still needs the zone: an instant just before
+    // midnight in Toronto is already the next day in much of the world, so
+    // without this a visit can be filed under the wrong date entirely.
+    timeZone: SALON_TIMEZONE,
   });
 }

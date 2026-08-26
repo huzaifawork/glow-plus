@@ -28,3 +28,26 @@ export const API_BASE_URL =
 if (typeof window !== 'undefined') {
   window.GLOW_API_BASE_URL = API_BASE_URL;
 }
+
+/**
+ * The timezone every salon's hours and appointments are shown in.  [F63]
+ *
+ * **Why this exists.** `availability.service.ts` resolves "09:00" against the
+ * SALON's timezone and returns real UTC instants — that part is correct, and
+ * [F57] fixed it. The browser then rendered those instants with
+ * `toLocaleTimeString(undefined, …)`, i.e. in **the viewer's** timezone. So a
+ * Toronto salon offering 9am showed as 6pm to a customer in Karachi, and the
+ * two halves of the same feature disagreed about what "9am" meant.
+ *
+ * ⚠️ **This must track the backend's `SALON_TIMEZONE`.** Both default to
+ * `America/Toronto` — the country the platform actually sells in, since prices
+ * are in CAD — and both are overridable by environment. Changing one without
+ * the other reintroduces exactly the bug this fixes, which is why they share
+ * a default rather than one silently falling back to UTC.
+ *
+ * The platform is single-timezone by design for now (see `salon-time.ts`). The
+ * end state is a `timezone` column on Merchant, at which point this constant
+ * becomes the fallback rather than the answer.
+ */
+export const SALON_TIMEZONE =
+  import.meta.env.VITE_SALON_TIMEZONE || 'America/Toronto';
