@@ -30,17 +30,17 @@ Per task: **implement → test by actually running it → record evidence → ti
 
 Why strict: the exact problem we were hired to fix is *"functionality that exists vs. functionality that's been validated."*
 
-## 4. Environment — CURRENT STATE (updated 2026-08-23, end of session 3)
+## 4. Environment — CURRENT STATE (updated 2026-08-26, end of session 29 — **DEPLOYED**)
 
 | Thing | Status |
 |---|---|
 | Docker Desktop | ✅ Running. ⚠️ `docker` is on **no** PATH — not Git Bash's, not PowerShell's. Call it by full path: `& "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"` |
 | Postgres | ✅ `docker-postgres-1`, Postgres 16.15, port **5433**, db `glowplus`. **Migrated — 14 tables + `_prisma_migrations`** (was 0 applied; `PasswordReset` added T21, `Admin` added T22, `StaffInvite` added T24; `Visit.expired`/`expiredAt` added T25; **`RefreshToken` added T47**, and `AccountType` gained a fourth value `STAFF`) |
 | Production DB | ✅ **T52 — Supabase, project `xhyoeiltwcciqowlwyov`, region `us-east-1`, Postgres 17.6, free plan.** 8/8 migrations applied; schema diffed against local at column+type level: **126 vs 126, zero drift**. `.env` is switched **back to local Docker** — the Supabase pair sits commented beneath it. `npm run seed` **refuses** to run against it (local-DB guard). Latency from here is ~1,170ms and that is **distance, not config** (raw TCP RTT to the pooler is 240ms); on Vercel `iad1` the DB is same-region. Account is the developer's → **transfer at handover**. **T52b (2026-08-26): the Supabase Data API is now CLOSED against the app tables** — RLS **16/16** and `anon`/`authenticated` revoked, two independent locks, via migration `20260826120000_lock_down_supabase_data_api`. It is a **no-op off Supabase** (guarded on `pg_roles`), and there is deliberately **no `FORCE ROW LEVEL SECURITY`** — `FORCE` would subject the owner to policies and lock the backend out. Do **not** "tidy" either of those away |
-| Backend | ✅ **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T56: there are now TWO entry points and neither may configure the app itself — `src/bootstrap.ts` (`createApp()`) is the ONLY place that happens. `main.ts` = `createApp()` + `listen()` for local; `src/serverless.ts` = `createApp()` + `init()` and exports the Express instance for Vercel; `api/index.ts` is a one-line re-export and is NOT type-checked (`api` is in tsconfig `exclude`, TS6059 / [F23]). Caching in `serverless.ts` is a PROMISE, not the resolved app — concurrent cold requests would otherwise each bootstrap and race Prisma pools against `connection_limit=1`.** **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
-| Website | ✅ **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
+| Backend | ✅ **LIVE at https://glow-plus-api.vercel.app** (developer's Vercel). **Compiles (0 TS errors) and runs on :4000**, 64 routes mapped, Prisma connected. **T56: there are now TWO entry points and neither may configure the app itself — `src/bootstrap.ts` (`createApp()`) is the ONLY place that happens. `main.ts` = `createApp()` + `listen()` for local; `src/serverless.ts` = `createApp()` + `init()` and exports the Express instance for Vercel; `api/index.ts` is a one-line re-export and is NOT type-checked (`api` is in tsconfig `exclude`, TS6059 / [F23]). Caching in `serverless.ts` is a PROMISE, not the resolved app — concurrent cold requests would otherwise each bootstrap and race Prisma pools against `connection_limit=1`.** **T49: every route is served under `/v1` — `http://localhost:4000/v1/...`. `/health` + `/health/ready` are `VERSION_NEUTRAL` and stay UNVERSIONED; do not prefix their AuthMiddleware exclusions or every uptime probe 401s.** **T47: the access token is 15 MINUTES, not 7 days — a stale browser tab now refreshes instead of dying, and `POST /auth/refresh` + `POST /auth/logout` exist.** **T46: the `Bearer` scheme is matched case-INSENSITIVELY (RFC 7235 §2.1) — do not "tidy" it back to `startsWith('Bearer ')`.** **T43: the public salon directory is `GET /merchants` — `GET /merchants/public` no longer exists.** **T44: `X-Total-Count` is exposed once, globally, in `config/security.ts` — do NOT set `Access-Control-Expose-Headers` in a handler, it REPLACES the rate-limit list [F46].** **T27: it refuses to boot on a missing/placeholder secret** — intended; read the error, it names every problem at once. **T30: JWT is now `jsonwebtoken@9`, not hand-rolled** — pre-T30 tokens lack `iss`/`aud` and are refused, so a stale browser session must sign in once more (the web client clears it automatically). **T31: `bcrypt` → `bcryptjs`** (removes the native binary and the only critical advisory; existing `$2b$` hashes verify unchanged). **T31b: also refuses to boot without `ENCRYPTION_KEY`** (32 bytes, hex or base64) — phone numbers are now AES-256-GCM at rest |
+| Website | ✅ **LIVE at https://glow-plus-web-eight.vercel.app** (developer's Vercel; move to the client's — see HANDOVER.md). **Now React + Vite** — `glow-plus-web` on :3000 (`npm run dev`). Migrated session 3; see §11. The old `glow-plus-frontend` (Express) still exists but is **superseded** — don't run both, they both want :3000. **T39: `.topbar` is `min-height:52px`, not `height` — it must be able to grow when `.topnav` wraps, or the nav spills over the promo bar and the page heading at phone widths. T39b: below 700px `.topnav` is a drop panel behind `#navToggle` (`TopBar.jsx`), so it is `display:none` until `.open`** |
 | Stripe CLI | ✅ Forwarding verified; **webhook now returns 200** (was 400 on everything — see F19) |
-| Tests | ✅ Jest configured, **396 passing** (`npm test`) — 25 suites (T49 added `config/version.spec.ts`, 13): jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
+| Tests | ✅ **480 passing, 30 suites** — 465 unit + **15 integration over real Postgres** (T65), run in CI against a service container. Historic detail below: Jest configured, **396 passing** (`npm test`) — 25 suites (T49 added `config/version.spec.ts`, 13): jwt.util (23, T30), health controller, exception filter (+6 body-parser, T31), billing readPeriod, require-merchant / require-consumer / require-admin / require-merchant-owner / require-active-subscription guards, trialEndingReminder job, expirePoints job, throttling, env.validation (**+6 for ENCRYPTION_KEY, T31b**), security headers/CORS, **input-validation (T31, 22 + T38, 10)**, **pii-crypto (T31b, 25)**, me.service (T42, 12), reward-rules.service (T37, 21), **merchants.service + controller (T43, 19)**, **styles.service + controller (T44, 16)**, **auth.middleware (T46, 26)**, **refresh-token.service (T47, 22)**, **merchant-visibility (T48, 12)**, **pagination.dto (T50, 19)**, security +7 (T51). ⚠️ `jest.setup.ts` supplies `JWT_SECRET` AND now `ENCRYPTION_KEY` — neither has a fallback |
 | Seed | ✅ `npm run seed` — idempotent, local-DB-guarded |
 | Git | ✅ Repo live at **https://github.com/huzaifawork/glow-plus** (private), pushed |
 | Node / npm | v24.11.1 / 11.6.2 |
@@ -112,6 +112,7 @@ joziilunga-attachments/
 | **F12** | JWT is hand-rolled HS256, fixed 7-day, **no refresh token**. |
 | **F13** | No `/health` endpoint. |
 
+**F69–F76 are SESSION 29's, found on the live site — see the SESSION 29 block at the top of §8; five of the seven were found by the USER asking a question rather than by a probe.**
 **F60–F68 live in the SESSION 28 block in §8** — **nine** found across J3–J8;
 **seven are FIXED and verified live** (F60, F61, F62, F64, F65, F66, F67).
 **Two are OPEN: [F63]** (appointment times render in the browser's timezone,
@@ -133,141 +134,115 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **ALL 65 TASKS CLOSED. What remains is handover + client decisions.**
+## 8. EXACTLY where to resume — **BUILD COMPLETE. The only work left is DEPLOYING TO THE CLIENT'S ACCOUNTS.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. THE APP IS DEPLOYED AND LIVE.**
+> ## 🏁 SESSION 29 (2026-08-26) — **PRODUCTION DAY. Built, deployed, smoke-tested end to end, and reset clean.**
 >
-> **State: EVERY TASK CLOSED — 65 of 65.** Nothing remains in `[ ]`. What is
-> left is **blocked on the client**, not on work: **T61** (live Stripe keys +
-> live-mode webhook), **T67** (business registration), **T32** (is M-Pesa in
-> scope at all), **T31c** (major-version upgrades, deliberately deferred),
-> **T27** (secrets out of plaintext `.env`).
-> Backend suite **474 passing, 30 suites** — 459 unit + **15 integration**.
-> **CI is green on all three jobs.**
+> **65 of 65 tasks closed. Nothing is in `[ ]`.** Backend suite **480 passing,
+> 30 suites** (465 unit + 15 integration). **CI green on all three jobs.**
 >
-> | | Live URL |
+> ### ➡️ THE NEXT SESSION IS A DEPLOYMENT, NOT DEVELOPMENT
+>
+> **Read `HANDOVER.md` first — it is the ordered checklist and it is the actual
+> next task.** Deploy backend + website to the **client's Vercel** via the CLI
+> using their access token, then transfer the Supabase project.
+>
+> ⚠️ **The frontend must be REBUILT, not re-pointed.** Vite inlines
+> `VITE_API_BASE_URL` at build time, so the API URL is baked into the bundle.
+> Backend first, then build the frontend against its final URL. This ordering
+> is not a preference, it is a dependency.
+>
+> | Currently live (DEVELOPER's accounts — temporary) | |
 > |---|---|
 > | **API** | **https://glow-plus-api.vercel.app** |
 > | **Website** | **https://glow-plus-web-eight.vercel.app** |
-> | Privacy / Terms | `/privacy.html` · `/terms.html` |
+> | Legal | `/privacy.html` · `/terms.html` |
+> | **Database** | Supabase `xhyoeiltwcciqowlwyov`, `us-east-1`, PG 17.6 — **0 rows, schema intact, 8 migrations applied** |
 >
-> ### ➡️ RESUME HERE — the remaining work is a HANDOVER, not development
+> **The database was deliberately wiped after testing** so the client receives a
+> clean app. A backup of the test data is in the gitignored `backups/`. There is
+> **no admin account** — the client creates their own with
+> `npm run create-admin <email> <password>` ([F70]).
 >
-> 1. **Deploy to the client's Vercel** (their token). Two projects, Root
->    Directories as below. ⚠️ **The frontend must be REBUILT, not re-pointed** —
->    Vite inlines `VITE_API_BASE_URL` at build time.
-> 2. **Transfer the Supabase project** to the client's org (a project transfer,
->    not a re-migration).
-> 3. **Hand over the admin password** — `admin@glowplusmember.com`, currently
->    only in the gitignored `.env` under `# PRODUCTION ADMIN`.
-> 4. **Client decisions outstanding:** [F50], [F71], [F72], [F63], and the
->    Supabase **Pro plan** (~$25/mo) — the free tier has **no backups at all**.
+> ### ⚠️ Four traps that already cost time. Do not rediscover them.
 >
-> ⚠️ **The website host is `glow-plus-web-EIGHT`.** The plain
-> `glow-plus-web.vercel.app` is **an unrelated "Glow+" SPA that returns 200 for
-> every path**, which made one round of checks look green while hitting a
-> stranger's site. Never hardcode the un-suffixed host.
+> 1. **Always put the `cd` in the SAME command as `vercel --prod`.** A deploy
+>    run from the repo root uploaded **130MB** and failed — **Vercel honours
+>    `.vercelignore`, NOT `.gitignore`**, so the git-ignored 129MB `website.zip`
+>    was sent anyway. It also created a stray project.
+> 2. **`vercel env pull` writes `[SENSITIVE]` in place of secret values.** It
+>    cannot read a secret back. This caused two wrong deploys in T57: a webhook
+>    signature was computed with the literal string `"[SENSITIVE]"` and the
+>    failure was misdiagnosed as Vercel eating the request body. **It does not** —
+>    the webhook works untouched.
+> 3. **`.env` keeps inline comments.** Copying a whole line stores the comment as
+>    part of the value; that is how `STRIPE_PRICE_ID_MONTHLY` reached Vercel as
+>    46 characters when a Stripe price ID is exactly **30**, producing a 500 on
+>    "Start plan" whose only symptom was *Internal server error*.
+> 4. **The website host is `glow-plus-web-EIGHT`.** The plain
+>    `glow-plus-web.vercel.app` is **an unrelated "Glow+" SPA that returns 200 for
+>    every path**, which made one round of checks look green while hitting a
+>    stranger's site. Never hardcode the un-suffixed host.
 >
-> ⚠️ **Always put the `cd` in the SAME command as `vercel --prod`.** A deploy
-> from the repo root uploaded **130MB** (the git-ignored `website.zip` —
-> **Vercel honours `.vercelignore`, NOT `.gitignore`**) and created a stray
-> project.
+> ### The production run (P1–P11) — 11 journeys against the LIVE stack
 >
-> ⚠️ **`vercel env pull` writes `[SENSITIVE]` in place of secret values.** That
-> cost two wrong deploys in T57: a webhook signature was computed with the
-> literal string `"[SENSITIVE]"` and the failure was misread as Vercel eating
-> the request body. **It does not** — the webhook works untouched.
+> Every journey passed and each write was verified in Supabase directly. The
+> evidence worth keeping: the `User` row stores **bcrypt `$2b$12$`** and the
+> phone as **AES-256-GCM** `v1:iv:ct:tag` (queried with **raw SQL** so no
+> application-layer decryption could hide it) — the docx's claim is finally
+> true; the access token's `exp − iat` is **exactly 900s**; a **real Stripe
+> webhook** created a `TRIALING` subscription with `trialEnd` **37 days** out
+> (7 + 30 founding), confirming [F74]'s arithmetic independently; **[F64] holds
+> on the write path** — closed Sunday, pre-open, off-grid and past-close all
+> refused, none of which the slot grid would ever offer; a password reset
+> **revoked 9 of 10 refresh tokens**; and the paywall was exercised at **every**
+> status (PAST_DUE read-only, CANCELLED/SUSPENDED 403, all three hidden).
+>
+> ### ⚠️ SEVEN defects were found and fixed ON PRODUCTION. Five came from the
+> ### user asking a question, not from a probe. That is the lesson of the run.
+>
+> | # | What | How it was found |
+> |---|---|---|
+> | **F69** | *"Missing bearer token"* toast on the landing page — every view is mounted from first paint, so `ConsumerDashboard` and `HoursPanel` called protected routes for anonymous visitors. **The gate belongs to the FETCH, not the hook.** | user opened the site |
+> | **F76** | 🔴 **The salon had NO screen for its own appointments.** `GET /bookings` + confirm/cancel shipped in T18 and **no client ever called them**. A customer books 9am Monday and the salon never finds out | user asked *"where do I see it?"* |
+> | **F75** | The redeem toast said *"Show this to the salon"* and there was **nothing to show** — no history in the SPA. [F60] with the roles reversed | user asked *"how will he show?"* |
+> | **F74** | The site promised **"first month free"** while the code grants **7 days** to everyone past the 50th — in **all 8 languages**, plus unconditionally on the **admin review screen** | user asked about the paywall |
+> | **F74(c)** | **Approval alone granted a permanent free listing** — the paywall never consulted the `Subscription` table | user asked what happens after the free days |
+> | **F63** | Times rendered in the **browser's** timezone, not the salon's. `formatDay` had it too, filing an 11:30pm visit under the **wrong day** | audit |
+> | **F73** | A test that **passed for the wrong reason** — it asked about a Sunday in the past, and a past date also returns `[]` | writing T65 |
+>
+> ⚠️ **Do not undo these:** the `useApiData`/`HoursPanel` session gates ([F69]);
+> `salon-listable.ts` being **one** predicate shared by the directory *and*
+> `assertMerchantVisible` — two copies are how [F47] happened; the
+> *"approved but not listed"* banner, because hiding a salon **silently** is
+> worse than the free listing it replaced; and `SALON_TIMEZONE` in
+> `lib/config.js` **tracking the backend's own default** ([F63]).
+>
+> ### Still open — all genuinely the CLIENT's decision, none blocking
+>
+> **[F50]** paying bypasses approval · **[F71]** points still redeemable at a
+> lapsed salon · **[F72]** salon signup calls Stripe **before** writing the row,
+> so a Stripe outage blocks all signups · **[F74(b)]** 7-day trial vs a full
+> month (revenue, not code) · **[T32]** **there is no M-Pesa/Daraja code in the
+> repository at all** — the docx describes securing a webhook that was never
+> built · **[T67]** business registration · **[T31c]** major-version upgrades,
+> deliberately deferred · **translations** — the 7 non-English languages now say
+> *less* than English about the founding offer; nothing false remains, but the
+> fuller wording needs a translator.
+>
+> **Also for the client, from `HANDOVER.md`:** rotate the exposed credentials
+> (**Resend first** — it has no test mode, unlike the `sk_test_` Stripe key);
+> going live on Stripe is **four** changes, not two, because **live mode needs
+> its own Products and Prices with different IDs**; and the **free Supabase plan
+> takes no backups at all** and autosuspends after ~1 week idle, so the ~$25/mo
+> Pro decision wants making **before** real data.
 >
 > **[T53] settled T56's one open assumption:** Vercel's catch-all rewrite **does**
 > preserve the original `req.url`. And **T52's latency prediction was right** —
-> `/health/ready` went **1,798ms → 19ms** once the function and database sat in
-> the same region.
-> localhost survives in `src/`), so it happens *inside* T53. **T57 and T58 can
-> only be done after a live URL exists.**
->
-> ### ➡️ RESUME HERE — **next task is T53 (deploy), which needs the user's Vercel login.**
->
-> **[T54] Nothing schedules itself any more.** All four `@Cron()` decorators are
-> GONE and `ScheduleModule.forRoot()` is out of `app.module.ts` — an in-process
-> timer can never fire on Vercel. Jobs are now triggered by
-> **`GET /v1/cron/nightly`** (2am UTC) and **`GET /v1/cron/morning`** (9am UTC),
-> guarded by `CRON_SECRET`. ⚠️ **Two slots, not four, because Hobby allows only
-> 2 crons/day** — four routes would force the client onto Pro. ⚠️ **The cron path
-> must stay excluded from `AuthMiddleware`**: Vercel sends the secret in the
-> same `Authorization` header, so without the exclusion every job stops with a
-> 401 nobody reads. ⚠️ **Do not re-add `@Cron()`** — it would double-run.
->
-> **The two things this session settled, both worth not re-deriving:**
->
-> **1. [T52b] The Supabase Data API was wide open and is now closed.** Not a
-> T52 defect — the Supabase *default*, which Prisma cannot see because Prisma
-> has no concept of RLS. `anon` held full CRUD on all 16 tables, RLS was off,
-> and `/rest/v1/` is live. Now: **RLS 16/16, anon/authenticated revoked**, two
-> independent locks, via migration `20260826120000_lock_down_supabase_data_api`.
-> ⚠️ **Do not add `FORCE ROW LEVEL SECURITY`** (it would subject the owner to
-> policies and lock the backend out) and **do not remove the `pg_roles` guard**
-> (it makes the migration a no-op on local Docker and CI, which T58 needs).
->
-> **2. [T56] The backend now has a Vercel entry point.** It had none — no
-> `vercel.json`, no `api/`, `main.ts` ended in `app.listen()`. Config moved to
-> **`src/bootstrap.ts`**, which is now **the one place the app is configured**;
-> `main.ts` listens, `src/serverless.ts` inits and exports the Express instance,
-> `api/index.ts` is a one-line re-export. ⚠️ **Never configure the app in an
-> entry point again** — a guard added to one and not the other fails silently
-> and security-shaped, since nothing local exercises the serverless path. Four
-> tests in `version.spec.ts` now enforce this. Cold start **2,855ms → warm 2ms**.
->
-> ### Decisions taken this session
->
-> | Decision | Call |
-> |---|---|
-> | **Frontend + backend deploy SEPARATELY**, two Vercel projects, same repo, different Root Directory | The decisive reason is **Order 2**: the RN app calls the API cross-origin from a phone, where there is no same-origin at all. Auth is bearer-token with **zero cookies** (verified), so separate origins cost only a CORS preflight |
-> | **Free `.vercel.app` URLs** for the test deploy | The client's `glowplusmember.com` stays untouched until handover. **Hosting is independent of Resend** — the `mail.` DKIM/SPF records in Hostinger are outbound email only, so email is unaffected by where the app is hosted |
-> | **[F68] does NOT block launch** | Measured: **~224 new keys × 8 languages ≈ 1,792 strings**, more than doubling the existing 191-key dictionary. Session 28 already shipped the valuable half (RTL + `lang`); what remains is bulk copy. Shipping ~672 unreviewed Arabic/CJK strings on a **billing** screen is worse than English. → **T40, post-launch** |
->
-> ⚠️ **[F63], [F68] and [F50] are all still open and NONE of them blocks
-> deployment.** [F50] needs a client decision, not code.
->
-> ---
->
-> **State as of session 28 (2026-08-26): 52 of 65 done. PHASE 7 IS CLOSED —
-> T46 ✅ T47 ✅ T48 ✅ T49 ✅ T50 ✅ T51 ✅.**
-> Backend suite **432 passing, 28 suites** (session 28 added
-> `modules/auth/password-reset.service.spec.ts` 17 and `common/free-service.spec.ts` 8).
->
-> ### THE MANUAL TEST RUN IS COMPLETE — all eight journeys closed in session 28.
->
-> **ALL EIGHT JOURNEYS ARE CLOSED.** J1 ✅ J2 ✅ (s26) · the whole merchant
-> side M1–M9 ✅ (s27) · **J3 ✅ J4 ✅ J5 ✅ J6 ✅ J7 ✅ J8 ✅ (s28).**
->
-> There is no journey left to pick up. **The next work is PHASE 8: T53.**
-> Three findings remain open and each needs a decision rather than a keystroke
-> — **[F63]** (times in the browser's timezone), **[F68]** (standalone pages
-> untranslated, no RTL), **[F50]** (paying bypasses approval — client's call).
->
-> The old J6/J7/J8 rows are kept below only as a record of what they covered:
->
-> | # | Journey | Notes for whoever picks this up |
-> |---|---|---|
-> | **J6** ✅ | 15-min expiry → silent refresh + **replay revokes the family** | Read T47's TASKS.md entry first. The SPA resets to the marketing view on reload, so **reloading proves nothing** — drive `await import('/src/lib/api.js')` in the page instead. Authenticated responses carry an **ETag**, so a good retry is **304**, not 200. **`+walkin` is the ready subject: 0 live sessions, password `Walkin456!`.** J5.5 already proved reset-revokes-all; J6 is the *rotation/replay* half |
-> | **J7** ✅ | admin approve/suspend | **MOSTLY DONE ALREADY in J4.6/J4.7** — suspend → all four public salon-scoped routes 404 + `POST /bookings` 404, reactivate → all restored, 6/6. What is left is the **PENDING → approve** half on a genuinely pending salon; both local salons are ACTIVE, so one has to be created or set back |
-> | **J8** ✅ | every view at **390px** | The long pole; touches all 8 languages incl. **Arabic RTL**. Note [F43]: 18 keys exist only in the `en` block and several tab labels are hardcoded English — pre-existing, belongs to T40 |
->
-> ⚠️ **Two admin surfaces exist and they are NOT the same.** `/admin`
-> (standalone, T22) reads `GET /admin/merchants/pending` — **PENDING only**, so
-> an ACTIVE salon never appears and it cannot suspend one. The **SPA nav →
-> Admin** view reads `GET /admin/merchants` (all statuses) and is the one with
-> approve/suspend/reactivate. This cost time in J4.6; use the SPA view. Same
-> "superseded standalone page" situation as `/consumer/rewards`. Cleanup to
-> raise with the client, **not** a defect.
->
-> ---
->
-> ---
->
-> ---
+> `/health/ready` went **1,798ms → 19ms** once the function and database shared
+> a region.
 >
 > ---
 >
