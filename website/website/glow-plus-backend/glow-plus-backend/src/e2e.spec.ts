@@ -209,15 +209,40 @@ run('integration: the whole stack over real HTTP and real Postgres (T65)', () =>
 
   describe('merchant lifecycle and public visibility', () => {
     it_('creates a salon PENDING and keeps it out of the public directory', async () => {
-      const signup = await req('POST', '/v1/merchants/signup', {
-        businessName: 'E2E Salon', email: MERCHANT, password: 'E2eSalon123!',
+      // ⚠️ The salon row is created directly rather than through
+      // `POST /merchants/signup`, and that is not laziness.
+      //
+      // That endpoint calls `stripe.customers.create()` BEFORE writing the
+      // row, so it needs a live Stripe key and network access. Requiring one
+      // here would mean this suite could not run from a fork, from the
+      // client's copy of the repo, or offline — for the sake of one call whose
+      // behaviour T63 already verified against production.
+      //
+      // Worth recording as a property of the system rather than of this test:
+      // **a Stripe outage blocks every salon signup.** The verification email
+      // beside it is wrapped in try/catch precisely so a Resend outage cannot;
+      // the Stripe call has no such guard. Deferring customer creation to
+      // checkout would remove that dependency, and is a design decision for
+      // the client rather than a defect to fix silently.
+      const bcrypt = await import('bcryptjs');
+      const created = await prisma!.merchant.create({
+        data: {
+          businessName: 'E2E Salon',
+          email: MERCHANT,
+          passwordHash: await bcrypt.hash('E2eSalon123!', 12),
+          status: 'PENDING',
+          stripeCustomerId: `cus_e2e_${TAG}`,
+          foundingMember: true,
+        },
       });
-      expect(signup.status).toBe(201);
-      expect(signup.json.status).toBe('PENDING');
-      state.merchantId = signup.json.id;
+      state.merchantId = created.id;
+      expect(created.status).toBe('PENDING');
 
+      // Login DOES go through the real endpoint — it touches no third party.
       const login = await req('POST', '/v1/merchants/login', { email: MERCHANT, password: 'E2eSalon123!' });
+      expect(login.status).toBe(201);
       state.merchantToken = login.json.token;
+      expect(typeof state.merchantToken).toBe('string');
 
       const dir = await req('GET', '/v1/merchants');
       expect(dir.json.some((m: any) => m.id === state.merchantId)).toBe(false);
