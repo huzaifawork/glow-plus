@@ -2,7 +2,7 @@
   "name": "glow-plus-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Glow+ shared backend API — auth, merchants, styles, visits, reward rules, billing",
+  "description": "Glow+ shared backend API \u2014 auth, merchants, styles, visits, reward rules, billing",
   "scripts": {
     "build": "nest build",
     "start": "nest start",
@@ -15,7 +15,8 @@
     "test": "jest",
     "seed": "ts-node prisma/seed.ts",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "create-admin": "ts-node scripts/create-admin.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
