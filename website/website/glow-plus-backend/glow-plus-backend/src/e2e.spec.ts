@@ -305,9 +305,15 @@ run('integration: the whole stack over real HTTP and real Postgres (T65)', () =>
       const days = [...Array(7)].map((_, d) => ({ dayOfWeek: d, openTime: '09:00', closeTime: '17:00', closed: d === 0 }));
       expect((await req('PUT', '/v1/business-hours', { days }, state.merchantToken)).status).toBe(200);
 
+      // ⚠️ The `+ 7` is load-bearing. JavaScript's % keeps the sign of the
+      // dividend, so (1 - 3) % 7 is -2, not 5 — without it "next Monday"
+      // resolves to Monday of THIS week, in the past, and the API correctly
+      // offers no slots for a day that has already gone. That failed the
+      // booking test honestly and, worse, made the closed-Sunday test PASS for
+      // the wrong reason, since a past date also returns [].
       const nextDow = (dow: number) => {
         const d = new Date();
-        d.setUTCDate(d.getUTCDate() + (((dow - d.getUTCDay()) % 7) || 7));
+        d.setUTCDate(d.getUTCDate() + (((dow - d.getUTCDay() + 7) % 7) || 7));
         return d.toISOString().slice(0, 10);
       };
       const sunday = nextDow(0);
@@ -331,11 +337,19 @@ run('integration: the whole stack over real HTTP and real Postgres (T65)', () =>
     });
 
     it_('offers no slots on a closed day', async () => {
+      // Same `+ 7` as above, and for a sharper reason here: with the negative
+      // modulo this test asked about a Sunday in the PAST and passed on that,
+      // proving nothing about the closed-day rule it exists to check.
       const d = new Date();
-      d.setUTCDate(d.getUTCDate() + (((0 - d.getUTCDay()) % 7) || 7));
+      d.setUTCDate(d.getUTCDate() + (((0 - d.getUTCDay() + 7) % 7) || 7));
+      const date = d.toISOString().slice(0, 10);
       const slots = await req('GET',
-        `/v1/bookings/availability?merchantId=${state.merchantId}&styleId=${state.styleId}&date=${d.toISOString().slice(0, 10)}`);
+        `/v1/bookings/availability?merchantId=${state.merchantId}&styleId=${state.styleId}&date=${date}`);
       expect(slots.json).toEqual([]);
+      // Prove the date really is a future Sunday, so this can never again pass
+      // because the day had simply gone by.
+      expect(new Date(`${date}T12:00:00Z`).getUTCDay()).toBe(0);
+      expect(new Date(`${date}T12:00:00Z`).getTime()).toBeGreaterThan(Date.now());
     });
   });
 
