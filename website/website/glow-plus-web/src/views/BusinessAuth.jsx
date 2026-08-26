@@ -45,6 +45,13 @@ export default function BusinessAuth({ active }) {
           // look for `foundingBadge`, which nothing here ever set, so the
           // founding half of the banner was unreachable.
           foundingMember: data.merchant.foundingMember,
+          // [F74] — `undefined` (not null) on purpose: the login payload does
+          // not carry the subscription, and null would read as "definitely no
+          // plan" and flash the banner at a salon that has one. The banner
+          // only renders once the profile refresh resolves this to a value.
+          subscriptionStatus: data.merchant.subscription
+            ? data.merchant.subscription.status
+            : undefined,
           createdAt: Date.now(),
         });
         if (!data.merchant.emailVerified) toast(t('auth_verify_banner', { email: email.trim() }));

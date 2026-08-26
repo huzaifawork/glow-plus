@@ -3,6 +3,7 @@ import { Prisma, StyleType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FOUNDING_MEMBER_CAP, FoundingSpots } from './founding';
 import { DEFAULT_MERCHANT_PAGE, PublicMerchantsQueryDto } from './public-merchants-query.dto';
+import { LISTABLE_MERCHANT_WHERE } from '../../common/salon-listable';
 
 /** One row of the public salon directory (T43). */
 export type PublicMerchant = {
@@ -95,7 +96,11 @@ export class MerchantsService {
     // the directory again, not an accidental `contains: ''`.
     const q = query.q?.trim();
     const where: Prisma.MerchantWhereInput = {
-      status: 'ACTIVE',
+      // [F74] — approval is only half of it. A salon that never subscribed used
+      // to be listed forever for free; LISTABLE_MERCHANT_WHERE adds the
+      // subscription half, and is shared with assertMerchantVisible so the
+      // directory and the per-salon routes cannot disagree.
+      ...LISTABLE_MERCHANT_WHERE,
       ...(q ? { businessName: { contains: q, mode: 'insensitive' as const } } : {}),
     };
 

@@ -160,6 +160,10 @@ export function AppProvider({ children }) {
                 businessName: m.businessName,
                 status: m.status,
                 foundingMember: m.foundingMember,
+                // [F74] — the portal banner needs to know whether a plan has
+                // been started, because an approved-but-unsubscribed salon is
+                // now hidden from "Find a salon" and has to be told why.
+                subscriptionStatus: m.subscription ? m.subscription.status : null,
                 createdAt: Date.parse(m.createdAt) || Date.now(),
               });
             })

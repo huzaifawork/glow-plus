@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { isListable } from './salon-listable';
 
 /**
  * "Is this salon open to customers?"  (T48)
@@ -42,10 +43,13 @@ export async function assertMerchantVisible(
     where: { id: merchantId },
     // Status only. This runs on unauthenticated routes, and an `include` here
     // publishes every salon's bcrypt hash to the open internet [F31].
-    select: { status: true },
+    // [F74] — the subscription is now part of visibility, so it is selected
+    // too. Still a narrow select: an `include` here publishes every salon's
+    // bcrypt hash to the open internet [F31].
+    select: { status: true, subscription: { select: { status: true } } },
   });
 
-  if (!merchant || merchant.status !== 'ACTIVE') {
+  if (!merchant || !isListable(merchant)) {
     throw new NotFoundException(message);
   }
 }

@@ -25,6 +25,7 @@ import { MerchantAuthService } from './merchant-auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FOUNDING_MEMBER_CAP } from './founding';
 import { DEFAULT_MERCHANT_PAGE, MAX_MERCHANT_PAGE } from './public-merchants-query.dto';
+import { LISTABLE_MERCHANT_WHERE } from '../../common/salon-listable';
 
 const M1 = 'merchant-1';
 const M2 = 'merchant-2';
@@ -149,7 +150,13 @@ describe('MerchantsService.listPublic', () => {
     for (const q of ['', '   ']) {
       merchantFindMany.mockClear();
       await service.listPublic({ q });
-      expect(merchantFindMany.mock.calls[0][0].where).toEqual({ status: 'ACTIVE' });
+      // [F74] — the baseline `where` is now approved AND on a plan. This test
+      // is about the SEARCH term, so it asserts the baseline is unchanged and
+      // that no `businessName` filter was added, rather than restating the
+      // whole visibility rule (which merchant-visibility.spec.ts owns).
+      const where = merchantFindMany.mock.calls[0][0].where;
+      expect(where).toEqual(LISTABLE_MERCHANT_WHERE);
+      expect(where.businessName).toBeUndefined();
     }
   });
 

@@ -1162,6 +1162,7 @@ export default function BusinessPortal({ active }) {
   const status = currentMerchant ? currentMerchant.status || 'ACTIVE' : 'ACTIVE';
 
   let bannerMsg = null;
+  let bannerAction = null;
   if (currentMerchant && status !== 'ACTIVE') {
     bannerMsg =
       status === 'PENDING'
@@ -1170,6 +1171,18 @@ export default function BusinessPortal({ active }) {
             ? ' ' + t('pending_banner_founding')
             : ' ' + t('pending_banner_standard'))
         : t('suspended_banner');
+  } else if (currentMerchant && currentMerchant.subscriptionStatus === null) {
+    // [F74] — approved, but no plan started, so the salon is NOT in "Find a
+    // salon" yet. It MUST be told: a salon hidden silently would sit waiting
+    // for customers who cannot find it, which is worse than the free listing
+    // this replaced.
+    //
+    // Strictly `=== null`, never falsy. `undefined` means "not known yet" —
+    // the login payload does not carry the subscription — and treating that as
+    // "no plan" would flash this banner at a paying salon on every sign-in.
+    bannerMsg =
+      'Your salon is approved but not yet listed in "Find a salon" — customers cannot see you until you start your plan. Everything else in the portal works meanwhile.';
+    bannerAction = 'billing';
   }
 
   const tabs = [
@@ -1195,6 +1208,21 @@ export default function BusinessPortal({ active }) {
       {bannerMsg ? (
         <div className="pending-banner" id="pendingBanner">
           {bannerMsg}
+          {/* A banner that states a problem without offering the fix is half a
+              feature — this is one click from the thing it asks for. */}
+          {bannerAction === 'billing' ? (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="navbtn"
+                style={{ marginTop: '8px' }}
+                onClick={() => setTab('billing')}
+              >
+                Start my plan
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
 

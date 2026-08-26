@@ -20,9 +20,18 @@
 import { NotFoundException } from '@nestjs/common';
 import { assertMerchantVisible } from './merchant-visibility';
 
-const prismaWith = (status: string | null) => ({
+/**
+ * [F74] — visibility now has TWO halves: approved AND on a plan. The default
+ * subscription here is TRIALING so every pre-existing case still reads as
+ * "an approved, paying salon", which is what those tests were always about.
+ */
+const prismaWith = (status: string | null, subStatus: string | null = 'TRIALING') => ({
   merchant: {
-    findUnique: jest.fn().mockResolvedValue(status === null ? null : { status }),
+    findUnique: jest
+      .fn()
+      .mockResolvedValue(
+        status === null ? null : { status, subscription: subStatus ? { status: subStatus } : null },
+      ),
   },
 });
 
@@ -59,17 +68,55 @@ describe('assertMerchantVisible (T48 [F47])', () => {
     expect(suspended).toBe(msg);
   });
 
-  it('selects the status ONLY', async () => {
+  it('selects the status and the subscription status, and NOTHING else', async () => {
     const prisma = prismaWith('ACTIVE');
 
     await assertMerchantVisible(prisma as any, 'm_1');
 
     // This runs on unauthenticated routes. An `include`, or a select that grew
     // a field, publishes every salon's bcrypt hash to the open internet [F31].
+    // [F74] widened this by exactly one nested status — still an allow-list,
+    // still no way for a credential to reach it.
     expect(prisma.merchant.findUnique).toHaveBeenCalledWith({
       where: { id: 'm_1' },
-      select: { status: true },
+      select: { status: true, subscription: { select: { status: true } } },
     });
+  });
+
+  /* ----------------------------------------------------------------
+     [F74] — approval is not enough on its own
+     ---------------------------------------------------------------- */
+
+  it('refuses an ACTIVE merchant that never subscribed', async () => {
+    // The gap this closes: approval alone used to grant a permanent free
+    // listing, because the rule never consulted the Subscription table.
+    await expect(
+      assertMerchantVisible(prismaWith('ACTIVE', null) as any, 'm_1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it.each(['TRIALING', 'ACTIVE'])('lets an ACTIVE merchant on a %s plan through', async (sub) => {
+    // A trial is a plan that has not been billed yet, not the absence of one.
+    await expect(
+      assertMerchantVisible(prismaWith('ACTIVE', sub) as any, 'm_1'),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each(['CANCELED', 'PAST_DUE'])('refuses an ACTIVE merchant whose plan is %s', async (sub) => {
+    await expect(
+      assertMerchantVisible(prismaWith('ACTIVE', sub) as any, 'm_1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('gives the SAME message whether the salon is missing, suspended, or unpaid', async () => {
+    // Three different internal reasons, one external answer. "That salon
+    // exists but has not paid" is not a customer's business, and telling them
+    // apart turns a 404 into a probe.
+    const gone = await assertMerchantVisible(prismaWith(null) as any, 'x').catch((e) => e.message);
+    const suspended = await assertMerchantVisible(prismaWith('SUSPENDED') as any, 'x').catch((e) => e.message);
+    const unpaid = await assertMerchantVisible(prismaWith('ACTIVE', null) as any, 'x').catch((e) => e.message);
+
+    expect(new Set([gone, suspended, unpaid]).size).toBe(1);
   });
 });
 

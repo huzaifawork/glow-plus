@@ -47,7 +47,9 @@ describe('StylesService.listPublicForMerchant', () => {
   let service: StylesService;
 
   beforeEach(async () => {
-    merchantFindUnique.mockReset().mockResolvedValue({ status: 'ACTIVE' });
+    // [F74] — a visible salon is now approved AND on a plan, so the default
+    // fixture carries a trialing subscription.
+    merchantFindUnique.mockReset().mockResolvedValue({ status: 'ACTIVE', subscription: { status: 'TRIALING' } });
     styleFindMany.mockReset().mockResolvedValue([aStyle()]);
     styleCount.mockReset().mockResolvedValue(1);
 
@@ -81,16 +83,20 @@ describe('StylesService.listPublicForMerchant', () => {
     async (status) => {
       // 404, not `[]`: "this salon has no services yet" and "this salon is
       // not open to customers" must not look identical to the caller.
-      merchantFindUnique.mockResolvedValue({ status });
+      merchantFindUnique.mockResolvedValue({ status, subscription: { status: 'TRIALING' } });
       await expect(service.listPublicForMerchant(MID)).rejects.toBeInstanceOf(NotFoundException);
     },
   );
 
-  it('never reads the merchant row beyond its status', async () => {
+  it('never reads the merchant row beyond what visibility needs', async () => {
+    // The point of this test is [F31]: this runs unauthenticated, so the select
+    // must stay a narrow allow-list and can never reach a bcrypt hash. [F74]
+    // widened it by exactly one nested status — asserted explicitly rather than
+    // loosened to `expect.anything()`, so a future field still fails here.
     await service.listPublicForMerchant(MID);
     expect(merchantFindUnique).toHaveBeenCalledWith({
       where: { id: MID },
-      select: { status: true },
+      select: { status: true, subscription: { select: { status: true } } },
     });
   });
 
