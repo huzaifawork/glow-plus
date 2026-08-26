@@ -139,12 +139,21 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >
 > ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. T52b + T56 done.**
 >
-> **State: 54 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
-> T56 ✅ T60 ✅.** Backend suite **436 passing, 28 suites** (T56 added 4 guards
-> to `config/version.spec.ts`).
-> **Remaining in Phase 8: T53, T54, T55, T57, T58, T59, T61, T62, T63.**
+> **State: 55 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
+> T54 ✅ T56 ✅ T60 ✅.** Backend suite **459 passing, 29 suites**.
+> **Remaining in Phase 8: T53, T55, T57, T58, T59, T61, T62, T63.**
 >
-> ### ➡️ RESUME HERE — **next task is T54 (cron dispatcher).**
+> ### ➡️ RESUME HERE — **next task is T53 (deploy), which needs the user's Vercel login.**
+>
+> **[T54] Nothing schedules itself any more.** All four `@Cron()` decorators are
+> GONE and `ScheduleModule.forRoot()` is out of `app.module.ts` — an in-process
+> timer can never fire on Vercel. Jobs are now triggered by
+> **`GET /v1/cron/nightly`** (2am UTC) and **`GET /v1/cron/morning`** (9am UTC),
+> guarded by `CRON_SECRET`. ⚠️ **Two slots, not four, because Hobby allows only
+> 2 crons/day** — four routes would force the client onto Pro. ⚠️ **The cron path
+> must stay excluded from `AuthMiddleware`**: Vercel sends the secret in the
+> same `Authorization` header, so without the exclusion every job stops with a
+> 401 nobody reads. ⚠️ **Do not re-add `@Cron()`** — it would double-run.
 >
 > **The two things this session settled, both worth not re-deriving:**
 >

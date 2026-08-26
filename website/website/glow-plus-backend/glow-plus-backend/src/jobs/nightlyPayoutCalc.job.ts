@@ -1,14 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
+/**
+ * T54 — this class has NO @Cron decorator any more, deliberately.
+ * An in-process timer never fires on Vercel: the container is frozen as soon
+ * as the request that woke it finishes, so the job would have run NEVER,
+ * with no error to notice. It is now triggered over HTTP by
+ * `GET /v1/cron/nightly` — see modules/cron/cron.service.ts.
+ * Was: CronExpression.EVERY_DAY_AT_2AM.
+ */
 @Injectable()
 export class NightlyPayoutCalcJob {
   private readonly logger = new Logger(NightlyPayoutCalcJob.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async run() {
     // Glow+ is a flat $200/mo SaaS fee, not a per-transaction marketplace —
     // there's no merchant payout to calculate. This job instead rolls up

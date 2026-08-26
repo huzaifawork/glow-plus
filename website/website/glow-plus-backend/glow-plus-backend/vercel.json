@@ -10,5 +10,9 @@
       "maxDuration": 30,
       "memory": 1024
     }
-  }
+  },
+  "crons": [
+    { "path": "/v1/cron/nightly", "schedule": "0 2 * * *" },
+    { "path": "/v1/cron/morning", "schedule": "0 9 * * *" }
+  ]
 }

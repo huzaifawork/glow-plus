@@ -1,7 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,6 +19,7 @@ import { StaffModule } from './modules/staff/staff.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { BusinessHoursModule } from './modules/business-hours/business-hours.module';
 import { JobsModule } from './jobs/jobs.module';
+import { CronModule } from './modules/cron/cron.module';
 import { AuthMiddleware } from './middleware/auth.middleware';
 import { withVersion } from './config/version';
 import { GlobalRateLimitMiddleware } from './middleware/globalRateLimit.middleware';
@@ -33,7 +33,12 @@ import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
     // falling back to one. Every secret in this codebase had a silent default,
     // and JWT_SECRET's was a constant published in the repo ([F20]).
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
-    ScheduleModule.forRoot(),
+    // T54 — ScheduleModule.forRoot() was here and is deliberately gone. It
+    // registers in-process timers, which on Vercel are created and then frozen
+    // with the container seconds later, so not one of the four jobs would ever
+    // have run — silently, killing T19 and T25. They are now triggered over
+    // HTTP by CronModule. Re-adding this would double-run every job anywhere a
+    // long-running process does exist.
     // T26 [F3] — until now nothing in this API was rate limited at all.
     // See common/throttling.ts for the three tiers and why they differ.
     ThrottlerModule.forRoot(throttlerOptions),
@@ -53,6 +58,7 @@ import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
     BookingsModule,
     BusinessHoursModule,
     JobsModule,
+    CronModule,
   ],
   // Registered globally rather than per-controller: "API-wide" has to mean
   // every route, including ones added later by someone who never reads this
@@ -96,6 +102,15 @@ export class AppModule implements NestModule {
         { path: withVersion('merchants/login'), method: RequestMethod.POST },
         { path: withVersion('admin/login'), method: RequestMethod.POST },
         { path: withVersion('billing/webhook'), method: RequestMethod.POST },
+        // T54 — Vercel Cron. Excluded for a reason that is easy to miss and
+        // fails silently: Vercel sends the CRON_SECRET as
+        // `Authorization: Bearer <secret>`, the SAME header AuthMiddleware
+        // reads. Without this entry the middleware tries to verify that secret
+        // as a JWT, fails, and 401s the request before CronSecretGuard ever
+        // runs — so every scheduled job stops, with the only symptom being a
+        // 401 in a cron log nobody reads. This does NOT make the route public:
+        // CronSecretGuard still has to match the secret.
+        { path: withVersion('cron/(.*)'), method: RequestMethod.GET },
         // Public by design — a consumer browses times and opening hours
         // before creating an account. Both controllers document these as
         // public; AuthMiddleware throws 401 without a bearer token, so they

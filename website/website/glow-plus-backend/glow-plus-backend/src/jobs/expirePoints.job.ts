@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -17,13 +16,20 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 export const POINTS_EXPIRE_AFTER_DAYS = Number(process.env.POINTS_EXPIRE_AFTER_DAYS ?? 365);
 
+/**
+ * T54 — this class has NO @Cron decorator any more, deliberately.
+ * An in-process timer never fires on Vercel: the container is frozen as soon
+ * as the request that woke it finishes, so the job would have run NEVER,
+ * with no error to notice. It is now triggered over HTTP by
+ * `GET /v1/cron/nightly` — see modules/cron/cron.service.ts.
+ * Was: CronExpression.EVERY_DAY_AT_3AM.
+ */
 @Injectable()
 export class ExpirePointsJob {
   private readonly logger = new Logger(ExpirePointsJob.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async run() {
     const cutoff = new Date(Date.now() - POINTS_EXPIRE_AFTER_DAYS * 24 * 60 * 60 * 1000);
 

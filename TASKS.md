@@ -1271,7 +1271,41 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 
       Applied to production via the Supabase SQL Editor. The migration file is committed so the lockdown **travels with the repo** and re-applies itself when the client's project is stood up at handover — it is idempotent, so `migrate deploy` re-running it is harmless. Break-glass rollback is recorded in the migration's header comments.
 - [ ] **T53 — Deploy backend + website**, env vars in Vercel project settings.
-- [ ] **T54 — Convert all 4 cron jobs to Vercel Cron.** `@Cron()` **never fires** on serverless — this silently kills T19 and T25. Expose each as a route guarded by `CRON_SECRET`; schedule in `vercel.json`.
+- [x] **T54 — Convert all 4 cron jobs to Vercel Cron.** ✅ **DONE & VERIFIED 2026-08-26.** `@Cron()` sets an **in-process timer**, which needs a process still alive when it expires — and a serverless function is alive only while serving a request. On Vercel the timers would be registered and the container frozen seconds later, so **not one job would ever have run**: no error, no log, nothing to notice. That silently kills **T19** (trial reminders) and **T25** (point expiry).
+
+      **New:** `src/modules/cron/` — `cron.controller.ts`, `cron.service.ts`, `cron.guard.ts`, `cron.module.ts`.
+      **Changed:** all four jobs lost `@Cron()`, `JobsModule` now **exports** its providers, `ScheduleModule.forRoot()` **removed** from `app.module.ts`, `CRON_SECRET` added to `PRODUCTION_REQUIRED`.
+
+      ⚠️ **The decorators are GONE, not left alongside the routes.** Keeping both would double-run every job anywhere a long-running process does exist. Each job file now carries a comment naming the route that triggers it.
+
+      **Two slots, not four routes — this is what keeps the client on the free plan.** Vercel **Hobby allows 2 cron jobs, each at most once daily**. Four routes would force Pro (~$20/mo) for four queries a day. The `vercel.json` schedule:
+      | Slot | Cron | Runs | Was |
+      |---|---|---|---|
+      | `/v1/cron/nightly` | `0 2 * * *` | payout calc → point expiry → merchant reports **(Sundays only)** | 2am + 3am + weekly |
+      | `/v1/cron/morning` | `0 9 * * *` | trial-ending reminders | 9am |
+
+      ⚠️ **The cron path MUST stay excluded from `AuthMiddleware`** (`withVersion('cron/(.*)')`, GET). Vercel sends the secret as `Authorization: Bearer <CRON_SECRET>` — **the same header `AuthMiddleware` parses as a JWT**. Without the exclusion it 401s before `CronSecretGuard` ever runs, and every scheduled job stops with the only symptom being a 401 in a cron log nobody reads. **This does not make the route public** — the guard still has to match the secret.
+
+      ⚠️ **The guard FAILS CLOSED on an unset `CRON_SECRET`.** An unset secret must never mean "let everyone in"; that is the failure mode where a missing env var quietly publishes a route that expires points and sends email. Comparison is constant-time over SHA-256 digests, so neither the value **nor its length** is observable in the response time, and **every rejection returns the identical message** — a distinct "wrong secret" reply would confirm to a prober that the route exists and is merely guarded.
+
+      ⚠️ **Routes are `GET` although they mutate.** Vercel's scheduler issues a GET; a POST-only route would simply never be invoked. **Weekday is decided with `getUTCDay()`** — Vercel cron schedules are UTC, and a local-timezone check would skip the weekly report on the very night it is due, silently, once a week (there is a test for exactly this).
+
+      ⚠️ **A failing job does not stop the batch,** and jobs run **sequentially, not `Promise.all`** — the pooled string is `connection_limit=1` (T52), so parallel jobs would contend for one connection. There is no retry; the next attempt is tomorrow, so one bad job aborting the slot would mean points quietly stop expiring every night.
+
+      **Evidence — driven through the real serverless handler against production Supabase:**
+      | Case | Result |
+      |---|---|
+      | No `Authorization` header | **401** `Cron is not configured.` |
+      | Wrong secret | **401**, *identical* message |
+      | Secret without the `Bearer` scheme | **401** |
+      | Lowercase `bearer` scheme (RFC 7235 §2.1) | **200** — matched, as T46 does |
+      | `GET /v1/cron/nightly` | **200** `payout ok 1927ms, expirePoints ok 1436ms, sendMerchantReports skipped "weekly — Sundays only (UTC)"` (today is Wednesday) |
+      | `GET /v1/cron/morning` | **200** `trialEndingReminder ok 1728ms` |
+      | Unknown slot | **404** `Unknown cron slot 'bogus'` — a `vercel.json` typo is visible, not a silent no-op |
+      | Guard replied, not `AuthMiddleware` | ✅ proving the exclusion works |
+      | `npm test` | **459 passing, 29 suites** (was 436; `modules/cron/cron.spec.ts` adds 23) |
+
+      ⬜ **`CRON_SECRET` must be generated and set as a Vercel env var → T53.** Nothing schedules until it is.
 - [ ] **T55 — Prisma connection pooling** (PgBouncer / `?pgbouncer=true` / Accelerate). **The most common way Prisma-on-Vercel dies in production.**
 - [x] **T56 — Cache the Nest app instance across invocations.** ✅ **DONE & VERIFIED 2026-08-26.** This is also the task that gave the backend a Vercel entry point **at all** — before it, there was no `vercel.json`, no `api/`, and `main.ts` ended in `app.listen()`.
 

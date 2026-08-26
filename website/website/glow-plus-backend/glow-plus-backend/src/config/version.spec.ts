@@ -73,8 +73,10 @@ describe('the raw-URL matchers all carry the prefix (T49)', () => {
     const exclusions = src.slice(src.indexOf('.exclude('), src.indexOf(".forRoutes('*')", src.indexOf('.exclude(')));
     const entries = exclusions.match(/\{\s*path:[\s\S]*?\}/g) ?? [];
 
-    // 15 exclusions: 2 health (unversioned, deliberately) + 13 versioned.
-    expect(entries).toHaveLength(15);
+    // 16 exclusions: 2 health (unversioned, deliberately) + 14 versioned.
+    // T54 added the cron dispatcher, which must be excluded because Vercel
+    // sends CRON_SECRET in the Authorization header AuthMiddleware parses.
+    expect(entries).toHaveLength(16);
 
     const unversioned = entries.filter((e: string) => !e.includes('withVersion('));
     expect(unversioned).toHaveLength(2);

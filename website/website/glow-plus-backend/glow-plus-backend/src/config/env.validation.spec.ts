@@ -27,6 +27,7 @@ const goodProd = (): NodeJS.ProcessEnv =>
     EMAIL_FROM: 'Glow+ <noreply@mail.glowplusmember.com>',
     RESEND_API_KEY: 're_abc123',
     TRUST_PROXY_HEADER: '1',
+    CRON_SECRET: 'a-real-looking-cron-secret',
   }) as NodeJS.ProcessEnv;
 
 describe('isProductionEnv', () => {

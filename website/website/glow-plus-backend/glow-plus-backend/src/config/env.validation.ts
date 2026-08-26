@@ -49,6 +49,10 @@ const PRODUCTION_REQUIRED = [
   'STRIPE_PRICE_ID_ANNUAL',
   'EMAIL_PROVIDER',
   'EMAIL_FROM',
+  // T54 — without it CronSecretGuard fails closed and refuses every request,
+  // so all four scheduled jobs stop. Production-required rather than always:
+  // locally nothing calls the cron routes unless you call them yourself.
+  'CRON_SECRET',
 ] as const;
 
 /**
