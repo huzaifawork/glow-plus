@@ -139,10 +139,28 @@ These two are the biggest hidden-scope items. The user has been advised to raise
 >
 > ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. THE APP IS DEPLOYED AND LIVE.**
 >
-> **State: 58 of 65 done — THE APP IS LIVE.** PHASE 7 CLOSED. **PHASE 8: T52 ✅
-> T52b ✅ T53 ✅ T54 ✅ T55 ✅ T56 ✅ T59 ✅ T60 ✅.**
+> **State: 59 of 65 done — THE APP IS LIVE AND SMOKE-TESTED.** PHASE 7 CLOSED.
+> **PHASE 8: T52 ✅ T52b ✅ T53 ✅ T54 ✅ T55 ✅ T56 ✅ T59 ✅ T60 ✅ T63 ✅.**
 > Backend suite **459 passing, 29 suites**.
-> **Remaining in Phase 8: T57, T58, T61, T62, T63.**
+> **Remaining in Phase 8: T57, T58, T61, T62.** Next is **T57** (Stripe raw body).
+>
+> ⚠️ **[F70] — THE PRODUCTION ADMIN.** T63 found that production had **no way to
+> create an admin at all**: there is no signup route (deliberately) and the only
+> `prisma.admin.create` lives in `seed.ts`, which refuses non-local databases
+> (also deliberately). Between two right decisions was a gap that made the
+> product non-functional — every salon signs up PENDING and only an admin can
+> approve one. Fixed with **`npm run create-admin <email> <password>`**.
+> **An admin now exists on production: `admin@glowplusmember.com`. Its password
+> is in the gitignored `.env` under `# PRODUCTION ADMIN` — move it to a password
+> manager and hand it to the client.**
+>
+> ⚠️ **[F69] — two ungated fetches**, both fixed. Every view is mounted from
+> first paint, so `ConsumerDashboard` and `BusinessPortal`'s `HoursPanel` called
+> protected routes for anonymous visitors and toasted *"Missing bearer token"* on
+> the landing page. **The gate belongs to the FETCH, not the hook** — a bare
+> `useEffect` calling a protected route from an always-mounted view needs one too.
+> Found by the user on the live site; **no local test could catch it**, because a
+> developer's browser always holds a token from an earlier sign-in.
 >
 > | | Live URL |
 > |---|---|

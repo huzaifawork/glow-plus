@@ -1412,7 +1412,28 @@ Vercel runs the backend **serverless**, a different model from a long-running No
 
 - [ ] **T61 — Production Stripe webhook endpoint** registered.
 - [ ] **T62 — Backups, monitoring, logging.**
-- [ ] **T63 — Full production smoke test.**
+- [x] **T63 — Full production smoke test.** ✅ **DONE 2026-08-26.** Driven against the **live** stack (`glow-plus-api.vercel.app` + Supabase), not a local one. **26 cases, every write path exercised, 22 rows written and then removed.**
+
+      ⚠️ **It found a hard production blocker on its second-to-last step — [F70], no way to create an admin.** Without it no salon could ever leave PENDING, so the product could not have functioned at all. That is the single strongest argument for having run this before handover rather than after.
+
+      | # | Case | Result |
+      |---|---|---|
+      | 1–2 | Consumer signup; duplicate | **201**; **409** |
+      | — | **Row at rest in Supabase** | `passwordHash` **bcrypt `$2b$12$`**; `phone` **AES-256-GCM** `v1:iv:ct:tag` (12 chars → 59); `phoneFingerprint` HMAC blind index; `emailVerifiedAt` NULL. **T31b's encryption-at-rest verified in production** |
+      | 3–5 | Login; `/me`; `/me` unauthenticated | token `exp-iat = 900s` (**15 min**, T47) with `iss`/`aud` (T30); **200**; **401** |
+      | 6–9 | Merchant signup, login, `/merchants/me`, public directory | **PENDING**, `foundingMember: true`, and **absent from the public list** (T48/[F47]) |
+      | 10–13 | Admin login → pending queue → approve → public | PENDING → **ACTIVE** → **appears in the directory**. *Only possible after [F70] was fixed* |
+      | 14–17 | Style, reward rule, 3 visits, `/me/rewards` | 30 points, reward `eligible: true` |
+      | 18–20 | Redeem; redeem again; salon's Redemptions tab | **201**; **400** *"Already redeemed at this milestone"* (T23/[F4]); visible with client name+email ([F60]) |
+      | 21–23 | Business hours; availability Monday; availability closed Sunday | 7 rows; slots from `13:00Z` (**salon timezone applied, not the server's**); **`[]`** |
+      | 24 | **[F64] — the write path must enforce opening hours** | Closed Sunday, 07:00 (pre-open), 09:07 (off-grid) and 21:00 (past close) **all 400**, each with its own accurate message |
+      | 25–26 | Valid slot; same slot twice | **201**; **400** *"just booked by someone else"* — the conflict check still runs first |
+
+      **Checked, not assumed:** `/me/rewards` returns `progress: 3, remaining: 3` at the moment a 3-visit reward unlocks, which reads wrong. It is **not** a defect — both clients gate on `eligible`, so `remaining` is never rendered at that moment (`ConsumerDashboard` shows the Redeem button instead; `RewardsPage` prints it only when `!eligible`).
+
+      **Cleanup:** all 22 rows removed, scoped to the two test identities rather than a blanket truncate. Final state: **`Admin` 1** (keep — it is the client's) and one admin refresh token. Founding spots back to **50/50**, public directory `[]`.
+
+      ⬜ **Not covered here:** the Stripe webhook, which needs a registered endpoint → **T57 / T61**. And the browser UI itself was only spot-checked; the API contract beneath it is what these 26 cases prove.
 
 # PHASE 9 — Testing, CI, legal
 
