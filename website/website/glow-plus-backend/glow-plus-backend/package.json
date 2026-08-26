@@ -16,7 +16,8 @@
     "seed": "ts-node prisma/seed.ts",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "create-admin": "ts-node scripts/create-admin.ts"
+    "create-admin": "ts-node scripts/create-admin.ts",
+    "backup": "ts-node scripts/backup.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",

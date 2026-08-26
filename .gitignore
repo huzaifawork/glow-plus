@@ -61,3 +61,6 @@ jest.setup.js
 jest.setup.js.map
 
 .vercel
+
+# T62 — logical backups: password hashes + encrypted PII. Never commit.
+backups/
