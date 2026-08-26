@@ -59,3 +59,5 @@ temp/
 # watch/build rather than into dist/. jest.setup.ts is one of them.
 jest.setup.js
 jest.setup.js.map
+
+.vercel

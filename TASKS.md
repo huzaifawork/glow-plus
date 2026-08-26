@@ -1270,7 +1270,47 @@ Vercel runs the backend **serverless**, a different model from a long-running No
       **Note on the `storage` schema:** its default ACLs still grant `anon`/`authenticated`, and that is **correct** — Supabase Storage is unused here and is governed by its own RLS policies on `storage.objects`. A first verification pass flagged it as a leak; the query was too broad, the schema is not in scope.
 
       Applied to production via the Supabase SQL Editor. The migration file is committed so the lockdown **travels with the repo** and re-applies itself when the client's project is stood up at handover — it is idempotent, so `migrate deploy` re-running it is harmless. Break-glass rollback is recorded in the migration's header comments.
-- [ ] **T53 — Deploy backend + website**, env vars in Vercel project settings.
+- [x] **T53 — Deploy backend + website.** ✅ **DONE & VERIFIED 2026-08-26.** Deployed to the **developer's** Vercel account (`huzaifas-projects-eabfae35`) for validation; re-deploy to the client's account at handover.
+      | Project | Root Directory | Live URL |
+      |---|---|---|
+      | `glow-plus-api` | `website/website/glow-plus-backend/glow-plus-backend` | **https://glow-plus-api.vercel.app** |
+      | `glow-plus-web` | `website/website/glow-plus-web` | **https://glow-plus-web-eight.vercel.app** |
+
+      ⚠️ **The website is `glow-plus-web-EIGHT.vercel.app`, not `glow-plus-web.vercel.app`.** That name was already taken by an unrelated project, so Vercel appended a suffix. **`glow-plus-web.vercel.app` belongs to someone else and also happens to be a "Glow+" SPA that returns 200 for every path** — which made a first round of checks look like they passed when they were hitting a stranger's site. Anything that hardcodes the site origin must use the `-eight` host. Confirmed ours by the bundle: it serves `main-DIa-ST0U.js` with `glow-plus-api.vercel.app/v1` inlined.
+
+      **16 env vars set on `glow-plus-api`** (values piped to the CLI's stdin, never argv, so nothing reached shell history). ⚠️ **`VITE_API_BASE_URL` on the web project cannot be stored as sensitive** — Vercel refuses a `VITE_`-prefixed secret because Vite **inlines it into the browser bundle**, so it is public by definition. `--no-sensitive` is correct; it is only a URL.
+
+      **Three deployment-specific failures, all fixed:**
+      1. **`No Output Directory named "public"`** — `framework: null` + a `buildCommand` makes Vercel expect static output, but this build emits only functions. Fixed with `outputDirectory: "public"` and a small `public/index.html`. Vercel checks the filesystem **before** rewrites, so `/` serves that page and every other path still falls through the catch-all to `/api`.
+      2. **`File size limit exceeded (100 MB)` — 130.6MB uploaded.** The shell's working directory had reverted to the **repo root**, so `vercel` deployed the whole repository including the **129MB `website.zip`**. ⚠️ **Vercel uses `.vercelignore`, NOT `.gitignore`** — the zip is git-ignored and was uploaded anyway. Added a root `.vercelignore`. It also created a stray project `joziilunga-attachments`, since deleted (it had **zero** deployments — the upload aborted before one was created, so nothing was ever published). **Always put the `cd` in the same command as the deploy.**
+      3. **`APP_URL`/`ALLOWED_ORIGINS` initially pointed at the wrong host** — they were set to the *predicted* `glow-plus-web.vercel.app` before the real name was known. Corrected to the `-eight` host; **Vercel requires a redeploy for env changes to take effect.**
+
+      **From the build log, and the reason `vercel-build` must keep running `prisma generate`:**
+      ```
+      npm warn allow-scripts  @prisma/client@5.22.0 (postinstall: node scripts/postinstall.js)
+      ```
+      Vercel did **not** run Prisma's postinstall. Without the explicit generate the client would be missing at runtime — the most common way Prisma-on-Vercel dies.
+
+      **Evidence — against the live deployment:**
+      | Check | Result |
+      |---|---|
+      | `GET /health` | **200** — ⭐ **settles T56's one open assumption: Vercel's catch-all rewrite DOES preserve the original `req.url`** |
+      | `GET /health/ready` | **200**, `database.status: "up"`, **`latencyMs: 19`** |
+      | **Latency vs local** | **1,798ms → 19ms.** T52 predicted exactly this: it was distance, not misconfiguration |
+      | `GET /v1/merchants` | **200** `[]` + `X-Total-Count: 0` |
+      | `GET /v1/merchants/founding-spots` | **200** `{"cap":50,"taken":0,"left":50}` |
+      | `POST /v1/auth/login`, wrong password | **401** `Invalid email or password` |
+      | `POST /v1/auth/login`, junk body | **400** with the `details[]` envelope — ValidationPipe live |
+      | Cron, no auth / wrong secret | **401**, identical message |
+      | Cron, real secret | **200** — `payout ok 27ms, expirePoints ok 14ms, reports skipped` (**1927ms/1436ms locally**) |
+      | Security headers | `nosniff`, `DENY`, HSTS, `no-referrer`; **`x-powered-by` absent** |
+      | Website `/` + all 8 standalone rewrites | **200** |
+      | Bundle contents | production API URL inlined, **zero `localhost`** |
+
+      ⬜ **Still on test Stripe keys (`sk_test_`)** — deliberate. Live keys are **T61**, on the client's say-so.
+- [x] **T59 — Replace all localhost URLs/origins with production values.** ✅ **DONE 2026-08-26.** Turned out to be **purely env-var work**: a sweep of `src/` found no hardcoded localhost that survives production — every hit is a comment, `env.validation`'s own detection logic, or an `?? 'http://localhost:3000'` fallback that `env.validation` **refuses to boot with** in production (it names all three problems at once: `APP_URL`, `ALLOWED_ORIGINS`, `TRUST_PROXY_HEADER`).
+      Set on `glow-plus-api`: `APP_URL` and `ALLOWED_ORIGINS` → `https://glow-plus-web-eight.vercel.app`, and **`TRUST_PROXY_HEADER=1`** — without it every request behind Vercel's proxy looks like one IP and the rate limiter throttles all visitors as a single client.
+      **CORS verified live, in all three directions:** the real frontend origin is echoed back; **a stranger's origin gets no `Access-Control-Allow-Origin` at all**; and the `OPTIONS` preflight for `POST /v1/auth/login` returns **204** with the correct methods and headers. `X-Total-Count` is exposed exactly once, globally [F46].
 - [x] **T54 — Convert all 4 cron jobs to Vercel Cron.** ✅ **DONE & VERIFIED 2026-08-26.** `@Cron()` sets an **in-process timer**, which needs a process still alive when it expires — and a serverless function is alive only while serving a request. On Vercel the timers would be registered and the container frozen seconds later, so **not one job would ever have run**: no error, no log, nothing to notice. That silently kills **T19** (trial reminders) and **T25** (point expiry).
 
       **New:** `src/modules/cron/` — `cron.controller.ts`, `cron.service.ts`, `cron.guard.ts`, `cron.module.ts`.

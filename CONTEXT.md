@@ -133,19 +133,41 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **Phases 5–7 DONE. In PHASE 8 (deployment); T52, T52b, T56 done — next is T54.**
+## 8. EXACTLY where to resume — **THE APP IS LIVE. Phase 8: T57, T58, T61, T62, T63 remain.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
 >
-> ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. T52b + T56 done.**
+> ## 🚀 SESSION 29 (2026-08-26) — **PRODUCTION DAY. THE APP IS DEPLOYED AND LIVE.**
 >
-> **State: 56 of 65 done.** PHASE 7 CLOSED. **PHASE 8 UNDERWAY: T52 ✅ T52b ✅
-> T54 ✅ T55 ✅ T56 ✅ T60 ✅.** Backend suite **459 passing, 29 suites**.
-> **Remaining in Phase 8: T53, T57, T58, T59, T61, T62, T63.**
+> **State: 58 of 65 done — THE APP IS LIVE.** PHASE 7 CLOSED. **PHASE 8: T52 ✅
+> T52b ✅ T53 ✅ T54 ✅ T55 ✅ T56 ✅ T59 ✅ T60 ✅.**
+> Backend suite **459 passing, 29 suites**.
+> **Remaining in Phase 8: T57, T58, T61, T62, T63.**
 >
-> **[T55] needed no work** — T52's pooled connection string already was it, and
-> `PrismaService` has no `enableShutdownHooks`/`beforeExit`, the pattern that
-> misbehaves on serverless. **T59 is purely env-var work** (no hardcoded
+> | | Live URL |
+> |---|---|
+> | **API** | **https://glow-plus-api.vercel.app** |
+> | **Website** | **https://glow-plus-web-eight.vercel.app** |
+>
+> ⚠️ **The website host is `glow-plus-web-EIGHT`.** The plain
+> `glow-plus-web.vercel.app` was taken and belongs to **an unrelated "Glow+" SPA
+> that returns 200 for every path** — which made one round of checks look green
+> while hitting a stranger's site. Never hardcode the un-suffixed host.
+>
+> ⚠️ **Deployed to the DEVELOPER's Vercel account** (`huzaifas-projects-eabfae35`)
+> for validation. **Re-deploy to the client's account at handover**, alongside
+> the Supabase project transfer. Stripe is still on **`sk_test_`** — live keys
+> are **T61**, on the client's say-so.
+>
+> ⚠️ **Always put the `cd` in the SAME command as `vercel --prod`.** A deploy run
+> from the repo root uploaded **130MB** (the git-ignored 129MB `website.zip` —
+> **Vercel honours `.vercelignore`, NOT `.gitignore`**) and created a stray
+> project. A root `.vercelignore` now exists, but the directory is the real fix.
+>
+> **[T53] settled T56's one open assumption:** Vercel's catch-all rewrite **does**
+> preserve the original `req.url`, so every route resolves. And **T52's latency
+> prediction was right** — `/health/ready` went **1,798ms → 19ms** once the
+> function and database sat in the same region.
 > localhost survives in `src/`), so it happens *inside* T53. **T57 and T58 can
 > only be done after a live URL exists.**
 >

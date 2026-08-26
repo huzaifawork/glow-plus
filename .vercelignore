@@ -1,0 +1,15 @@
+# Nothing in this repository ROOT is ever a Vercel deployment source. The two
+# real projects are deployed from their own directories:
+#
+#   website/website/glow-plus-backend/glow-plus-backend  -> glow-plus-api
+#   website/website/glow-plus-web                        -> glow-plus-web
+#
+# This file exists because running `vercel` from the root once uploaded 130MB
+# and failed on the 100MB limit: Vercel uses .vercelignore, NOT .gitignore, so
+# the 129MB `website.zip` was sent even though git ignores it. Deploying from
+# the wrong directory is now cheap to notice instead of a two-minute upload.
+*.zip
+node_modules
+dist
+.env
+.env.*
