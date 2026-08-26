@@ -1,28 +1,36 @@
 /**
- * Admin team management — T77.
+ * Admin team — T77.
  *
- * **Why this exists.** Until now the only ways to obtain an admin account were
- * a CLI script and a hand-written SQL INSERT, both needing production database
- * credentials. That made the client permanently dependent on a developer for
- * something they will genuinely need — a second administrator, or a
- * replacement for one who has left — and the fallback advice was to hand a
- * business owner a SQL console pointed at their live database.
+ * **Scope, and why it is this narrow.** There is exactly one way to gain an
+ * admin account through this panel: promoting an existing customer. Creating
+ * an admin outright, and removing one, are deliberately NOT here — they remain
+ * operator actions done in Supabase or via `scripts/create-admin.ts`.
  *
- * Adding and removing admins is owner-only on the server
- * (RequireAdminOwnerGuard). A plain ADMIN is shown the explanation rather than
- * a blank space, because a missing button is indistinguishable from a bug.
+ * That is a deliberate limit on blast radius, not an oversight. A web form
+ * that mints platform administrators is reachable by anything that can reach a
+ * logged-in owner's browser; a SQL console is reachable only by someone
+ * holding database credentials. Keeping the count of ways to mint an admin as
+ * low as possible is worth more than the convenience of a second one.
  *
- * Changing your own password is the exception and is open to every admin.
- * Before T77 nobody could: `forgot-password` only ever looked up User and
- * Merchant, and answered `{ ok: true }` regardless — so an admin who lost
- * their password waited for an email that was never going to arrive.
+ * Promotion earns its place because it is the only path that never creates a
+ * credential: the server reuses the customer's existing password hash, so the
+ * new admin signs in with the password they already have. Nobody invents a
+ * password and nobody has to transmit one — which is how this project's other
+ * credentials ended up in a chat log.
+ *
+ * Promotion is owner-only on the server (RequireAdminOwnerGuard). A plain
+ * ADMIN is shown the explanation rather than a blank space, because a missing
+ * button is indistinguishable from a bug.
+ *
+ * Changing your own password is open to every admin. Before T77 nobody could:
+ * `forgot-password` only ever looked up User and Merchant, and answered
+ * `{ ok: true }` regardless — so an admin who lost their password waited for
+ * an email that was never going to arrive.
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
   ApiError,
   changeAdminPassword,
-  createAdmin,
-  deleteAdmin,
   getAdminProfile,
   listAdmins,
   listUsersForPromotion,
@@ -34,7 +42,6 @@ export default function AdminTeam() {
   const [admins, setAdmins] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [busyId, setBusyId] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -65,21 +72,6 @@ export default function AdminTeam() {
 
   const isOwner = me?.role === 'OWNER';
 
-  async function remove(id, email) {
-    if (!window.confirm(`Remove admin access for ${email}? Their sessions end immediately.`)) return;
-    setBusyId(id);
-    setNotice(null);
-    try {
-      await deleteAdmin(id);
-      setNotice(`${email} is no longer an admin.`);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not remove that admin.');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   return (
     <div className="card">
       <h2>Admin team</h2>
@@ -89,8 +81,8 @@ export default function AdminTeam() {
 
       {error === 'owner-only' ? (
         <p className="muted">
-          Only an <strong>owner</strong> can add or remove admins. You can still change your
-          own password below.
+          Only an <strong>owner</strong> can promote customers to admin. You can still change
+          your own password below.
         </p>
       ) : admins === null ? (
         <p className="muted">Loading…</p>
@@ -101,28 +93,17 @@ export default function AdminTeam() {
               <th>Email</th>
               <th>Role</th>
               <th>Added</th>
-              <th />
             </tr>
           </thead>
           <tbody>
             {admins.map((a) => (
               <tr key={a.id}>
-                <td>{a.email}</td>
+                <td>
+                  {a.email}
+                  {a.id === me?.id && <span className="muted"> (you)</span>}
+                </td>
                 <td>{a.role === 'OWNER' ? 'Owner' : 'Admin'}</td>
                 <td>{new Date(a.createdAt).toLocaleDateString()}</td>
-                <td>
-                  {a.id === me?.id ? (
-                    <span className="muted">you</span>
-                  ) : isOwner ? (
-                    <button
-                      className="btn btn-quiet btn-small"
-                      disabled={busyId === a.id}
-                      onClick={() => remove(a.id, a.email)}
-                    >
-                      {busyId === a.id ? 'Removing…' : 'Remove'}
-                    </button>
-                  ) : null}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -137,27 +118,19 @@ export default function AdminTeam() {
           }}
         />
       )}
-      {isOwner && (
-        <CreateAdminForm
-          onDone={(msg) => {
-            setNotice(msg);
-            refresh();
-          }}
-        />
-      )}
       <ChangeMyPassword />
     </div>
   );
 }
 
 /**
- * Promote an existing customer.
+ * Promote an existing customer to admin.
  *
- * Preferred over "add a new admin" wherever it applies, because no password is
- * invented here and none is transmitted: the server copies the customer's
- * existing hash, so they sign in with the password they already use. Every
- * other route to granting admin access ends with someone sending a credential
- * over a chat app, which is precisely how this project's other keys leaked.
+ * No password is invented here and none is transmitted: the server copies the
+ * customer's existing hash, so they sign in with the password they already
+ * use. The customer's own account is left intact — being an admin does not
+ * stop someone being a customer, and their visits, bookings and points stay
+ * attached to it.
  */
 function PromoteCustomer({ onDone }) {
   const [q, setQ] = useState('');
@@ -196,7 +169,7 @@ function PromoteCustomer({ onDone }) {
 
   return (
     <div className="subsection">
-      <h3>Promote a customer</h3>
+      <h3>Promote a customer to admin</h3>
       <p className="muted">They keep their existing password — nothing is generated or sent to them.</p>
       <form onSubmit={search}>
         <input
@@ -223,66 +196,6 @@ function PromoteCustomer({ onDone }) {
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-/** Create an admin who has no existing customer account. */
-function CreateAdminForm({ onDone }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('ADMIN');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  async function submit(e) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    const normalised = email.trim().toLowerCase();
-    try {
-      await createAdmin(normalised, password, role);
-      onDone(`${normalised} can now sign in to this panel.`);
-      setEmail('');
-      setPassword('');
-      setRole('ADMIN');
-    } catch (e2) {
-      setErr(e2 instanceof ApiError ? e2.message : 'Could not create that admin.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="subsection">
-      <h3>Add a new admin</h3>
-      <form onSubmit={submit}>
-        <label>
-          Email
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        <label>
-          Role
-          <select value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="ADMIN">Admin — approve and suspend salons</option>
-            <option value="OWNER">Owner — can also manage the admin team</option>
-          </select>
-        </label>
-        {err && <p className="err" role="alert">{err}</p>}
-        <button className="btn" disabled={busy}>
-          {busy ? 'Creating…' : 'Create admin'}
-        </button>
-      </form>
     </div>
   );
 }

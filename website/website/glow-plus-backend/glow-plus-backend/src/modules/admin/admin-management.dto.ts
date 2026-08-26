@@ -2,33 +2,6 @@ import { IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class
 import { MAX_EMAIL, MAX_PASSWORD, MIN_PASSWORD } from '../../common/limits';
 
 /**
- * Create a brand-new admin account from the panel  (T77)
- *
- * The password floor is the API's own `MIN_PASSWORD`, not a stricter one
- * invented here: an admin password held to a weaker standard than a customer's
- * would be backwards, and a stricter one that only exists on this route is a
- * rule nobody can discover until it rejects them.
- */
-export class CreateAdminDto {
-  @IsEmail()
-  @MaxLength(MAX_EMAIL)
-  email!: string;
-
-  @IsString()
-  @MinLength(MIN_PASSWORD)
-  @MaxLength(MAX_PASSWORD)
-  password!: string;
-
-  /**
-   * Omitted means ADMIN. An OWNER has to be asked for explicitly — the same
-   * reasoning as the column default in schema.prisma.
-   */
-  @IsOptional()
-  @IsIn(['OWNER', 'ADMIN'])
-  role?: 'OWNER' | 'ADMIN';
-}
-
-/**
  * Promote an existing customer to admin  (T77)
  *
  * Takes only the user's id. There is deliberately no password field: the new

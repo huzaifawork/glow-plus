@@ -1,12 +1,13 @@
 /**
  * Tests for admin team management (T77)
  *
- * Covers the refusals that keep the platform recoverable — you cannot delete
- * yourself, and you cannot delete the last owner — plus the two properties
- * that make promotion safe: the customer's existing hash is reused rather than
- * a new password being invented, and no passwordHash is ever selected back out.
+ * Promotion is the ONLY way to gain an admin account through the API — creating
+ * one outright is deliberately not exposed, and remains a Supabase/CLI action.
+ * These cover the two properties that make promotion safe: the customer's
+ * existing hash is reused rather than a new password being invented, and no
+ * passwordHash is ever selected back out.
  */
-import { BadRequestException, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -35,43 +36,6 @@ function makeService(prisma: any) {
 }
 
 describe('AdminService — team management (T77)', () => {
-  describe('createAdmin', () => {
-    it('refuses a duplicate email before spending bcrypt on it', async () => {
-      const prisma = makePrisma();
-      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_1' });
-      await expect(
-        makeService(prisma).createAdmin({ email: 'x@y.com', password: 'password123' }),
-      ).rejects.toThrow(ConflictException);
-      expect(prisma.admin.create).not.toHaveBeenCalled();
-    });
-
-    it('lowercases the email — login is case-sensitive, so a capital would create an unreachable account', async () => {
-      const prisma = makePrisma();
-      await makeService(prisma).createAdmin({ email: '  Mixed@Case.COM ', password: 'password123' });
-      expect((prisma.admin.create as jest.Mock).mock.calls[0][0].data.email).toBe('mixed@case.com');
-    });
-
-    it('stores a bcrypt hash, never the password', async () => {
-      const prisma = makePrisma();
-      await makeService(prisma).createAdmin({ email: 'x@y.com', password: 'password123' });
-      const { passwordHash } = (prisma.admin.create as jest.Mock).mock.calls[0][0].data;
-      expect(passwordHash).not.toBe('password123');
-      expect(await bcrypt.compare('password123', passwordHash)).toBe(true);
-    });
-
-    it('defaults to the WEAKER role when none is asked for', async () => {
-      const prisma = makePrisma();
-      await makeService(prisma).createAdmin({ email: 'x@y.com', password: 'password123' });
-      expect((prisma.admin.create as jest.Mock).mock.calls[0][0].data.role).toBe('ADMIN');
-    });
-
-    it('honours an explicit OWNER', async () => {
-      const prisma = makePrisma();
-      await makeService(prisma).createAdmin({ email: 'x@y.com', password: 'password123', role: 'OWNER' });
-      expect((prisma.admin.create as jest.Mock).mock.calls[0][0].data.role).toBe('OWNER');
-    });
-  });
-
   describe('promoteUser', () => {
     it('reuses the customer’s existing hash — no password is generated or transmitted', async () => {
       const prisma = makePrisma();
@@ -103,52 +67,6 @@ describe('AdminService — team management (T77)', () => {
       (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_1' });
       await expect(makeService(prisma).promoteUser({ userId: 'u_1' })).rejects.toThrow(
         ConflictException,
-      );
-    });
-  });
-
-  describe('deleteAdmin', () => {
-    it('refuses self-deletion — the likeliest way to lock a platform out', async () => {
-      const prisma = makePrisma();
-      await expect(makeService(prisma).deleteAdmin('a_1', 'a_1')).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('refuses to delete the LAST owner, which would make admin access ungrantable forever', async () => {
-      const prisma = makePrisma();
-      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_2', role: 'OWNER' });
-      (prisma.admin.count as jest.Mock).mockResolvedValue(1);
-      await expect(makeService(prisma).deleteAdmin('a_2', 'a_1')).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(prisma.$transaction).not.toHaveBeenCalled();
-    });
-
-    it('allows deleting an owner when another owner remains', async () => {
-      const prisma = makePrisma();
-      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_2', role: 'OWNER' });
-      (prisma.admin.count as jest.Mock).mockResolvedValue(2);
-      await expect(makeService(prisma).deleteAdmin('a_2', 'a_1')).resolves.toEqual({ ok: true });
-      expect(prisma.$transaction).toHaveBeenCalled();
-    });
-
-    it('revokes their refresh tokens in the SAME transaction as the delete', async () => {
-      const prisma = makePrisma();
-      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id: 'a_2', role: 'ADMIN' });
-      await makeService(prisma).deleteAdmin('a_2', 'a_1');
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { accountId: 'a_2', accountType: 'ADMIN', revokedAt: null },
-        }),
-      );
-      expect(prisma.$transaction).toHaveBeenCalled();
-    });
-
-    it('404s on an unknown admin', async () => {
-      const prisma = makePrisma();
-      await expect(makeService(prisma).deleteAdmin('nope', 'a_1')).rejects.toThrow(
-        NotFoundException,
       );
     });
   });

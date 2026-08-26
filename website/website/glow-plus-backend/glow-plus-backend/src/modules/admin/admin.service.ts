@@ -1,8 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
-import { ChangeAdminPasswordDto, CreateAdminDto, PromoteUserDto } from './admin-management.dto';
+import { ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
 
 /** T77 — the same cost the auth services and create-admin.ts use. An admin hash weaker than a customer's would be exactly backwards. */
 const SALT_ROUNDS = 12;
@@ -147,22 +147,6 @@ export class AdminService {
     });
   }
 
-  /** Create a fresh admin account that is not tied to an existing customer. */
-  async createAdmin(dto: CreateAdminDto) {
-    const email = dto.email.trim().toLowerCase();
-
-    // Checked before hashing: bcrypt at cost 12 is ~250ms of deliberate work,
-    // and there is no reason to spend it on a request that cannot succeed.
-    const clash = await this.prisma.admin.findUnique({ where: { email } });
-    if (clash) throw new ConflictException('An admin with that email already exists');
-
-    const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    return this.prisma.admin.create({
-      data: { email, passwordHash, role: dto.role ?? 'ADMIN' },
-      select: ADMIN_SELECT,
-    });
-  }
-
   /**
    * Promote an existing customer to admin.
    *
@@ -195,53 +179,6 @@ export class AdminService {
       },
       select: ADMIN_SELECT,
     });
-  }
-
-  /**
-   * Delete an admin, and revoke their sessions in the same transaction.
-   *
-   * Two refusals, both of which exist to prevent an unrecoverable state:
-   *
-   *  - **Not yourself.** An owner deleting their own account mid-session is
-   *    the single likeliest way to lock a platform out, and it reads as a
-   *    misclick far more often than as an intention.
-   *  - **Not the last owner.** Creating an owner requires being one, so a
-   *    platform with zero owners can never grant admin access again without
-   *    dropping back to raw SQL — the exact dependency T77 removes.
-   */
-  async deleteAdmin(targetId: string, callerId: string) {
-    if (targetId === callerId) {
-      throw new BadRequestException('You cannot delete your own admin account');
-    }
-
-    const target = await this.prisma.admin.findUnique({
-      where: { id: targetId },
-      select: { id: true, role: true },
-    });
-    if (!target) throw new NotFoundException('Admin not found');
-
-    if (target.role === 'OWNER') {
-      const owners = await this.prisma.admin.count({ where: { role: 'OWNER' } });
-      if (owners <= 1) {
-        throw new BadRequestException(
-          'This is the last owner account — promote another owner before deleting it',
-        );
-      }
-    }
-
-    // Their access token stays syntactically valid until it expires; the
-    // refresh tokens are what would otherwise let a deleted admin keep
-    // renewing a session indefinitely. RequireAdminOwnerGuard also fails
-    // closed on a missing row, so the two together close both halves.
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.updateMany({
-        where: { accountId: targetId, accountType: 'ADMIN', revokedAt: null },
-        data: { revokedAt: new Date() },
-      }),
-      this.prisma.admin.delete({ where: { id: targetId } }),
-    ]);
-
-    return { ok: true };
   }
 
   /**

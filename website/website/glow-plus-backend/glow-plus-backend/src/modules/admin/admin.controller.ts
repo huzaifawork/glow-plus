@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -7,7 +7,7 @@ import { AdminMerchantsQueryDto } from './merchants-query.dto';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
 import { AuthedRequest } from '../../middleware/auth.middleware';
 import { RequireAdminOwnerGuard } from '../../common/guards/require-admin-owner.guard';
-import { ChangeAdminPasswordDto, CreateAdminDto, PromoteUserDto } from './admin-management.dto';
+import { ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -118,27 +118,11 @@ export class AdminController {
     return this.admin.listUsers(q);
   }
 
-  @ThrottleCredentials()
-  @UseGuards(RequireAdminOwnerGuard)
-  @Post('admins')
-  createAdmin(@Body() dto: CreateAdminDto) {
-    return this.admin.createAdmin(dto);
-  }
-
   /** Promote an existing customer; reuses their password, never issues one. */
   @UseGuards(RequireAdminOwnerGuard)
   @Post('admins/promote')
   promoteUser(@Body() dto: PromoteUserDto) {
     return this.admin.promoteUser(dto);
-  }
-
-  @UseGuards(RequireAdminOwnerGuard)
-  @Delete('admins/:id')
-  deleteAdmin(@Param('id') id: string, @Req() req: AuthedRequest) {
-    // The caller's own id comes from the token, never from the body — this is
-    // what makes the "cannot delete yourself" check meaningful rather than
-    // something the client could simply lie about.
-    return this.admin.deleteAdmin(id, req.accountId!);
   }
 
   /**

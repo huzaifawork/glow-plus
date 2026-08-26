@@ -604,15 +604,6 @@ export function listUsersForPromotion(q) {
   return apiRequest(`/admin/users${qs}`, { tokenKey: ADMIN_TOKEN_KEY });
 }
 
-/** Create an admin that isn't tied to an existing customer account. */
-export function createAdmin(email, password, role) {
-  return apiRequest('/admin/admins', {
-    method: 'POST',
-    tokenKey: ADMIN_TOKEN_KEY,
-    body: { email, password, role },
-  });
-}
-
 /**
  * Promote a customer. Deliberately sends no password: the server reuses the
  * user's existing hash, so they sign in here with the password they already
@@ -623,13 +614,6 @@ export function promoteUserToAdmin(userId, role) {
     method: 'POST',
     tokenKey: ADMIN_TOKEN_KEY,
     body: { userId, role },
-  });
-}
-
-export function deleteAdmin(id) {
-  return apiRequest(`/admin/admins/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    tokenKey: ADMIN_TOKEN_KEY,
   });
 }
 
