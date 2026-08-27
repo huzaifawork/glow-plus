@@ -65,3 +65,16 @@ export class ChangeAdminEmailDto {
   @MaxLength(MAX_EMAIL)
   newEmail!: string;
 }
+
+/**
+ * Change an admin's tier  (T80)
+ *
+ * Only the two admin tiers. Revoking access entirely is DELETE, not a role of
+ * "CONSUMER" here — the two do different things (one edits an admin, one ends
+ * one) and collapsing them into a single field is how a caller ends up
+ * deleting an account it meant to demote.
+ */
+export class SetAdminRoleDto {
+  @IsIn(['OWNER', 'ADMIN'])
+  role!: 'OWNER' | 'ADMIN';
+}

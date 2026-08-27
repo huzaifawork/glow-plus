@@ -617,6 +617,33 @@ export function promoteUserToAdmin(userId, role) {
   });
 }
 
+/**
+ * Change an admin's tier — T80. Owner-only.
+ *
+ * The caller's own id is taken from the token server-side, never sent, which
+ * is what makes "you cannot demote yourself" enforceable rather than advisory.
+ */
+export function setAdminRole(id, role) {
+  return apiRequest(`/admin/admins/${encodeURIComponent(id)}/role`, {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { role },
+  });
+}
+
+/**
+ * Revoke admin access entirely — T80. Owner-only.
+ *
+ * A promoted customer keeps their customer account, points and bookings; only
+ * the admin half is removed. A standalone admin row is deleted outright.
+ */
+export function removeAdmin(id) {
+  return apiRequest(`/admin/admins/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    tokenKey: ADMIN_TOKEN_KEY,
+  });
+}
+
 /** Change your own admin password. Revokes your other sessions server-side. */
 export function changeAdminPassword(currentPassword, newPassword) {
   return apiRequest('/admin/me/password', {

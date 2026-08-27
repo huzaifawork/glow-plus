@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantLoginDto } from './login.dto';
@@ -15,6 +15,27 @@ export class MerchantAuthService {
     const merchant = await this.prisma.merchant.findUnique({ where: { email: dto.email } });
     if (!merchant || !(await bcrypt.compare(dto.password, merchant.passwordHash))) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // T81 — an unverified address cannot sign in.
+    //
+    // Checked AFTER the password, never before: answering "verify your email"
+    // to a wrong password would confirm that the address has an account here,
+    // turning the login form into an account-existence oracle. The generic
+    // "Invalid email or password" has to stay the only reply to bad
+    // credentials.
+    //
+    // 403 rather than 401 on purpose. The credentials were RIGHT; the account
+    // is simply not usable yet. A 401 would be indistinguishable from a bad
+    // password to any client, and `lib/api.js` discards the session on 401 —
+    // which is meaningless here, since no session was ever issued.
+    //
+    // Signup sends the link and POST /auth/resend-verification issues another,
+    // so this is a door with a key, not a wall.
+    if (!merchant.emailVerifiedAt) {
+      throw new ForbiddenException(
+        'Please verify your email address before signing in. We sent you a link when you signed up — check your inbox, or request a new one.',
+      );
     }
 
     // T47 — additive beside `token`, which keeps its name and position.

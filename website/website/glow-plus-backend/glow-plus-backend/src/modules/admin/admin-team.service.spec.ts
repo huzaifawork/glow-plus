@@ -7,7 +7,12 @@
  * existing hash is reused rather than a new password being invented, and no
  * passwordHash is ever selected back out.
  */
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -35,8 +40,9 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
   return prisma as unknown as PrismaService & typeof prisma;
 }
 
-function makeService(prisma: any) {
-  return new AdminService(prisma, {} as MerchantsService);
+/** The third dependency is only reached on an email change; a stub suffices. */
+function makeService(prisma: any, emailVerification: any = { sendVerificationEmail: jest.fn() }) {
+  return new AdminService(prisma, {} as MerchantsService, emailVerification);
 }
 
 describe('AdminService — team management (T77)', () => {
@@ -290,4 +296,114 @@ describe('AdminService — team management (T77)', () => {
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // T80 — demoting and removing
+  // -------------------------------------------------------------------------
+  describe('setAdminRole / removeAdmin', () => {
+    function withAdmin(prisma: any, role: string, linked: boolean, id = 'a_2') {
+      (prisma.admin.findUnique as jest.Mock).mockResolvedValue({ id, email: 'x@y.com', role });
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(linked ? { id: 'u_2' } : null);
+    }
+
+    it('demotes a PROMOTED admin by writing User.role — the trigger updates the Admin row', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'OWNER', true);
+      await makeService(prisma).setAdminRole('a_2', 'a_1', 'ADMIN');
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u_2' }, data: { role: 'ADMIN' } });
+      expect(prisma.admin.update).not.toHaveBeenCalled();
+    });
+
+    it('demotes a STANDALONE admin directly — no User row means no trigger will fire', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'OWNER', false);
+      await makeService(prisma).setAdminRole('a_2', 'a_1', 'ADMIN');
+      expect(prisma.admin.update).toHaveBeenCalledWith({ where: { id: 'a_2' }, data: { role: 'ADMIN' } });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to demote yourself', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'OWNER', true, 'a_1');
+      await expect(makeService(prisma).setAdminRole('a_1', 'a_1', 'ADMIN')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('refuses to demote the LAST owner — nobody could grant admin access again', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'OWNER', true);
+      (prisma.admin.count as jest.Mock).mockResolvedValue(1);
+      await expect(makeService(prisma).setAdminRole('a_2', 'a_1', 'ADMIN')).rejects.toThrow(
+        /last owner/,
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('allows demoting an owner while another owner remains', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'OWNER', true);
+      (prisma.admin.count as jest.Mock).mockResolvedValue(2);
+      await makeService(prisma).setAdminRole('a_2', 'a_1', 'ADMIN');
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('refuses a no-op role change', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'ADMIN', true);
+      await expect(makeService(prisma).setAdminRole('a_2', 'a_1', 'ADMIN')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('removing a PROMOTED admin keeps the customer account — only role goes back to CONSUMER', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'ADMIN', true);
+      const res = await makeService(prisma).removeAdmin('a_2', 'a_1');
+      expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'u_2' }, data: { role: 'CONSUMER' } });
+      expect(prisma.admin.delete).not.toHaveBeenCalled();
+      expect(res.keptCustomerAccount).toBe(true);
+    });
+
+    it('removing a STANDALONE admin deletes the row — the trigger does not reach it', async () => {
+      const prisma = makePrisma();
+      withAdmin(prisma, 'ADMIN', false);
+      const res = await makeService(prisma).removeAdmin('a_2', 'a_1');
+      expect(prisma.admin.delete).toHaveBeenCalledWith({ where: { id: 'a_2' } });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(res.keptCustomerAccount).toBe(false);
+    });
+
+    it('revokes their sessions in the same transaction, both paths', async () => {
+      for (const linked of [true, false]) {
+        const prisma = makePrisma();
+        withAdmin(prisma, 'ADMIN', linked);
+        await makeService(prisma).removeAdmin('a_2', 'a_1');
+        expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { accountId: 'a_2', accountType: 'ADMIN', revokedAt: null },
+          }),
+        );
+        expect(prisma.$transaction).toHaveBeenCalled();
+      }
+    });
+
+    it('refuses to remove yourself, and refuses to remove the last owner', async () => {
+      const p1 = makePrisma();
+      withAdmin(p1, 'ADMIN', true, 'a_1');
+      await expect(makeService(p1).removeAdmin('a_1', 'a_1')).rejects.toThrow(BadRequestException);
+
+      const p2 = makePrisma();
+      withAdmin(p2, 'OWNER', true);
+      (p2.admin.count as jest.Mock).mockResolvedValue(1);
+      await expect(makeService(p2).removeAdmin('a_2', 'a_1')).rejects.toThrow(/last owner/);
+    });
+
+    it('404s on an admin that does not exist', async () => {
+      const prisma = makePrisma();
+      (prisma.admin.findUnique as jest.Mock).mockResolvedValue(null);
+      await expect(makeService(prisma).removeAdmin('nope', 'a_1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
 });

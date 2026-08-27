@@ -1,7 +1,14 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
+import { EmailVerificationService } from '../auth/email-verification.service';
 import { ChangeAdminEmailDto, ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
 
 /** T77 — the same cost the auth services and create-admin.ts use. An admin hash weaker than a customer's would be exactly backwards. */
@@ -15,6 +22,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly merchants: MerchantsService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   /**
@@ -261,9 +269,16 @@ export class AdminService {
    * So the two updates go in one transaction.
    *
    * `emailVerifiedAt` is cleared on the customer row: the old verification
-   * attested to the old address and says nothing about the new one. Nothing
-   * gates login on it (`loginConsumer` does not check it), so this costs the
-   * account no access — it just puts the "verify your email" prompt back.
+   * attested to the old address and says nothing about the new one.
+   *
+   * ⚠️ T81 changed what that costs. Login now REFUSES an unverified address,
+   * so clearing this locks the person out of their customer account until they
+   * confirm the new one — it is no longer the free "prompt reappears" it was
+   * when T79 was written. A fresh verification email is therefore sent below,
+   * or an admin renaming themselves would be stranded with no link to click
+   * and no indication that one was needed. The admin console itself is
+   * unaffected: `AdminAuthService.login` has no verification check, because
+   * the Admin table has no such column.
    *
    * Sessions are deliberately NOT revoked, unlike a password change. Tokens
    * carry the account id, so nothing about them depends on the address, and
@@ -336,8 +351,148 @@ export class AdminService {
       throw err;
     }
 
+    // T81 — send the link for the address we just cleared.
+    //
+    // Outside the transaction and swallowed on failure: the rename has already
+    // committed, and an email provider having a bad minute must not surface as
+    // "changing your email failed" when it did not. POST /auth/resend-
+    // verification issues another, so a lost mail is recoverable.
+    if (linkedUser) {
+      try {
+        await this.emailVerification.sendVerificationEmail(linkedUser.id, 'CONSUMER', newEmail);
+      } catch {
+        /* recoverable via resend-verification */
+      }
+    }
+
     // The new address goes back so the console can relabel itself — its header
     // shows the signed-in admin's email, and it was captured at login.
     return { ok: true, email: newEmail };
+  }
+
+  // -------------------------------------------------------------------------
+  // Demoting and removing admins  (T80)
+  //
+  // T77 gave an owner a way to grant admin access and no way to take it back,
+  // which is only half a control: the answer to "someone left" was a database
+  // console, the very thing T77 existed to stop needing.
+  //
+  // Both operations write `User.role` where a customer account exists and let
+  // `user_role_sync_admin` (migration 20260827020000) update the Admin row, so
+  // they are the same gesture as the Supabase dropdown. A STANDALONE admin —
+  // one created by `scripts/create-admin.ts` or inserted by hand, with no
+  // matching User — is outside the trigger's reach entirely and is written
+  // directly. Missing that second case is how you get a "removed" admin who
+  // can still sign in.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Look up an admin and the customer account it is linked to, if any.
+   *
+   * Admin and User are joined by **email only** — that is what the trigger
+   * joins on — so this is the one place that decides which of the two writes
+   * below applies.
+   */
+  private async adminWithLink(targetId: string) {
+    const target = await this.prisma.admin.findUnique({
+      where: { id: targetId },
+      select: { id: true, email: true, role: true },
+    });
+    if (!target) throw new NotFoundException('Admin not found');
+
+    const linkedUser = await this.prisma.user.findUnique({
+      where: { email: target.email },
+      select: { id: true },
+    });
+    return { target, linkedUser };
+  }
+
+  /**
+   * Refuse the two changes that cannot be undone from inside the product.
+   *
+   *  - **Not yourself.** Demoting or deleting the account you are signed in as
+   *    reads as a misclick far more often than an intention, and it takes
+   *    effect immediately — RequireAdminOwnerGuard reads the role from the
+   *    database on every request, so the next click is already refused.
+   *  - **Not the last owner.** Only an owner can create an owner, so a
+   *    platform with zero owners can never grant admin access again without
+   *    dropping back to raw SQL. That is precisely the dependency T77 removed.
+   */
+  private async assertNotSelfOrLastOwner(
+    target: { id: string; role: string },
+    callerId: string,
+    verb: string,
+  ) {
+    if (target.id === callerId) {
+      throw new BadRequestException(`You cannot ${verb} your own admin account`);
+    }
+    if (target.role === 'OWNER') {
+      const owners = await this.prisma.admin.count({ where: { role: 'OWNER' } });
+      if (owners <= 1) {
+        throw new BadRequestException(
+          'This is the last owner account — make someone else an owner first',
+        );
+      }
+    }
+  }
+
+  /** Change an admin's tier: OWNER <-> ADMIN. Owner-only. */
+  async setAdminRole(targetId: string, callerId: string, role: 'OWNER' | 'ADMIN') {
+    const { target, linkedUser } = await this.adminWithLink(targetId);
+
+    if (target.role === role) {
+      throw new ConflictException(`That account is already ${role === 'OWNER' ? 'an owner' : 'an admin'}`);
+    }
+    // Only a demotion can strand the platform; promoting to OWNER cannot.
+    if (role !== 'OWNER') {
+      await this.assertNotSelfOrLastOwner(target, callerId, 'demote');
+    } else if (target.id === callerId) {
+      throw new BadRequestException('You cannot change your own admin account');
+    }
+
+    if (linkedUser) {
+      await this.prisma.user.update({ where: { id: linkedUser.id }, data: { role } });
+    } else {
+      // No customer account, so no trigger will fire for this one.
+      await this.prisma.admin.update({ where: { id: targetId }, data: { role } });
+    }
+
+    return this.prisma.admin.findUnique({ where: { id: targetId }, select: ADMIN_SELECT });
+  }
+
+  /**
+   * Revoke admin access entirely, and end their sessions in the same
+   * transaction.
+   *
+   * A promoted customer keeps their customer account and everything on it —
+   * visits, bookings, points. Only the admin half goes: `User.role` returns to
+   * CONSUMER and the trigger deletes the Admin row. Deleting the person
+   * outright would orphan real data over a staffing change.
+   *
+   * Removing the Admin row is what actually revokes access, rather than merely
+   * marking it: RequireAdminOwnerGuard fails closed when the row is gone, so
+   * it bites on the next request instead of when their token expires.
+   */
+  async removeAdmin(targetId: string, callerId: string) {
+    const { target, linkedUser } = await this.adminWithLink(targetId);
+    await this.assertNotSelfOrLastOwner(target, callerId, 'remove');
+
+    const now = new Date();
+    const revoke = this.prisma.refreshToken.updateMany({
+      where: { accountId: targetId, accountType: 'ADMIN', revokedAt: null },
+      data: { revokedAt: now },
+    });
+
+    if (linkedUser) {
+      // The trigger deletes the Admin row when role goes back to CONSUMER.
+      await this.prisma.$transaction([
+        revoke,
+        this.prisma.user.update({ where: { id: linkedUser.id }, data: { role: 'CONSUMER' } }),
+      ]);
+    } else {
+      await this.prisma.$transaction([revoke, this.prisma.admin.delete({ where: { id: targetId } })]);
+    }
+
+    return { ok: true, removed: target.email, keptCustomerAccount: Boolean(linkedUser) };
   }
 }

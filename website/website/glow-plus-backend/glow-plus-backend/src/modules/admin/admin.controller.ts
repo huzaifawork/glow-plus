@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -7,7 +7,12 @@ import { AdminMerchantsQueryDto } from './merchants-query.dto';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
 import { AuthedRequest } from '../../middleware/auth.middleware';
 import { RequireAdminOwnerGuard } from '../../common/guards/require-admin-owner.guard';
-import { ChangeAdminEmailDto, ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
+import {
+  ChangeAdminEmailDto,
+  ChangeAdminPasswordDto,
+  PromoteUserDto,
+  SetAdminRoleDto,
+} from './admin-management.dto';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -123,6 +128,31 @@ export class AdminController {
   @Post('admins/promote')
   promoteUser(@Body() dto: PromoteUserDto) {
     return this.admin.promoteUser(dto);
+  }
+
+  /**
+   * Change an admin's tier — T80. Owner-only, like promotion.
+   *
+   * The caller's own id comes from the token, never the body: that is what
+   * makes "you cannot demote yourself" a rule rather than a suggestion.
+   */
+  @UseGuards(RequireAdminOwnerGuard)
+  @Patch('admins/:id/role')
+  setAdminRole(@Param('id') id: string, @Body() dto: SetAdminRoleDto, @Req() req: AuthedRequest) {
+    return this.admin.setAdminRole(id, req.accountId!, dto.role);
+  }
+
+  /**
+   * Revoke admin access entirely — T80.
+   *
+   * A promoted customer keeps their customer account; only the admin half is
+   * removed. A standalone admin row is deleted outright, since it has no
+   * customer half to keep.
+   */
+  @UseGuards(RequireAdminOwnerGuard)
+  @Delete('admins/:id')
+  removeAdmin(@Param('id') id: string, @Req() req: AuthedRequest) {
+    return this.admin.removeAdmin(id, req.accountId!);
   }
 
   /**

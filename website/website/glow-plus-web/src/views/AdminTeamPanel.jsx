@@ -30,6 +30,8 @@ import {
   listAdmins,
   listUsersForPromotion,
   promoteUserToAdmin,
+  removeAdmin,
+  setAdminRole,
 } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatDay } from '../lib/helpers.js';
@@ -79,6 +81,56 @@ export default function AdminTeamPanel() {
     setError(null);
     try {
       setUsers(await listUsersForPromotion(q));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * T80 — demote or revoke.
+   *
+   * Both confirm first: they take effect on the target's very next request,
+   * because RequireAdminOwnerGuard reads the role from the database rather
+   * than the token, so there is no window in which to change your mind.
+   */
+  async function changeRole(admin, role) {
+    const verb = role === 'OWNER' ? 'make an owner' : 'demote to admin';
+    if (!window.confirm(`${admin.email}: ${verb}?`)) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await setAdminRole(admin.id, role);
+      setNotice(`${admin.email} is now ${role === 'OWNER' ? 'an owner' : 'an admin'}.`);
+      await loadOwnerData(q);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(admin) {
+    if (
+      !window.confirm(
+        `Remove admin access for ${admin.email}? Their sessions end immediately. ` +
+          'Their customer account, points and bookings are kept.',
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await removeAdmin(admin.id);
+      setNotice(
+        res && res.keptCustomerAccount
+          ? `${admin.email} is no longer an admin. Their customer account was kept.`
+          : `${admin.email} is no longer an admin.`,
+      );
+      await loadOwnerData(q);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -148,6 +200,29 @@ export default function AdminTeamPanel() {
                     <span className={a.role === 'OWNER' ? 'toggle active' : 'toggle inactive'}>
                       {roleLabel(a.role)}
                     </span>
+                    {/* No controls on your own row: the server refuses both,
+                        and offering a button that always errors is worse than
+                        not offering one. */}
+                    {a.id !== me?.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="toggle inactive"
+                          disabled={busy}
+                          onClick={() => changeRole(a, a.role === 'OWNER' ? 'ADMIN' : 'OWNER')}
+                        >
+                          {a.role === 'OWNER' ? 'Demote to admin' : 'Make owner'}
+                        </button>
+                        <button
+                          type="button"
+                          className="toggle inactive"
+                          disabled={busy}
+                          onClick={() => revoke(a)}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               ))

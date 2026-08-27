@@ -24,6 +24,11 @@ export default function ConsumerAuth({ active }) {
   const [signupNotice, setSignupNotice] = useState(null); // email string once signup succeeds
   const [resendBusy, setResendBusy] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  // T81 — login now REFUSES an unverified address (403). Without this the
+  // message says "request a new one" while offering no way to do it: the
+  // resend control was tied to `signupNotice`, which only exists in the tab
+  // where the signup happened. Someone who closed that tab had no route back.
+  const [unverified, setUnverified] = useState(null);
   const [resetHint, setResetHint] = useState(false);
 
   // Carries whatever they have already typed, so the reset form opens prefilled.
@@ -66,16 +71,18 @@ export default function ConsumerAuth({ active }) {
       // A 409 on signup means the address is already an account — which for a
       // walk-in is the *expected* answer, not a mistake they made. [F56]
       setResetHint(err instanceof ApiError && err.status === 409 && mode === 'signup');
+      setUnverified(err instanceof ApiError && err.status === 403 ? email.trim() : null);
     } finally {
       setBusy(false);
     }
   }
 
   async function resend() {
-    if (!signupNotice) return;
+    const target = signupNotice || unverified;
+    if (!target) return;
     setResendBusy(true);
     try {
-      await resendVerification(signupNotice);
+      await resendVerification(signupNotice || unverified);
       setResendDone(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -93,6 +100,14 @@ export default function ConsumerAuth({ active }) {
         {signupNotice ? (
           <div className="notice" role="status">
             <T as="span" k="auth_signup_success" />
+            <button type="button" className="link-btn" onClick={resend} disabled={resendBusy}>
+              {resendDone ? t('auth_resend_sent') : t('auth_resend_verification')}
+            </button>
+          </div>
+        ) : null}
+
+        {unverified && !signupNotice ? (
+          <div className="notice" role="status">
             <button type="button" className="link-btn" onClick={resend} disabled={resendBusy}>
               {resendDone ? t('auth_resend_sent') : t('auth_resend_verification')}
             </button>
