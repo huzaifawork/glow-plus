@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ApiError,
+  changeAdminEmail,
   changeAdminPassword,
   getAdminProfile,
   listAdmins,
@@ -84,7 +85,7 @@ export default function AdminTeam() {
       {error === 'owner-only' ? (
         <p className="empty-note">
           Only an <strong>owner</strong> can promote customers to admin. You can still change
-          your own password below.
+          your own email and password below.
         </p>
       ) : admins === null ? (
         <p className="empty-note">Loading…</p>
@@ -117,6 +118,7 @@ export default function AdminTeam() {
           }}
         />
       ) : null}
+      <ChangeMyEmail currentEmail={me?.email} onChanged={refresh} />
       <ChangeMyPassword />
     </div>
   );
@@ -293,6 +295,86 @@ function ChangeMyPassword() {
         {ok ? <p className="ok" role="status">{ok}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Change password'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Change the address you sign in with.
+ *
+ * The email is the admin's username — `POST /admin/login` looks the account up
+ * by it and by nothing else — so this takes the current password like the
+ * password form does, and says outright which address to use next time. There
+ * is no self-service way back if an admin changes this and forgets it:
+ * `forgot-password` looks at User and Merchant only, and has never covered
+ * admin accounts.
+ *
+ * Where the admin was promoted from a customer, the server renames both rows
+ * in one transaction — the two are linked by email alone, so moving one
+ * without the other would quietly unlink them.
+ */
+function ChangeMyEmail({ currentEmail, onChanged }) {
+  const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [ok, setOk] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    setOk(null);
+    try {
+      const res = await changeAdminEmail(currentPassword, newEmail.trim());
+      // What the server stored, not what was typed.
+      const saved = res?.email ?? newEmail.trim();
+      setOk(`Email changed. Sign in with ${saved} from now on.`);
+      setNewEmail('');
+      setPassword('');
+      onChanged?.(saved);
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : 'Could not change your email.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="subsection">
+      <h3>Change my email</h3>
+      <p className="empty-note">
+        This is the address you sign in with{currentEmail ? ` — currently ${currentEmail}` : ''}.
+      </p>
+      <form onSubmit={submit} className="form">
+        <label className="field">
+          <span>New email</span>
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="you@yourdomain.com"
+          />
+        </label>
+        <label className="field">
+          <span>Current password</span>
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
+        </label>
+        {err ? <p className="err" role="alert">{err}</p> : null}
+        {ok ? <p className="ok" role="status">{ok}</p> : null}
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Change email'}
         </button>
       </form>
     </div>

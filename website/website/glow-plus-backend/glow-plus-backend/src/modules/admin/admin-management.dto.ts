@@ -41,3 +41,27 @@ export class ChangeAdminPasswordDto {
   @MaxLength(MAX_PASSWORD)
   newPassword!: string;
 }
+
+/**
+ * An admin changes their own email address  (T79)
+ *
+ * The email is the admin's *login identity* — `POST /admin/login` looks the
+ * account up by it and nothing else — so this is a credential change, not a
+ * contact-detail edit, and it takes the same `currentPassword` proof that
+ * changing the password does. Without it, a session left open on an unlocked
+ * laptop is enough to move the account to an address its owner does not
+ * control, and every "who am I signing in as" answer moves with it.
+ *
+ * No MinLength on `currentPassword`, for the reason ChangeAdminPasswordDto
+ * gives: a length complaint about the *existing* password leaks the policy
+ * that was in force when it was set.
+ */
+export class ChangeAdminEmailDto {
+  @IsString()
+  @MaxLength(MAX_PASSWORD)
+  currentPassword!: string;
+
+  @IsEmail()
+  @MaxLength(MAX_EMAIL)
+  newEmail!: string;
+}

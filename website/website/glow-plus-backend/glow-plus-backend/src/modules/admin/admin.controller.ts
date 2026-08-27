@@ -7,7 +7,7 @@ import { AdminMerchantsQueryDto } from './merchants-query.dto';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
 import { AuthedRequest } from '../../middleware/auth.middleware';
 import { RequireAdminOwnerGuard } from '../../common/guards/require-admin-owner.guard';
-import { ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
+import { ChangeAdminEmailDto, ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -136,5 +136,23 @@ export class AdminController {
   @Patch('me/password')
   changePassword(@Req() req: AuthedRequest, @Body() dto: ChangeAdminPasswordDto) {
     return this.admin.changeOwnPassword(req.accountId!, dto);
+  }
+
+  /**
+   * Change your own email address — the address you sign in with.  (T79)
+   *
+   * RequireAdminGuard like the password route above, not the owner guard: an
+   * admin whose address changes (or who was set up under a shared inbox) must
+   * be able to move their own login without asking an owner, and until now the
+   * only way to do it was an UPDATE in the database console.
+   *
+   * ThrottleCredentials because it takes a password: unthrottled, it is a
+   * password oracle that happens to sit behind a bearer token.
+   */
+  @ThrottleCredentials()
+  @UseGuards(RequireAdminGuard)
+  @Patch('me/email')
+  changeEmail(@Req() req: AuthedRequest, @Body() dto: ChangeAdminEmailDto) {
+    return this.admin.changeOwnEmail(req.accountId!, dto);
   }
 }

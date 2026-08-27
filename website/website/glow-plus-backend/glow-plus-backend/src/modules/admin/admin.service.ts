@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException, UnauthorizedException
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
-import { ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
+import { ChangeAdminEmailDto, ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
 
 /** T77 — the same cost the auth services and create-admin.ts use. An admin hash weaker than a customer's would be exactly backwards. */
 const SALT_ROUNDS = 12;
@@ -241,5 +241,103 @@ export class AdminService {
     ]);
 
     return { ok: true };
+  }
+
+  /**
+   * An admin changes their own email address.  (T79)
+   *
+   * The address is the login identity — `AdminAuthService.login` finds the
+   * account by email and by nothing else — so this is the second half of
+   * `changeOwnPassword`, not a profile edit. It takes the same
+   * `currentPassword` proof for the same reason.
+   *
+   * **Both rows move together, or neither does.** The `Admin` row and the
+   * `User` row of a promoted customer are linked by *email only* — that is
+   * what `user_role_sync_admin` (migration 20260827020000) joins on. Renaming
+   * one and not the other silently unlinks them: the next customer-side
+   * password reset would stop reaching the panel, and flipping the customer
+   * back to CONSUMER would delete an `Admin` row that no longer matches,
+   * leaving a live admin account behind after access was supposedly revoked.
+   * So the two updates go in one transaction.
+   *
+   * `emailVerifiedAt` is cleared on the customer row: the old verification
+   * attested to the old address and says nothing about the new one. Nothing
+   * gates login on it (`loginConsumer` does not check it), so this costs the
+   * account no access — it just puts the "verify your email" prompt back.
+   *
+   * Sessions are deliberately NOT revoked, unlike a password change. Tokens
+   * carry the account id, so nothing about them depends on the address, and
+   * the reason password rotation revokes — "someone else may know this
+   * credential" — has no counterpart here. Signing an admin out of the console
+   * they are standing in front of would be a cost with no matching benefit.
+   */
+  async changeOwnEmail(adminId: string, dto: ChangeAdminEmailDto) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, email: true, passwordHash: true },
+    });
+    if (!admin) throw new NotFoundException('Admin not found');
+
+    if (!(await bcrypt.compare(dto.currentPassword, admin.passwordHash))) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Trimmed but NOT lower-cased. Nothing else on this platform normalises an
+    // email — signup stores what was typed and every login is an exact-match
+    // `findUnique` — so folding case here alone would make this one row behave
+    // differently from every other account, in the one place where getting the
+    // lookup wrong locks someone out of the admin console.
+    const newEmail = dto.newEmail.trim();
+    if (newEmail === admin.email) {
+      throw new ConflictException('That is already your email address');
+    }
+
+    if (await this.prisma.admin.findUnique({ where: { email: newEmail }, select: { id: true } })) {
+      throw new ConflictException('Another admin already uses that email address');
+    }
+
+    const linkedUser = await this.prisma.user.findUnique({
+      where: { email: admin.email },
+      select: { id: true },
+    });
+
+    // Refused even for a standalone admin with no customer account of their
+    // own. `sync_admin_from_user` inserts into Admin with `ON CONFLICT (email)
+    // DO UPDATE SET passwordHash`, so an admin sitting on some *other*
+    // customer's address would have their panel password quietly replaced by
+    // that customer's the next time that customer was promoted or reset their
+    // password. Blocking the collision here is the only place that is visible.
+    const emailTaken = await this.prisma.user.findUnique({
+      where: { email: newEmail },
+      select: { id: true },
+    });
+    if (emailTaken && emailTaken.id !== linkedUser?.id) {
+      throw new ConflictException('A customer account already uses that email address');
+    }
+
+    try {
+      await this.prisma.$transaction([
+        this.prisma.admin.update({ where: { id: adminId }, data: { email: newEmail } }),
+        ...(linkedUser
+          ? [
+              this.prisma.user.update({
+                where: { id: linkedUser.id },
+                data: { email: newEmail, emailVerifiedAt: null },
+              }),
+            ]
+          : []),
+      ]);
+    } catch (err) {
+      // Two admins renaming to the same address at once. The checks above lose
+      // that race by construction; the unique index does not.
+      if ((err as { code?: string })?.code === 'P2002') {
+        throw new ConflictException('That email address is already in use');
+      }
+      throw err;
+    }
+
+    // The new address goes back so the console can relabel itself — its header
+    // shows the signed-in admin's email, and it was captured at login.
+    return { ok: true, email: newEmail };
   }
 }

@@ -187,4 +187,107 @@ describe('AdminService — team management (T77)', () => {
       expect((prisma.user.findMany as jest.Mock).mock.calls[0][0].take).toBe(50);
     });
   });
+
+  /**
+   * Changing the email is changing the LOGIN (T79) — `AdminAuthService.login`
+   * finds the account by email and nothing else. These cover the two ways it
+   * can go wrong quietly: leaving the Admin and User rows on different
+   * addresses, which unlinks them from the `user_role_sync_admin` trigger, and
+   * moving onto an address some other account already holds.
+   */
+  describe('changeOwnEmail', () => {
+    const current = 'currentPassword1';
+    const OLD = 'old@glowplus.com';
+    const NEW = 'new@glowplus.com';
+
+    async function prismaWithEmail() {
+      const prisma = makePrisma();
+      const passwordHash = await bcrypt.hash(current, 4);
+      // One mock serves two different lookups: "who am I" (by id) and "is this
+      // address taken" (by email). Answer them apart, or the uniqueness check
+      // finds the caller's own row and every rename is a conflict.
+      (prisma.admin.findUnique as jest.Mock).mockImplementation(({ where }: any) =>
+        where.id ? { id: 'a_1', email: OLD, passwordHash } : null,
+      );
+      return prisma;
+    }
+
+    /** The customer row, if any, that shares the admin's address. */
+    function withCustomer(prisma: any, atOldEmail: { id: string } | null, atNewEmail: { id: string } | null = null) {
+      (prisma.user.findUnique as jest.Mock).mockImplementation(({ where }: any) =>
+        where.email === OLD ? atOldEmail : atNewEmail,
+      );
+    }
+
+    it('rejects a wrong current password — an open session must not be able to move the login', async () => {
+      const prisma = await prismaWithEmail();
+      await expect(
+        makeService(prisma).changeOwnEmail('a_1', { currentPassword: 'wrong', newEmail: NEW }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('moves the Admin and User rows together — they are linked by email and nothing else', async () => {
+      const prisma = await prismaWithEmail();
+      withCustomer(prisma, { id: 'u_1' });
+
+      await expect(
+        makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: NEW }),
+      ).resolves.toEqual({ ok: true, email: NEW });
+
+      expect(prisma.admin.update).toHaveBeenCalledWith({ where: { id: 'a_1' }, data: { email: NEW } });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u_1' },
+        // The old verification was of the old address.
+        data: { email: NEW, emailVerifiedAt: null },
+      });
+      // Both writes in ONE transaction: half a rename unlinks the two rows.
+      expect((prisma.$transaction as jest.Mock).mock.calls[0][0]).toHaveLength(2);
+    });
+
+    it('writes only the Admin row for a standalone admin with no customer account', async () => {
+      const prisma = await prismaWithEmail();
+      withCustomer(prisma, null);
+
+      await makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: NEW });
+
+      expect(prisma.admin.update).toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect((prisma.$transaction as jest.Mock).mock.calls[0][0]).toHaveLength(1);
+    });
+
+    it('refuses an address another admin already holds', async () => {
+      const prisma = await prismaWithEmail();
+      (prisma.admin.findUnique as jest.Mock).mockImplementation(({ where }: any) =>
+        where.id ? { id: 'a_1', email: OLD, passwordHash: bcrypt.hashSync(current, 4) } : { id: 'a_2' },
+      );
+      await expect(
+        makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: NEW }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("refuses another customer's address — the sync trigger would overwrite this admin's password", async () => {
+      const prisma = await prismaWithEmail();
+      withCustomer(prisma, null, { id: 'u_someone_else' });
+      await expect(
+        makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: NEW }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('refuses the address the admin already has, rather than reporting a rename that did nothing', async () => {
+      const prisma = await prismaWithEmail();
+      await expect(
+        makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: OLD }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('does NOT revoke sessions — tokens carry the account id, not the address', async () => {
+      const prisma = await prismaWithEmail();
+      withCustomer(prisma, { id: 'u_1' });
+      await makeService(prisma).changeOwnEmail('a_1', { currentPassword: current, newEmail: NEW });
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+  });
 });

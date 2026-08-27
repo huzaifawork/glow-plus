@@ -626,6 +626,25 @@ export function changeAdminPassword(currentPassword, newPassword) {
   });
 }
 
+/**
+ * Change the address you sign in with (T79).
+ *
+ * Takes the current password, because the email IS the admin login — the
+ * server looks the account up by it and by nothing else, so this is a
+ * credential change wearing a profile-field's clothes.
+ *
+ * Resolves to `{ ok: true, email }`. Use the email it returns rather than the
+ * one you sent: it is what the server actually stored, and the console's
+ * header still shows the address captured at sign-in.
+ */
+export function changeAdminEmail(currentPassword, newEmail) {
+  return apiRequest('/admin/me/email', {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { currentPassword, newEmail },
+  });
+}
+
 /* --------------------------------------------------------------------------
    Endpoints used by the team / staff page (T24)
    -------------------------------------------------------------------------- */

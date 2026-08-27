@@ -24,17 +24,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ApiError,
+  changeAdminEmail,
   changeAdminPassword,
   getAdminProfile,
   listAdmins,
   listUsersForPromotion,
   promoteUserToAdmin,
 } from '../lib/api.js';
+import { useApp } from '../context/AppContext.jsx';
 import { formatDay } from '../lib/helpers.js';
 
 const roleLabel = (role) => (role === 'OWNER' ? 'Owner' : 'Admin');
 
 export default function AdminTeamPanel() {
+  // The console header renders 'Sign out <email>' from the admin captured at
+  // login, so a rename that only updated this panel would leave the page
+  // showing two different addresses for one account.
+  const { setCurrentAdmin } = useApp();
   const [me, setMe] = useState(null);
   const [admins, setAdmins] = useState(null);
   const [users, setUsers] = useState(null);
@@ -121,7 +127,7 @@ export default function AdminTeamPanel() {
       {!isOwner ? (
         <div className="empty">
           Only an owner can promote customers to admin. You can still change your own
-          password below.
+          email and password below.
         </div>
       ) : (
         <>
@@ -206,6 +212,13 @@ export default function AdminTeamPanel() {
         </>
       )}
 
+      <ChangeMyEmail
+        currentEmail={me?.email}
+        onChanged={(email) => {
+          setMe((prev) => (prev ? { ...prev, email } : prev));
+          setCurrentAdmin((prev) => (prev ? { ...prev, email } : prev));
+        }}
+      />
       <ChangeMyPassword />
     </>
   );
@@ -280,6 +293,90 @@ function ChangeMyPassword() {
 
         <button type="submit" className="btn btn-primary auth-submit" disabled={busy}>
           {busy ? '…' : 'Change password'}
+        </button>
+      </form>
+    </>
+  );
+}
+
+/**
+ * Change the address you sign in with.
+ *
+ * This is a credential change, not a profile edit: `POST /admin/login` finds
+ * the account by email and by nothing else, so the address here IS the
+ * username. That is why it asks for the current password, and why the
+ * confirmation says plainly which address to use next time — an admin who
+ * changes this and then forgets has no self-service way back, since
+ * `forgot-password` has never covered admin accounts.
+ *
+ * The server moves the matching customer row in the same transaction when the
+ * admin was promoted from one, so the two accounts cannot end up on different
+ * addresses. Sessions are left alone — the token carries an account id, not an
+ * email, so there is nothing here to sign out of.
+ */
+function ChangeMyEmail({ currentEmail, onChanged }) {
+  const [newEmail, setNewEmail] = useState('');
+  const [currentPassword, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [ok, setOk] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    setOk(null);
+    try {
+      const res = await changeAdminEmail(currentPassword, newEmail.trim());
+      // The server's copy, not the typed one — it is what was actually stored.
+      const saved = res?.email ?? newEmail.trim();
+      setOk(`Email changed. Sign in with ${saved} from now on.`);
+      setNewEmail('');
+      setPassword('');
+      onChanged?.(saved);
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : String(e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="block-head" style={{ marginTop: 22 }}>
+        <div className="block-title">Change my email</div>
+      </div>
+      <div className="sub">
+        This is the address you sign in with{currentEmail ? ` — currently ${currentEmail}` : ''}.
+      </div>
+
+      <form onSubmit={submit}>
+        <label htmlFor="adminNewEmail">New email</label>
+        <input
+          type="email"
+          id="adminNewEmail"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="you@yourdomain.com"
+          autoComplete="email"
+          required
+        />
+        <label htmlFor="adminEmailPassword">Current password</label>
+        <input
+          type="password"
+          id="adminEmailPassword"
+          value={currentPassword}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          autoComplete="current-password"
+          required
+        />
+
+        {err ? <p className="err" role="alert">{err}</p> : null}
+        {ok ? <div className="sub" role="status">{ok}</div> : null}
+
+        <button type="submit" className="btn btn-primary auth-submit" disabled={busy}>
+          {busy ? '…' : 'Change email'}
         </button>
       </form>
     </>
