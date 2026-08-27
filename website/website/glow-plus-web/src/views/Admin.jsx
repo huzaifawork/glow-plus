@@ -15,6 +15,7 @@ import {
 } from '../lib/api.js';
 import { formatDay } from '../lib/helpers.js';
 import T from '../components/T.jsx';
+import AdminTeamPanel from './AdminTeamPanel.jsx';
 
 /**
  * The platform admin console, against the real API  (T38)
@@ -492,6 +493,7 @@ export default function Admin({ active }) {
           <AdminStats />
           <PendingQueue />
           <AllSalons />
+          <AdminTeamPanel />
         </>
       )}
     </section>
