@@ -101,13 +101,17 @@ export default function AdminTeam() {
   }
 
   async function revoke(a) {
-    if (
-      !window.confirm(
-        `Remove admin access for ${a.email}? Their sessions end immediately. ` +
-          'Their customer account, points and bookings are kept.',
-      )
-    )
-      return;
+    // T80 fix — the two removals are NOT the same act, so they must not share
+    // one sentence. A promoted admin keeps everything and can be promoted
+    // again; a standalone row is deleted with nothing behind it.
+    const msg = a.hasCustomerAccount
+      ? `Remove admin access for ${a.email}?
+
+Their sessions end immediately. Their customer account, points and bookings are KEPT, and you can promote them again later.`
+      : `Permanently DELETE the admin account ${a.email}?
+
+This account has no customer account behind it, so nothing remains after this and it cannot be undone from the panel.`;
+    if (!window.confirm(msg)) return;
     setBusyId(a.id);
     setError(null);
     setNotice(null);
@@ -116,7 +120,7 @@ export default function AdminTeam() {
       setNotice(
         res && res.keptCustomerAccount
           ? `${a.email} is no longer an admin. Their customer account was kept.`
-          : `${a.email} is no longer an admin.`,
+          : `${a.email} has been deleted.`,
       );
       await refresh();
     } catch (err) {
@@ -157,6 +161,11 @@ export default function AdminTeam() {
               </div>
               <div className="merchant-actions">
                 <RoleBadge role={a.role} />
+                {a.hasCustomerAccount === false ? (
+                  <span className="role-badge" title="No customer account behind this login — removing it deletes the account outright.">
+                    standalone
+                  </span>
+                ) : null}
                 {/* Nothing on your own row: the server refuses both, and a
                     button that always errors is worse than no button. */}
                 {isOwner && a.id !== me?.id ? (

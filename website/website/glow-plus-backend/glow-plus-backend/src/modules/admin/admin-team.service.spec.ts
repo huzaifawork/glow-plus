@@ -167,10 +167,31 @@ describe('AdminService — team management (T77)', () => {
   describe('listAdmins / listUsers', () => {
     it('never selects passwordHash out of Admin', async () => {
       const prisma = makePrisma();
-      makeService(prisma).listAdmins();
+      await makeService(prisma).listAdmins();
       const { select } = (prisma.admin.findMany as jest.Mock).mock.calls[0][0];
       expect(select).not.toHaveProperty('passwordHash');
       expect(Object.keys(select).sort()).toEqual(['createdAt', 'email', 'id', 'role']);
+    });
+
+    it('flags which admins have a customer account, so removal can be described honestly', async () => {
+      const prisma = makePrisma();
+      (prisma.admin.findMany as jest.Mock).mockResolvedValue([
+        { id: 'a_1', email: 'promoted@y.com', role: 'ADMIN', createdAt: new Date() },
+        { id: 'a_2', email: 'standalone@y.com', role: 'OWNER', createdAt: new Date() },
+      ]);
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([{ email: 'promoted@y.com' }]);
+
+      const rows = await makeService(prisma).listAdmins();
+      expect(rows.map((r: any) => [r.email, r.hasCustomerAccount])).toEqual([
+        ['promoted@y.com', true],
+        ['standalone@y.com', false],
+      ]);
+    });
+
+    it('does not query users at all when there are no admins', async () => {
+      const prisma = makePrisma();
+      expect(await makeService(prisma).listAdmins()).toEqual([]);
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
     });
 
     it('never selects passwordHash or the encrypted phone out of User', async () => {

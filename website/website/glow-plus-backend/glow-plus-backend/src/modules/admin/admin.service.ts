@@ -121,12 +121,41 @@ export class AdminService {
   // supported path that does not hand a business owner a SQL console.
   // -------------------------------------------------------------------------
 
-  /** Every admin, oldest first. Owner-only — this is the platform's key list. */
-  listAdmins() {
-    return this.prisma.admin.findMany({
+  /**
+   * Every admin, oldest first. Owner-only — this is the platform's key list.
+   *
+   * `hasCustomerAccount` says which of the two kinds each row is, because
+   * removing them does materially different things and the console has to say
+   * so BEFORE the click, not after:
+   *
+   *   - promoted from a customer -> role returns to CONSUMER, the trigger
+   *     drops the Admin row, and the person keeps their account, points and
+   *     bookings. Reversible: promote them again.
+   *   - standalone (created by scripts/create-admin.ts or inserted by hand,
+   *     with no matching User) -> the row is DELETED. Nothing remains, and
+   *     there is no customer account to fall back to.
+   *
+   * T80 shipped one confirmation dialog for both, promising the customer
+   * account would be kept — untrue for a standalone admin, so an owner
+   * removing one was told their action was softer than it was.
+   *
+   * Admin and User are joined by email only, which is what the trigger joins
+   * on, so this is a second query rather than a relation.
+   */
+  async listAdmins() {
+    const admins = await this.prisma.admin.findMany({
       select: ADMIN_SELECT,
       orderBy: { createdAt: 'asc' },
     });
+    if (admins.length === 0) return [];
+
+    const linked = await this.prisma.user.findMany({
+      where: { email: { in: admins.map((a) => a.email) } },
+      select: { email: true },
+    });
+    const hasAccount = new Set(linked.map((u) => u.email));
+
+    return admins.map((a) => ({ ...a, hasCustomerAccount: hasAccount.has(a.email) }));
   }
 
   /**

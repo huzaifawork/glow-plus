@@ -112,23 +112,27 @@ export default function AdminTeamPanel() {
     }
   }
 
-  async function revoke(admin) {
-    if (
-      !window.confirm(
-        `Remove admin access for ${admin.email}? Their sessions end immediately. ` +
-          'Their customer account, points and bookings are kept.',
-      )
-    )
-      return;
+  async function revoke(a) {
+    // T80 fix — the two removals are NOT the same act, so they must not share
+    // one sentence. A promoted admin keeps everything and can be promoted
+    // again; a standalone row is deleted with nothing behind it.
+    const msg = a.hasCustomerAccount
+      ? `Remove admin access for ${a.email}?
+
+Their sessions end immediately. Their customer account, points and bookings are KEPT, and you can promote them again later.`
+      : `Permanently DELETE the admin account ${a.email}?
+
+This account has no customer account behind it, so nothing remains after this and it cannot be undone from the panel.`;
+    if (!window.confirm(msg)) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await removeAdmin(admin.id);
+      const res = await removeAdmin(a.id);
       setNotice(
         res && res.keptCustomerAccount
-          ? `${admin.email} is no longer an admin. Their customer account was kept.`
-          : `${admin.email} is no longer an admin.`,
+          ? `${a.email} is no longer an admin. Their customer account was kept.`
+          : `${a.email} has been deleted.`,
       );
       await loadOwnerData(q);
     } catch (err) {
@@ -200,6 +204,11 @@ export default function AdminTeamPanel() {
                     <span className={a.role === 'OWNER' ? 'toggle active' : 'toggle inactive'}>
                       {roleLabel(a.role)}
                     </span>
+                    {a.hasCustomerAccount === false ? (
+                      <span className="toggle inactive" title="No customer account behind this login — removing it deletes the account outright.">
+                        standalone
+                      </span>
+                    ) : null}
                     {/* No controls on your own row: the server refuses both,
                         and offering a button that always errors is worse than
                         not offering one. */}
