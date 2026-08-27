@@ -30,6 +30,8 @@ import {
   listAdmins,
   listUsersForPromotion,
   promoteUserToAdmin,
+  removeAdmin,
+  setAdminRole,
 } from '../../lib/api.js';
 
 const RoleBadge = ({ role }) => (
@@ -43,6 +45,7 @@ export default function AdminTeam() {
   const [admins, setAdmins] = useState(null);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -72,6 +75,56 @@ export default function AdminTeam() {
   }, [refresh]);
 
   const isOwner = me?.role === 'OWNER';
+
+  /**
+   * T80 — demote or revoke. Ported here so the two admin UIs do not drift:
+   * this panel and the SPA console (views/AdminTeamPanel.jsx) offer the same
+   * actions against the same owner-only routes. The last time they diverged,
+   * the whole team feature was invisible from the console people actually
+   * click through to.
+   */
+  async function changeRole(a, role) {
+    const verb = role === 'OWNER' ? 'make an owner' : 'demote to admin';
+    if (!window.confirm(`${a.email}: ${verb}?`)) return;
+    setBusyId(a.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await setAdminRole(a.id, role);
+      setNotice(`${a.email} is now ${role === 'OWNER' ? 'an owner' : 'an admin'}.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change that role.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function revoke(a) {
+    if (
+      !window.confirm(
+        `Remove admin access for ${a.email}? Their sessions end immediately. ` +
+          'Their customer account, points and bookings are kept.',
+      )
+    )
+      return;
+    setBusyId(a.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await removeAdmin(a.id);
+      setNotice(
+        res && res.keptCustomerAccount
+          ? `${a.email} is no longer an admin. Their customer account was kept.`
+          : `${a.email} is no longer an admin.`,
+      );
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove that admin.');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="card">
@@ -104,6 +157,28 @@ export default function AdminTeam() {
               </div>
               <div className="merchant-actions">
                 <RoleBadge role={a.role} />
+                {/* Nothing on your own row: the server refuses both, and a
+                    button that always errors is worse than no button. */}
+                {isOwner && a.id !== me?.id ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-quiet btn-small"
+                      disabled={busyId === a.id}
+                      onClick={() => changeRole(a, a.role === 'OWNER' ? 'ADMIN' : 'OWNER')}
+                    >
+                      {busyId === a.id ? '…' : a.role === 'OWNER' ? 'Demote' : 'Make owner'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-quiet btn-small"
+                      disabled={busyId === a.id}
+                      onClick={() => revoke(a)}
+                    >
+                      {busyId === a.id ? '…' : 'Remove'}
+                    </button>
+                  </>
+                ) : null}
               </div>
             </div>
           ))}
