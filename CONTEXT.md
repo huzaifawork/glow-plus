@@ -30,7 +30,19 @@ Per task: **implement → test by actually running it → record evidence → ti
 
 Why strict: the exact problem we were hired to fix is *"functionality that exists vs. functionality that's been validated."*
 
-## 4. Environment — CURRENT STATE (updated 2026-08-26, end of session 29 — **DEPLOYED**)
+## 4. Environment — CURRENT STATE (updated 2026-08-28, end of session 30 — **LIVE ON THE CLIENT'S ACCOUNTS**)
+
+> ### ⚠️ Read this before the table. The URLs in the Backend and Website rows below are the DEVELOPER's old deployment. They still run, but they are NOT the product any more.
+>
+> | Live for real customers | |
+> |---|---|
+> | **Website** | **https://www.glowplusmember.com** — Let's Encrypt, auto-renewing; the apex also serves |
+> | **Admin console** | **https://www.glowplusmember.com** → **Admin** in the header. `/admin/panel` is a second, older UI that still works |
+> | **API** | **https://glow-plus-api-six.vercel.app** — note the **`-six`**. The bare `glow-plus-api.vercel.app` belongs to the developer's project, exactly like the `-eight` trap below |
+> | **Vercel** | Client's team **`joseph-6cd1`**, Hobby plan, exactly two projects: `glow-plus-api`, `glow-plus-web` |
+> | **Database** | Still Supabase `xhyoeiltwcciqowlwyov` on the **developer's** account — transfer outstanding |
+> | **Stripe** | Client's account, **test mode**, webhook → `https://glow-plus-api-six.vercel.app/v1/billing/webhook` |
+> | **Tests** | **529 passing, 33 suites** |
 
 | Thing | Status |
 |---|---|
@@ -134,9 +146,128 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **BUILD COMPLETE. The only work left is DEPLOYING TO THE CLIENT'S ACCOUNTS.**
+## 8. EXACTLY where to resume — **DEPLOYED AND LIVE ON THE CLIENT'S ACCOUNTS. What remains is credential rotation, the Supabase transfer, and the client's own plan decisions.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
+>
+> ## 🏁 SESSION 30 (2026-08-27 → 28) — **DEPLOYED TO THE CLIENT, then six features and five real bugs found by using it.**
+>
+> ### Where it runs now
+>
+> Deployed to the client's Vercel team **`joseph-6cd1`** with their access token.
+> `www.glowplusmember.com` is live on SSL. DNS at Hostinger needed a **single**
+> record — `A @ → 76.76.21.21` — because the existing `www` CNAME already
+> pointed at the apex. **`mail.` was left untouched**: that is Resend, and
+> deleting one of those records silently kills every email the platform sends.
+>
+> ### ⚠️ Five traps this session. Do not rediscover them.
+>
+> 1. **Vercel BLOCKS deploys on the git author.** `Git author
+>    mhuzaifatariq7@gmail.com must have access to the team joseph`. Five deploys
+>    died as `BLOCKED` before this was found — the CLI just prints `Building…`
+>    and hangs, and `vercel ls` reports `UNKNOWN`; only the REST API
+>    (`/v13/deployments/<id>`) gives the reason. **Workaround: copy the project
+>    to a directory OUTSIDE the git repo and deploy from there**, so no git
+>    metadata is attached. The real fix is the client inviting that address to
+>    their Vercel team. Until then EVERY deploy needs the staging copy.
+> 2. **The first request after any deploy can return
+>    `FUNCTION_INVOCATION_TIMEOUT`** — a cold start booting Nest and Prisma. It
+>    settles to under a second immediately after. Uptime monitoring on
+>    `/health/ready` both detects and prevents it, and is still not set up.
+> 3. **There are TWO admin UIs and they drift.** `views/Admin.jsx` (the SPA
+>    console reached from the header — the one people actually click) and
+>    `pages/admin/AdminPage.jsx` (`/admin/panel`). A feature built in one is
+>    invisible in the other. This bit twice in one session. **Retiring
+>    `/admin/panel` is the right end state**; until then, change both.
+> 4. **A placeholder that works is a password.** The client pasted the
+>    admin-creation SQL verbatim, so the live owner password was literally
+>    `PUT_YOUR_PASSWORD_HERE`. Use a placeholder Postgres would reject.
+> 5. **An `Admin.id` of `''` looks fine and breaks everything.** Every guard
+>    tests `if (!req.accountId)`, and an empty string is falsy — so the account
+>    signs in and then fails every action with "No account context on this
+>    request". There is now a regression test for exactly that.
+>
+> ### What was built (T77–T82)
+>
+> | | |
+> |---|---|
+> | **T77** | **Admin roles, and one dropdown that grants access.** `User.role` (CONSUMER/ADMIN/OWNER) and `Admin.role` (OWNER/ADMIN). **Four database TRIGGERS** in migration `20260827020000_user_role_sync_admin` keep the `Admin` table in step with `User.role`: promote, demote, sync the password, and delete. ⚠️ **This behaviour is INVISIBLE to anyone reading `admin.service.ts`** — it lives only in the migration, and `schema.prisma`'s comment on `User.role` points there. Only an OWNER may promote |
+> | **T78** | **The paywall now checks for a plan** — see finding 1 below |
+> | **T79** | An admin can change the address they sign in with |
+> | **T80** | An OWNER can demote (`OWNER ⇄ ADMIN`) and revoke admin access, in **both** admin UIs. Standalone admins (no `User` row) are written directly, since no trigger reaches them. Refuses yourself and the last OWNER |
+> | **T81** | **An unverified email cannot sign in** — customers *and* salons. Checked AFTER the password, so it never reveals whether an address has an account. `403`, not `401`: the credentials were right, the account is not usable yet |
+> | **T82** | A customer whose account is auto-created by a salon logging a visit now gets an email telling them so |
+>
+> ### The five real bugs — every one found by the client clicking around
+>
+> 1. **The paywall never checked for a subscription, despite its name.** It
+>    refused only SUSPENDED/CANCELLED — states reachable ONLY *after* having had
+>    a plan and lost it. **Verified live: a salon never approved and never paid
+>    created a service (201) and logged a visit that awarded points (201).**
+>    Admin approval made it *worse*, not better: `approve()` sets ACTIVE with no
+>    billing check, so approving a salon handed it every paid feature for free.
+>    Only the public directory was ever gated — so a salon getting customers by
+>    walk-in could run the whole loyalty programme forever without paying. T78
+>    applies the rule `salon-listable.ts` already defined: **merchant ACTIVE AND
+>    subscription TRIALING|ACTIVE**. `PAST_DUE` returns before that check, or it
+>    would read as "no plan" and lose its deliberate read-only grace.
+> 2. **A 403 signed admins out.** `useAdminAuthGuard` cleared the session on 401
+>    *and* 403, and a plain ADMIN gets a legitimate 403 from the owner-only
+>    cards — so an ADMIN could never stay signed in at all, and the reload
+>    re-triggered it. The SPA console already had this right; the standalone
+>    page did not.
+> 3. **An admin's panel password and customer password diverged.** Changing it
+>    in the panel wrote only the `Admin` row, so the person had the new password
+>    for the console and the old one for their customer account — and their next
+>    customer-side reset would silently move the admin one back. It now writes
+>    `User` and lets the trigger sync the copy.
+> 4. **T79 and T81 collided.** T79 clears `emailVerifiedAt` on an email change,
+>    reasoning that nothing gated login on it. T81 made that false, stranding an
+>    admin who renamed themselves with no link to click. A verification email is
+>    now sent, and T79's comment is corrected.
+> 5. **The removal dialog lied.** It promised "their customer account is kept"
+>    for *standalone* admins too, where removal is permanent and nothing
+>    remains. `listAdmins` now returns `hasCustomerAccount`, both UIs confirm
+>    honestly, and standalone rows are labelled in the list.
+>
+> ### How the client grants admin access — tell them this, never SQL
+>
+> **Supabase → Table Editor → `User` → change `role` from `CONSUMER` to
+> `OWNER`.** The trigger creates the `Admin` row. No id, no bcrypt hash, no
+> `crypt()`. That owner can then promote anyone from the panel.
+>
+> **Prefer promoted admins over standalone ones.** A promoted admin can reset
+> their own password through the normal forgot-password flow. A standalone one
+> cannot — `forgotPassword` never looks at the `Admin` table and returns
+> `{ok:true}` anyway, so they wait for an email that never arrives, and every
+> lockout needs a SQL query.
+>
+> ### The customer journey that now works end to end
+>
+> Salon types a customer's email when logging a visit → the account is created
+> with a random 16-byte password **nobody knows** → the customer gets an email
+> naming the salon and the points → they use forgot-password → that sets their
+> password **and marks them verified**, which is what lets them sign in at all
+> after T81 → they see their points and can redeem. The middle step did not
+> exist before T82, which quietly broke the whole chain.
+>
+> ### Still open after this session
+>
+> - **Rotate `RESEND_API_KEY` and the Vercel token** — the token is in a chat log
+> - **Invite `mhuzaifatariq7@gmail.com` to the client's Vercel team** (trap 1)
+> - **Transfer the Supabase project to the client**, and get off the free plan:
+>   **it takes no backups at all** — no daily snapshot, no PITR
+> - **Vercel Hobby → Pro** — Hobby does not permit commercial use
+> - **Stripe live mode** — four changes; no real money can move until then
+> - **F74(b) is answered:** 7 days, +30 for the first 50 (`FOUNDING_MEMBER_CAP`),
+>   as already implemented. ⚠️ `foundingMember` is decided at signup by counting
+>   **all** salons including test ones — **wipe the database before real salons
+>   sign up**, or the first genuine customers silently get 7 days instead of 37
+> - **Cancelling is `cancel_at_period_end`**, so the lockout is not observable
+>   until the period ends. To see it, cancel *immediately* from the Stripe
+>   dashboard, which fires `customer.subscription.deleted` at once
+> - **`HANDOVER.md` still describes the pre-deployment system** and none of this
+>
 >
 > ## 🏁 SESSION 29 (2026-08-26) — **PRODUCTION DAY. Built, deployed, smoke-tested end to end, and reset clean.**
 >
@@ -1354,12 +1485,19 @@ Its actual title is **"Software Developer Project Experience & Technical Assessm
 
 ## 10. Open items needing the user / client
 
-- **Rotate the Stripe and Resend keys** — they travelled through a zip and Fiverr chat, and were sitting in `.env.example`.
-- **Rotate the Vercel token** the client pasted in Fiverr chat (`vcp_…`) before using it.
-- **Is M-Pesa in scope?** (no code exists)
-- **Confirm the website rebuild** (biggest item, absent from the client's list)
-- **Vercel plan** — Hobby allows only 2 cron jobs at once-daily; this project has 4 → Pro (~$20/mo) or consolidate.
-- Domain purchase — blocks production email and Stripe webhooks.
+**Updated 2026-08-28 (session 30). Ordered by what hurts soonest.**
+
+- **Rotate `RESEND_API_KEY`** — live, no test mode, and it travelled through a zip, Fiverr chat and `.env.example`. Highest severity of the three.
+- **Rotate the Vercel access token** — it has since been pasted into a chat log as well.
+- **Supabase is on the FREE plan, which takes no backups at all** — no daily snapshot, no PITR. A bad migration or a dropped table is unrecoverable. Pro is ~$25/mo. This is the largest un-mitigated risk now that real customers are possible.
+- **Transfer the Supabase project to the client** — their production data still sits on the developer's account.
+- **Invite `mhuzaifatariq7@gmail.com` to the client's Vercel team** — until then every deploy is BLOCKED and needs the non-git staging copy (session 30, trap 1).
+- **Vercel Hobby → Pro (~$20/mo)** — Hobby does not permit commercial use. Cron fits either way (2 jobs, once daily, after T54).
+- **Set up uptime monitoring on `/health/ready`** — also prevents the cold-start timeout and the free-plan Supabase autosuspend.
+- **Stripe live mode** — four changes, including two NEW live-mode price IDs. No real money can move until then.
+- **Wipe the database before real salons sign up** — `foundingMember` counts all salons including test ones, so the first real customers would silently get 7 days instead of 37.
+- **Is M-Pesa in scope?** (no code exists — [R3])
+- **Legal documents** — `privacy.html` / `terms.html` still carry `[TO BE COMPLETED]` fields and need a lawyer.
 
 ---
 
