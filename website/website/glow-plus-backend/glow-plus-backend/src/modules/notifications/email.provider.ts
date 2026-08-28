@@ -19,7 +19,14 @@ const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Glow+ <onboarding@resend.dev>';
 
 export interface SendEmailInput {
   to: string;
-  template: 'confirm-email' | 'reset-password' | 'trial-ending-soon' | 'payment-failed' | 'reward-unlocked' | 'staff-invite';
+  template:
+    | 'confirm-email'
+    | 'reset-password'
+    | 'trial-ending-soon'
+    | 'payment-failed'
+    | 'reward-unlocked'
+    | 'staff-invite'
+    | 'points-waiting';
   data: Record<string, unknown>;
 }
 
@@ -99,6 +106,32 @@ function renderTemplate(template: SendEmailInput['template'], data: Record<strin
                <p><a href="${data.inviteUrl}">${data.inviteUrl}</a></p>
                <p>This invite expires in 7 days. If you weren't expecting it, you can ignore this email.</p>`,
       };
+    /**
+     * T82 — the first time a salon logs a visit for someone with no account.
+     *
+     * `findOrCreateClient` creates the account so the points have somewhere to
+     * live, with a random 16-byte password nobody knows — not the customer,
+     * not the salon, not us. Until now NOTHING told the person any of this had
+     * happened, so they could accumulate points for months and never learn
+     * they had an account to redeem them from. A loyalty scheme the customer
+     * cannot see is not a loyalty scheme.
+     *
+     * It deliberately carries NO set-password token. Reset links live one hour
+     * (password-reset.service.ts), and someone who just had their hair cut may
+     * not open their inbox until that evening — a dead link is worse than a
+     * clear instruction. This points at the ordinary forgot-password page,
+     * which works whenever they get to it, and which also marks the address
+     * verified on the way through.
+     */
+    case 'points-waiting':
+      return {
+        subject: `You have ${data.points} Glow+ points from ${data.businessName}`,
+        html: `<p>${data.businessName} just added <strong>${data.points} points</strong> to your Glow+ account.</p>
+               <p>We created an account for you so the points had somewhere to go, but it has no password yet. Set one here to see your points and claim rewards:</p>
+               <p><a href="${data.setPasswordUrl}">Set your password</a></p>
+               <p>If you weren't expecting this, you can ignore this email — the account cannot be signed into until a password is set from your own inbox.</p>`,
+      };
+
     case 'reward-unlocked':
       return {
         subject: 'You unlocked a reward on Glow+! 🎉',

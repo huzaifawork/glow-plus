@@ -107,7 +107,7 @@ export class VisitsService {
     if (!style || style.merchantId !== merchantId) throw new NotFoundException('Style not found for this merchant');
     if (!style.active) throw new BadRequestException('This style is no longer active');
 
-    const client = await this.findOrCreateClient(dto.clientEmail, dto.clientName);
+    const { client, created } = await this.findOrCreateClient(dto.clientEmail, dto.clientName);
 
     const visit = await this.prisma.visit.create({
       data: {
@@ -118,6 +118,34 @@ export class VisitsService {
         loggedBy: staffUserId,
       },
     });
+
+    // T82 — tell a brand-new customer that an account now exists for them.
+    //
+    // After the visit, so the figure quoted is the one actually recorded, and
+    // outside any transaction: the visit and its points are the thing that
+    // must not be lost. An email provider having a bad minute must never turn
+    // a successful visit into a failed one at the counter, with a queue
+    // waiting — so this is best-effort and swallowed.
+    if (created) {
+      try {
+        const merchant = await this.prisma.merchant.findUnique({
+          where: { id: merchantId },
+          select: { businessName: true },
+        });
+        await sendEmail({
+          to: client.email,
+          template: 'points-waiting',
+          data: {
+            businessName: merchant?.businessName ?? 'A Glow+ salon',
+            points: style.pointsPerVisit,
+            setPasswordUrl: `${process.env.APP_URL ?? ''}/forgot-password`,
+          },
+        });
+      } catch {
+        /* the visit and its points are already saved; the customer can still
+           reach the account through forgot-password unprompted */
+      }
+    }
 
     const activeRules = await this.prisma.rewardRule.findMany({ where: { merchantId, active: true } });
     const unlocked: UnlockedReward[] = [];
@@ -140,15 +168,29 @@ export class VisitsService {
     return { visit, unlocked };
   }
 
-  /** Clients are consumers who may not have signed up yet — create a
-   * lightweight, unverified account so the visit has somewhere to attach. */
+  /**
+   * Clients are consumers who may not have signed up yet — create a
+   * lightweight, unverified account so the visit has somewhere to attach.
+   *
+   * The password is 16 random bytes, hashed: unguessable, and known to nobody
+   * — not the customer, not the salon, not us. That is deliberate. The way in
+   * is a password reset from their own inbox, which is also what marks the
+   * address verified, so the account cannot be used by whoever typed the email
+   * at the counter.
+   *
+   * T82 — returns whether it CREATED the row, because that is the one moment
+   * worth emailing about. Sending on every visit would be spam; sending never,
+   * which is what happened until now, left customers with points they had no
+   * idea existed.
+   */
   private async findOrCreateClient(email: string, name?: string) {
     const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) return existing;
+    if (existing) return { client: existing, created: false };
 
     const placeholderPassword = await bcrypt.hash(randomBytes(16).toString('hex'), 12);
-    return this.prisma.user.create({
+    const client = await this.prisma.user.create({
       data: { email, name: name ?? email.split('@')[0], passwordHash: placeholderPassword },
     });
+    return { client, created: true };
   }
 }
