@@ -93,6 +93,14 @@ model Merchant {
   emailVerifiedAt  DateTime?
   stripeCustomerId String?        @unique
   foundingMember   Boolean        @default(false) // true for the first 50 signups — gets an extra free month
+  /// T83 — how many clients this salon can serve AT ONCE: chairs, stations,
+  /// stylists on shift. Availability treated every salon as a single resource
+  /// until now, so a four-chair salon read as fully booked the moment ONE
+  /// client booked.
+  ///
+  /// Default 1 is the old behaviour exactly, so every existing salon keeps
+  /// working unchanged until someone sets a real number.
+  seats            Int       @default(1)
   createdAt        DateTime       @default(now())
 
   subscription  Subscription?

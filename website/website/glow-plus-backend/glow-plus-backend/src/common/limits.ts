@@ -49,3 +49,14 @@ export const MAX_TOKEN = 512;
 
 /** Database ids — cuid is 25 chars; the ceiling just stops a novel-as-an-id. */
 export const MAX_ID = 64;
+
+/**
+ * T83 — how many clients a salon can serve at once.
+ *
+ * The floor is 1, not 0: a salon with zero seats can never be booked, which is
+ * a state nobody means to configure and which reads as an outage. The ceiling
+ * is a sanity bound, not a business rule — it exists so a typo of 1000 cannot
+ * make the availability grid offer a thousand concurrent appointments.
+ */
+export const SEATS_MIN = 1;
+export const SEATS_MAX = 100;

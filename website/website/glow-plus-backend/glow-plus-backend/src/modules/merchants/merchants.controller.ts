@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
@@ -9,6 +9,10 @@ import { MerchantSignupDto } from './signup.dto';
 import { PublicMerchantsQueryDto } from './public-merchants-query.dto';
 import { MerchantRequest } from '../../middleware/auth.middleware';
 import { RequireMerchantGuard } from '../../common/guards/require-merchant.guard';
+import { RequireMerchantOwnerGuard } from '../../common/guards/require-merchant-owner.guard';
+import { RequireActiveSubscriptionGuard } from '../../common/guards/require-active-subscription.guard';
+import { AvailabilityService } from '../bookings/availability.service';
+import { UpdateSeatsDto } from './settings.dto';
 
 @Controller('merchants')
 export class MerchantsController {
@@ -16,6 +20,7 @@ export class MerchantsController {
     private readonly merchants: MerchantsService,
     private readonly onboarding: OnboardingService,
     private readonly merchantAuth: MerchantAuthService,
+    private readonly availability: AvailabilityService,
   ) {}
 
   // T31 — this bound `MerchantSignupInput`, a TypeScript INTERFACE. Interfaces
@@ -81,5 +86,35 @@ export class MerchantsController {
   @UseGuards(RequireMerchantGuard)
   me(@Req() req: MerchantRequest) {
     return this.merchants.getProfile(req.merchantId);
+  }
+
+  /**
+   * T83 — "can I get in?", for a salon's public page.
+   *
+   * PUBLIC, like the salon's menu and its opening hours: a customer deciding
+   * whether to walk in has not signed in yet, and asking them to is the
+   * fastest way to lose them. `getCapacity` calls `assertMerchantVisible`, so
+   * a suspended, cancelled or unapproved salon 404s here exactly as it does on
+   * every other public route — T48 [F47] is not re-opened by adding one.
+   *
+   * Booking counts only. It exposes no customer, no name and no appointment
+   * time — just how many of the salon's own chairs are busy.
+   */
+  @Get(':merchantId/capacity')
+  capacity(@Param('merchantId') merchantId: string) {
+    return this.availability.getCapacity(merchantId);
+  }
+
+  /**
+   * T83 — the salon sets its own seat count.
+   *
+   * Owner-only and behind the paywall, the same pair reward-rules uses for its
+   * writes: this is business configuration that changes what customers are
+   * offered, not day-to-day work a receptionist does.
+   */
+  @UseGuards(RequireMerchantOwnerGuard, RequireActiveSubscriptionGuard)
+  @Patch('me/seats')
+  updateSeats(@Req() req: MerchantRequest, @Body() dto: UpdateSeatsDto) {
+    return this.merchants.updateSeats(req.merchantId!, dto.seats);
   }
 }

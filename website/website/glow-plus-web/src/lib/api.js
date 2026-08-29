@@ -822,6 +822,38 @@ export function setRewardRuleActive(id, active) {
 }
 
 /**
+ * Edit an existing reward rule — T84.
+ *
+ * Until now a salon could create a rule and switch it off, but not change it:
+ * a typo in "10% off" meant deactivating that rule and building a replacement,
+ * leaving a dead row behind. The endpoint already existed and nothing called
+ * it.
+ */
+export function updateRewardRule(id, rule) {
+  return apiRequest(`/reward-rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: rule });
+}
+
+/* --------------------------------------------------------------------------
+   Seats and capacity (T83)
+   -------------------------------------------------------------------------- */
+
+/**
+ * How busy a salon is — PUBLIC, no token.
+ *
+ * A customer deciding whether to walk in has not signed in yet, and asking
+ * them to is the fastest way to lose them. Returns seats, how many are free
+ * right now, whether the salon is open, and whether it is booked out today.
+ */
+export function getSalonCapacity(merchantId) {
+  return apiRequest(`/merchants/${encodeURIComponent(merchantId)}/capacity`, { auth: false });
+}
+
+/** The salon sets how many clients it can serve at once. Owner-only. */
+export function updateSeats(seats) {
+  return apiRequest('/merchants/me/seats', { method: 'PATCH', body: { seats } });
+}
+
+/**
  * Opening hours  [F52]
  *
  * `PUT /business-hours` has existed since T13 and nothing ever called it, so

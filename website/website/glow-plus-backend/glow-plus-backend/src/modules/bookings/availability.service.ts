@@ -8,6 +8,28 @@ const SLOT_GRANULARITY_MINUTES = 15; // candidate slots start every 15 min
 export interface AvailableSlot {
   startTime: string; // ISO
   endTime: string; // ISO
+  /**
+   * T83 — how many of the salon's seats are still free for this slot, and how
+   * many it has in total. Additive: the two fields that existed keep their
+   * names and meaning, so the React Native app (Order 2), which reads only
+   * `startTime`/`endTime`, is unaffected.
+   */
+  seatsAvailable: number;
+  seatsTotal: number;
+}
+
+/** T83 — the at-a-glance answer for a salon's page and the directory. */
+export interface CapacitySummary {
+  seats: number;
+  /** Bookings overlapping this instant. */
+  inUseNow: number;
+  freeNow: number;
+  /** False when the salon is closed right now, so `freeNow` is not mistaken for "walk in". */
+  openNow: boolean;
+  /** No remaining slot today for the salon's shortest active service. */
+  fullyBookedToday: boolean;
+  /** ISO instant of the next free slot today, or null when there is none left. */
+  nextFreeAt: string | null;
 }
 
 @Injectable()
@@ -17,13 +39,25 @@ export class AvailabilityService {
   /**
    * Returns bookable time slots for a given merchant + style + date.
    *
-   * IMPORTANT SIMPLIFICATION (v1): this treats each merchant as a single
-   * resource — one appointment at a time, regardless of how many stylists
-   * or chairs they actually have. That's correct for a one-person salon
-   * and wrong for a multi-stylist one (it will under-report availability,
-   * showing a slot as booked even if a different stylist is free). Adding
-   * per-staff resources is the natural next step — see the note in
-   * bookings.service.ts's createBooking() for where that would plug in.
+   * T83 — capacity aware. Each salon declares `seats`: how many clients it can
+   * serve at once (chairs, stations, stylists on shift). A slot is offered
+   * while FEWER THAN `seats` bookings overlap it, and each slot reports how
+   * many are left.
+   *
+   * This replaces the v1 simplification that treated every merchant as a
+   * single resource — one appointment at a time, however many chairs they
+   * had. That under-reported availability badly: a four-chair salon read as
+   * fully booked the moment ONE client booked, and every slot three real
+   * stylists were free for simply never appeared.
+   *
+   * `seats` defaults to 1, which reproduces the old behaviour exactly, so a
+   * one-person salon is unaffected.
+   *
+   * Still NOT per-stylist scheduling: seats are interchangeable, so this
+   * cannot say *which* stylist, or hold a named one. That is a much larger
+   * build (staff rotas, per-staff hours, skills per service) and is not what
+   * "how many seats are free" needs. Per-staff resources would plug in here
+   * and in `countOverlapping` below.
    */
   async getAvailableSlots(merchantId: string, styleId: string, dateISO: string): Promise<AvailableSlot[]> {
     // T48 [F47] — checked FIRST, before anything about the style. This route
@@ -60,6 +94,8 @@ export class AvailabilityService {
     const now = new Date();
     const earliestStart = dayStart > now ? dayStart : this.roundUpToGranularity(now);
 
+    const seats = await this.seatsFor(merchantId);
+
     const existingBookings = await this.prisma.booking.findMany({
       where: {
         merchantId,
@@ -77,15 +113,105 @@ export class AvailabilityService {
       const slotStart = new Date(start);
       const slotEnd = new Date(start + durationMs);
 
-      const overlaps = existingBookings.some(
+      // Count them rather than asking "is there one?" — that difference IS the
+      // feature. `some()` treated the second chair as unavailable.
+      const taken = existingBookings.filter(
         (b: { startTime: Date; endTime: Date }) => slotStart < b.endTime && slotEnd > b.startTime,
-      );
-      if (!overlaps) {
-        slots.push({ startTime: slotStart.toISOString(), endTime: slotEnd.toISOString() });
+      ).length;
+
+      if (taken < seats) {
+        slots.push({
+          startTime: slotStart.toISOString(),
+          endTime: slotEnd.toISOString(),
+          seatsAvailable: seats - taken,
+          seatsTotal: seats,
+        });
       }
     }
 
     return slots;
+  }
+
+  /**
+   * The at-a-glance answer: how busy is this salon, right now and today.
+   *
+   * Deliberately does NOT take a style. A customer looking at a salon card is
+   * asking "can I get in?", not "can I get a 90-minute balayage at 3pm?" — so
+   * `fullyBookedToday` is measured against the salon's SHORTEST active
+   * service. If even that does not fit, nothing does, and the answer is
+   * honest for every service rather than accidentally pessimistic for the
+   * long ones.
+   *
+   * A closed salon reports `openNow: false` with `freeNow` still filled in,
+   * so a caller never renders "3 seats free" over a locked door.
+   */
+  async getCapacity(merchantId: string): Promise<CapacitySummary> {
+    await assertMerchantVisible(this.prisma, merchantId, 'This salon is not currently accepting bookings');
+
+    const seats = await this.seatsFor(merchantId);
+    const now = new Date();
+
+    const inUseNow = await this.countOverlapping(merchantId, now, now);
+
+    const today = salonDateFor(now);
+    const hours = await this.prisma.businessHours.findUnique({
+      where: { merchantId_dayOfWeek: { merchantId, dayOfWeek: dayOfWeekFor(today) } },
+    });
+    const openNow =
+      !!hours &&
+      !hours.closed &&
+      now >= salonWallTimeToInstant(today, hours.openTime) &&
+      now < salonWallTimeToInstant(today, hours.closeTime);
+
+    // Shortest active service — see the note above.
+    const shortest = await this.prisma.style.findFirst({
+      where: { merchantId, active: true },
+      orderBy: { durationMinutes: 'asc' },
+      select: { id: true },
+    });
+
+    let nextFreeAt: string | null = null;
+    if (shortest) {
+      const slots = await this.getAvailableSlots(merchantId, shortest.id, today);
+      nextFreeAt = slots.length ? slots[0].startTime : null;
+    }
+
+    return {
+      seats,
+      inUseNow,
+      freeNow: Math.max(0, seats - inUseNow),
+      openNow,
+      // A salon with no active services is not "fully booked" — it has nothing
+      // to book. Reporting it as booked out would be a different, wrong story.
+      fullyBookedToday: Boolean(shortest) && nextFreeAt === null,
+      nextFreeAt,
+    };
+  }
+
+  private async seatsFor(merchantId: string): Promise<number> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { seats: true },
+    });
+    // Falls back to the pre-T83 behaviour rather than throwing: this is called
+    // after the merchant has already been resolved by every caller.
+    return Math.max(1, merchant?.seats ?? 1);
+  }
+
+  /**
+   * Bookings overlapping a window. `start === end` asks "at this instant",
+   * where the strict comparisons still behave: a booking running 10:00–11:00
+   * overlaps 10:30, and one ending exactly at 10:30 does not.
+   */
+  private async countOverlapping(merchantId: string, start: Date, end: Date): Promise<number> {
+    return this.prisma.booking.count({
+      where: {
+        merchantId,
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        startTime: { lte: start },
+        endTime: { gt: end },
+      },
+    });
   }
 
   /**
@@ -156,8 +282,17 @@ export class AvailabilityService {
   }
 
   /** Confirms a specific start time is still free right before booking it — closes the race-condition window between browsing and submitting. */
+  /**
+   * T83 — capacity aware, and it MUST stay in step with the slot loop above.
+   *
+   * If this still refused on any overlap, the read path would offer a second
+   * chair and the write path would reject the booking it had just advertised
+   * — the exact read/write disagreement [F64] was about, arriving from the
+   * other direction.
+   */
   async isSlotStillAvailable(merchantId: string, startTime: Date, endTime: Date): Promise<boolean> {
-    const conflict = await this.prisma.booking.findFirst({
+    const seats = await this.seatsFor(merchantId);
+    const taken = await this.prisma.booking.count({
       where: {
         merchantId,
         status: { in: ['PENDING', 'CONFIRMED'] },
@@ -165,7 +300,7 @@ export class AvailabilityService {
         endTime: { gt: startTime },
       },
     });
-    return !conflict;
+    return taken < seats;
   }
 
   private roundUpToGranularity(date: Date): Date {

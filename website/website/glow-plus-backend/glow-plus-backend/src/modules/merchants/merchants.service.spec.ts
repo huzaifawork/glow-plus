@@ -20,6 +20,7 @@
 import { Test } from '@nestjs/testing';
 import { MerchantsService } from './merchants.service';
 import { MerchantsController } from './merchants.controller';
+import { AvailabilityService } from '../bookings/availability.service';
 import { OnboardingService } from './onboarding.service';
 import { MerchantAuthService } from './merchant-auth.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -242,6 +243,15 @@ describe('MerchantsController — GET /merchants', () => {
         { provide: MerchantsService, useValue: { listPublic, foundingSpots: jest.fn() } },
         { provide: OnboardingService, useValue: {} },
         { provide: MerchantAuthService, useValue: {} },
+        // T83 — the controller gained GET :id/capacity. This suite is about
+        // the directory's response shape, so a stub is right: a real
+        // AvailabilityService would drag BookingsModule in for nothing.
+        { provide: AvailabilityService, useValue: { getCapacity: jest.fn() } },
+        // The new PATCH me/seats route carries RequireMerchantOwnerGuard and
+        // RequireActiveSubscriptionGuard, and Nest builds every guard on the
+        // controller even for a test that only calls one handler. The second
+        // of those injects PrismaService, so it has to be resolvable here.
+        { provide: PrismaService, useValue: {} },
       ],
     }).compile();
     controller = moduleRef.get(MerchantsController);

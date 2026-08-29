@@ -7,6 +7,8 @@ import {
   cancelMerchantBooking,
   confirmMerchantBooking,
   createRewardRule,
+  updateRewardRule,
+  updateSeats,
   createStyle,
   getMerchantProfile,
   listMerchantBookings,
@@ -405,12 +407,54 @@ function RulesPanel({ active }) {
   const freeStyleRef = useRef(null);
   const [rewardType, setRewardType] = useState('PERCENT_OFF');
   const [busy, setBusy] = useState(false);
+  /**
+   * T84 — the rule currently loaded into the form for editing, or null when
+   * the form is creating a new one.
+   *
+   * A salon could create a rule and switch it off, but never change it: a typo
+   * in "10% off" meant deactivating that rule and building a replacement,
+   * leaving a dead row on the list forever. `PATCH /reward-rules/:id` already
+   * existed and nothing called it.
+   *
+   * Same shape as StylesPanel's `editing` above, deliberately — the two panels
+   * sit side by side and behaving differently would be its own small
+   * confusion.
+   */
+  const [editing, setEditing] = useState(null);
 
   const rules = usePortalData(() => listRewardRules(), []);
   // The scope dropdown lists real styles because `styleScopeId` is a foreign
   // key to one — see the divergence note at the top of this file.
   const styles = usePortalData(() => listStyles(), []);
   const activeStyles = styles ? styles.filter((s) => s.active !== false) : [];
+
+  // The form is uncontrolled (refs, like StylesPanel), so loading a rule into
+  // it has to be imperative. Keyed on `editing.id` rather than the object, so
+  // a refetch that returns an equal-but-new object does not stamp over what
+  // the salon has started typing.
+  useEffect(() => {
+    if (!editing) return;
+    nameRef.current.value = editing.name;
+    triggerRef.current.value = editing.triggerType;
+    valueRef.current.value = editing.triggerValue;
+    scopeRef.current.value = editing.styleScopeId || '';
+    setRewardType(editing.rewardType);
+    // Dollars in the form, cents in the column — the same conversion as
+    // submitRule, run backwards.
+    if (editing.rewardType === 'FREE_SERVICE') {
+      if (freeStyleRef.current) freeStyleRef.current.value = editing.freeServiceStyleId || '';
+    } else if (rewardValueRef.current) {
+      rewardValueRef.current.value =
+        editing.rewardType === 'FLAT_DISCOUNT' ? editing.rewardValue / 100 : editing.rewardValue;
+    }
+  }, [editing && editing.id]);
+
+  function cancelRuleEdit() {
+    setEditing(null);
+    formRef.current.reset();
+    valueRef.current.value = 5;
+    setRewardType('PERCENT_OFF');
+  }
 
   async function submitRule(ev) {
     ev.preventDefault();
@@ -443,14 +487,18 @@ function RulesPanel({ active }) {
     }
 
     setBusy(true);
-    const created = await run(() => createRewardRule(rule));
+    const saved = await run(() =>
+      editing ? updateRewardRule(editing.id, rule) : createRewardRule(rule),
+    );
     setBusy(false);
-    if (!created) return;
+    if (!saved) return;
 
+    const wasEditing = Boolean(editing);
+    setEditing(null);
     formRef.current.reset();
     valueRef.current.value = 5;
     setRewardType('PERCENT_OFF');
-    toast(t('toast_rule_added_prefix') + name);
+    toast(wasEditing ? `Updated ${name}` : t('toast_rule_added_prefix') + name);
   }
 
   function toggleRule(r) {
@@ -462,7 +510,16 @@ function RulesPanel({ active }) {
       <div className="panel-grid">
         <div className="panel-form">
           <T as="h4" k="rules_form_title" />
-          <T as="div" className="hint" k="rules_form_hint" />
+          {editing ? (
+            <div className="hint">
+              Editing <strong>{editing.name}</strong> —{' '}
+              <button type="button" className="link-btn" onClick={cancelRuleEdit}>
+                cancel and add a new rule instead
+              </button>
+            </div>
+          ) : (
+            <T as="div" className="hint" k="rules_form_hint" />
+          )}
           <form id="ruleForm" ref={formRef} onSubmit={submitRule}>
             <T as="label" htmlFor="rName" k="label_rule_name" />
             <input type="text" id="rName" ref={nameRef} placeholder="Loyal Client Discount" required />
@@ -564,6 +621,13 @@ function RulesPanel({ active }) {
                       rewardLabel(r)}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="toggle inactive"
+                  onClick={() => setEditing(r)}
+                >
+                  Edit
+                </button>
                 <button
                   className={'toggle ' + (r.active !== false ? 'active' : 'inactive')}
                   onClick={() => toggleRule(r)}
@@ -1083,6 +1147,70 @@ function HoursPanel({ active }) {
   );
 }
 
+
+/**
+ * How many clients this salon can serve at once — T83.
+ *
+ * Availability treated every salon as ONE chair until now, so a salon with
+ * three stylists showed as fully booked the moment a single client booked, and
+ * two thirds of its real capacity was invisible to customers. This is the
+ * number that fixes that, and it is the salon's to set: nobody else knows how
+ * many chairs are staffed on a Tuesday.
+ *
+ * Lowering it never cancels appointments that already exceed the new figure.
+ * Those were accepted in good faith and real customers are expecting them — the
+ * salon reduces capacity going forward and works the existing day out.
+ */
+function SeatsSetting({ current }) {
+  const [seats, setSeats] = useState(current);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    setSaved(false);
+    try {
+      await updateSeats(Number(seats));
+      setSaved(true);
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : String(e2));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="list-card" style={{ display: 'block' }}>
+      <div className="lc-name">Seats — clients you can serve at once</div>
+      <div className="lc-meta" style={{ marginBottom: 8 }}>
+        Chairs, stations, or stylists on shift. Customers can book this many appointments at the
+        same time, and see how many are still free.
+      </div>
+      <form onSubmit={save} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="number"
+          min={1}
+          max={100}
+          value={seats}
+          onChange={(e) => {
+            setSeats(e.target.value);
+            setSaved(false);
+          }}
+          style={{ width: 90 }}
+        />
+        <button type="submit" className="toggle active" disabled={busy}>
+          {busy ? '…' : 'Save'}
+        </button>
+        {saved ? <span className="lc-meta">Saved</span> : null}
+      </form>
+      {err ? <p className="err" role="alert">{err}</p> : null}
+    </div>
+  );
+}
+
 function ProfilePanel({ active }) {
   const profile = usePortalData(() => getMerchantProfile(), []);
 
@@ -1114,6 +1242,8 @@ function ProfilePanel({ active }) {
             </div>
           </div>
         ))}
+        <SeatsSetting current={profile.seats ?? 1} />
+
         <div className="hint" style={{ marginTop: '12px' }}>
           To change your business details, contact Glow+ support. Your sign-in email and account
           status are managed for you.

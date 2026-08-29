@@ -20,6 +20,7 @@ import {
   consumerLogin,
   createBooking,
   getAvailability,
+  getSalonCapacity,
   getConsumerToken,
   listMyBookings,
   listPublicMerchants,
@@ -135,6 +136,10 @@ function BookingForm() {
   const [styleId, setStyleId] = useState('');
   const [date, setDate] = useState(todayISO());
   const [slots, setSlots] = useState(null);
+  // T83 — how busy the chosen salon is, independent of the service or date the
+  // customer is still deciding on. Answers "can I get in?" before they have
+  // committed to anything.
+  const [capacity, setCapacity] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -153,6 +158,12 @@ function BookingForm() {
 
   useEffect(() => {
     if (!merchantId) return;
+    // Best effort and non-blocking: this is a nice-to-know banner, and a salon
+    // whose capacity call fails must still be bookable.
+    setCapacity(null);
+    getSalonCapacity(merchantId)
+      .then(setCapacity)
+      .catch(() => setCapacity(null));
     setStyleId('');
     setStyles([]);
     setSlots(null);
@@ -203,6 +214,49 @@ function BookingForm() {
     }
   }
 
+/**
+ * "Can I get in?" — T83.
+ *
+ * Deliberately answers the question a customer actually has when they land on
+ * a salon, which is not "is 14:15 free for a 90-minute balayage". Fully booked
+ * is measured against the salon's SHORTEST service, so if it says booked out,
+ * it is booked out for everything.
+ *
+ * `openNow` is rendered separately from seat counts so "3 seats free" is never
+ * shown over a closed door — free seats at 2am are not an invitation.
+ */
+function CapacityBanner({ capacity }) {
+  const { seats, freeNow, openNow, fullyBookedToday, nextFreeAt } = capacity;
+
+  if (fullyBookedToday) {
+    return (
+      <p className="capacity capacity-full" role="status">
+        <strong>Fully booked today.</strong> Try another date.
+      </p>
+    );
+  }
+
+  return (
+    <p className="capacity" role="status">
+      {openNow ? (
+        <>
+          <strong>
+            {freeNow > 0
+              ? `${freeNow} of ${seats} ${seats === 1 ? 'seat' : 'seats'} free right now`
+              : 'All seats busy right now'}
+          </strong>
+          {freeNow === 0 && nextFreeAt ? ` — next opening at ${formatSlot(nextFreeAt)}` : null}
+        </>
+      ) : (
+        <>
+          <strong>Closed right now.</strong>
+          {nextFreeAt ? ` Next opening today at ${formatSlot(nextFreeAt)}.` : ' No times left today.'}
+        </>
+      )}
+    </p>
+  );
+}
+
   return (
     <div className="card">
       <h2>Book an appointment</h2>
@@ -219,6 +273,8 @@ function BookingForm() {
             ))}
           </select>
         </label>
+
+        {capacity ? <CapacityBanner capacity={capacity} /> : null}
 
         <label className="field">
           <span>Service</span>
@@ -258,6 +314,13 @@ function BookingForm() {
                 onClick={() => setSelectedSlot(slot)}
               >
                 {formatSlot(slot.startTime)}
+                {/* Only worth saying when it is scarce or plural. "1 seat" on
+                    a one-chair salon is noise: every slot would carry it. */}
+                {slot.seatsTotal > 1 ? (
+                  <span className="slot-seats">
+                    {slot.seatsAvailable} of {slot.seatsTotal} free
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

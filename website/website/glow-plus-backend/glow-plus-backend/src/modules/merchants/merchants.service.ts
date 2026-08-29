@@ -41,6 +41,11 @@ export const MERCHANT_PUBLIC_SELECT = {
   status: true,
   emailVerifiedAt: true,
   foundingMember: true,
+  // T83 — how many clients the salon can serve at once. Opted in explicitly,
+  // as the comment above requires. Safe to publish: it is a fact about the
+  // shop floor, not about a person, and the whole point is that customers can
+  // see it. The salon's own portal reads it back from here to fill the field.
+  seats: true,
   createdAt: true,
   subscription: true,
 } satisfies Prisma.MerchantSelect;
@@ -198,5 +203,20 @@ export class MerchantsService {
       data: { status: 'SUSPENDED' },
       select: MERCHANT_PUBLIC_SELECT,
     });
+  }
+
+  /**
+   * T83 — set how many clients this salon can serve at once.
+   *
+   * Lowering it does NOT cancel bookings that already exceed the new number.
+   * Those appointments were accepted in good faith and real customers are
+   * expecting them; the salon reduces capacity going forward and works the
+   * existing day out. Availability simply offers nothing more until the count
+   * drops back under the new figure, which is what a salon losing a stylist
+   * actually wants.
+   */
+  async updateSeats(merchantId: string, seats: number) {
+    await this.prisma.merchant.update({ where: { id: merchantId }, data: { seats } });
+    return { ok: true, seats };
   }
 }
