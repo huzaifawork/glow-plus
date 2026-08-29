@@ -6,6 +6,7 @@ import {
   cancelBooking,
   createBooking,
   getAvailability,
+  getSalonCapacity,
   getMyRewards,
   listMyBookings,
   listMyRedemptions,
@@ -281,6 +282,52 @@ function RewardsPanel({ active, blocks }) {
 /* ============================================================
    Book tab — the public directory, then availability, then POST /bookings
    ============================================================ */
+/**
+ * "Can I get in?" — T83.
+ *
+ * This is the SECOND place it had to go. The banner was built on
+ * pages/booking/BookingPage.jsx (the standalone /consumer/booking page) and
+ * this dashboard's Book tab is the one customers actually reach from the site,
+ * so the feature was invisible where it mattered. Same pair of files, same
+ * mistake, third time this project — see the two-admin-UI note in CONTEXT.md.
+ *
+ * Order matters below. `fullyBookedToday` means "no bookable time remains
+ * today", which is equally true at 8pm on a completely empty day — reporting
+ * that as "fully booked" would have every salon on the platform telling
+ * customers it was turning them away, every evening. Closed is checked first.
+ */
+function CapacityNote({ capacity }) {
+  const { seats, freeNow, openNow, fullyBookedToday, nextFreeAt } = capacity;
+
+  if (!openNow) {
+    return (
+      <div className="hint" role="status" style={{ marginBottom: '10px' }}>
+        <b>Closed right now.</b>{' '}
+        {nextFreeAt ? `Next opening today at ${formatSlot(nextFreeAt)}.` : 'Pick another date to book.'}
+      </div>
+    );
+  }
+
+  if (fullyBookedToday) {
+    return (
+      <div className="hint" role="status" style={{ marginBottom: '10px' }}>
+        <b>Fully booked today.</b> Try another date.
+      </div>
+    );
+  }
+
+  return (
+    <div className="hint" role="status" style={{ marginBottom: '10px' }}>
+      <b>
+        {freeNow > 0
+          ? `${freeNow} of ${seats} ${seats === 1 ? 'seat' : 'seats'} free right now`
+          : 'All seats busy right now'}
+      </b>
+      {freeNow === 0 && nextFreeAt ? ` — next opening at ${formatSlot(nextFreeAt)}` : null}
+    </div>
+  );
+}
+
 function BookPanel({ active }) {
   const { bumpData, toast } = useApp();
   const onError = useApiError();
@@ -301,6 +348,30 @@ function BookPanel({ active }) {
   useEffect(() => {
     if (merchants && merchants.length && !merchantId) setMerchantId(merchants[0].id);
   }, [merchants, merchantId]);
+
+  // T83 — how busy the chosen salon is, independent of the service and date
+  // the customer has not settled on yet. Answers "can I get in?" before they
+  // have committed to anything.
+  const [capacity, setCapacity] = useState(null);
+
+  useEffect(() => {
+    if (!merchantId) {
+      setCapacity(null);
+      return;
+    }
+    let stale = false;
+    // Best effort: a salon whose capacity call fails must still be bookable,
+    // so this never touches onError and never blocks the form.
+    setCapacity(null);
+    getSalonCapacity(merchantId)
+      .then((c) => {
+        if (!stale) setCapacity(c);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [merchantId]);
 
   useEffect(() => {
     if (!merchantId) return;
@@ -419,6 +490,8 @@ function BookPanel({ active }) {
         </form>
 
         <div>
+          {capacity ? <CapacityNote capacity={capacity} /> : null}
+
           {slots === null ? (
             <div className="empty">Choose a salon, a service and a date, then check for open times.</div>
           ) : slots.length === 0 ? (
@@ -439,6 +512,13 @@ function BookPanel({ active }) {
                     onClick={() => setSelected(s)}
                   >
                     {formatSlot(s.startTime)}
+                    {/* Only when the salon has more than one seat. "1 of 1
+                        free" on every row of a one-chair salon is noise. */}
+                    {s.seatsTotal > 1 ? (
+                      <span className="slot-seats">
+                        {s.seatsAvailable} of {s.seatsTotal} free
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>

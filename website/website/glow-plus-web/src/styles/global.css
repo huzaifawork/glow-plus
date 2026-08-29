@@ -441,3 +441,10 @@
   .hours-time{flex:1 1 110px;min-width:0;}
   .hours-sep{flex:0 0 auto;}
 }
+
+/* T83 — seats remaining, printed under a slot's time in the Book tab. Only
+   rendered when the salon has more than one seat, so this never appears on a
+   one-chair salon. */
+.slot-seats{
+  display:block;font-size:11px;font-weight:500;opacity:.7;margin-top:2px;
+}
