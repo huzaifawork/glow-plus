@@ -10,6 +10,7 @@ export type PublicMerchant = {
   id: string;
   businessName: string;
   foundingMember: boolean;
+  seats: number;
   /** Active styles on this salon's menu. */
   styleCount: number;
   /** The distinct style types it offers, for the card's tag row. */
@@ -118,7 +119,12 @@ export class MerchantsService {
         orderBy: { businessName: 'asc' },
         skip,
         take,
-        select: { id: true, businessName: true, foundingMember: true },
+        // T83 — `seats` joins the card so the directory can say "4 chairs"
+        // without an extra request per salon. How BUSY each one is stays on
+        // GET /merchants/:id/capacity: that answer needs today's bookings and
+        // the salon's hours, and doing it per row here would be one query per
+        // card on every directory load.
+        select: { id: true, businessName: true, foundingMember: true, seats: true },
       }),
       this.prisma.merchant.count({ where }),
     ]);

@@ -228,6 +228,19 @@ function BookingForm() {
 function CapacityBanner({ capacity }) {
   const { seats, freeNow, openNow, fullyBookedToday, nextFreeAt } = capacity;
 
+  // Order matters. `fullyBookedToday` means "no bookable time remains today",
+  // which is equally true at 8pm on a quiet day — so it must NOT be reported
+  // as "fully booked" while the salon is closed, or every salon on the
+  // platform claims to be booked out every evening. Closed is checked first.
+  if (!openNow) {
+    return (
+      <p className="capacity" role="status">
+        <strong>Closed right now.</strong>{' '}
+        {nextFreeAt ? `Next opening today at ${formatSlot(nextFreeAt)}.` : 'Pick another date to book.'}
+      </p>
+    );
+  }
+
   if (fullyBookedToday) {
     return (
       <p className="capacity capacity-full" role="status">
@@ -238,7 +251,7 @@ function CapacityBanner({ capacity }) {
 
   return (
     <p className="capacity" role="status">
-      {openNow ? (
+      {(
         <>
           <strong>
             {freeNow > 0
@@ -246,11 +259,6 @@ function CapacityBanner({ capacity }) {
               : 'All seats busy right now'}
           </strong>
           {freeNow === 0 && nextFreeAt ? ` — next opening at ${formatSlot(nextFreeAt)}` : null}
-        </>
-      ) : (
-        <>
-          <strong>Closed right now.</strong>
-          {nextFreeAt ? ` Next opening today at ${formatSlot(nextFreeAt)}.` : ' No times left today.'}
         </>
       )}
     </p>

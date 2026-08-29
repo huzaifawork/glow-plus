@@ -76,7 +76,8 @@ describe('the raw-URL matchers all carry the prefix (T49)', () => {
     // 16 exclusions: 2 health (unversioned, deliberately) + 14 versioned.
     // T54 added the cron dispatcher, which must be excluded because Vercel
     // sends CRON_SECRET in the Authorization header AuthMiddleware parses.
-    expect(entries).toHaveLength(16);
+    // T83 added merchants/(.*)/capacity — public, like the menu and hours.
+    expect(entries).toHaveLength(17);
 
     const unversioned = entries.filter((e: string) => !e.includes('withVersion('));
     expect(unversioned).toHaveLength(2);

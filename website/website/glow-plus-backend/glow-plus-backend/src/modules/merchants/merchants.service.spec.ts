@@ -80,6 +80,11 @@ describe('MerchantsService.listPublic', () => {
       id: true,
       businessName: true,
       foundingMember: true,
+      // T83 — a fact about the shop floor, not about a person. The guard this
+      // test provides is unchanged: an exact-match assertion means a new
+      // column has to be opted in deliberately, which is what editing this
+      // line is. passwordHash and stripeCustomerId still cannot appear.
+      seats: true,
     });
   });
 

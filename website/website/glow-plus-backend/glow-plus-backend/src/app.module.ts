@@ -128,6 +128,12 @@ export class AppModule implements NestModule {
         // which is on the landing page above the fold [F42].
         { path: withVersion('merchants'), method: RequestMethod.GET },
         { path: withVersion('merchants/founding-spots'), method: RequestMethod.GET },
+        // T83 — "how busy is this salon", read before signing in, exactly like
+        // the menu and the opening hours above. The pattern ends in
+        // `/capacity` rather than being `merchants/(.*)`, so it still cannot
+        // match `merchants/me` — the reason the list above is written out
+        // path by path in the first place.
+        { path: withVersion('merchants/(.*)/capacity'), method: RequestMethod.GET },
         { path: withVersion('styles/public/(.*)'), method: RequestMethod.GET },
         // Staff invite acceptance + staff login (T24). An invitee has no
         // account yet, so they cannot hold a token — these must be reachable
