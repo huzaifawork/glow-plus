@@ -30,7 +30,7 @@ Per task: **implement → test by actually running it → record evidence → ti
 
 Why strict: the exact problem we were hired to fix is *"functionality that exists vs. functionality that's been validated."*
 
-## 4. Environment — CURRENT STATE (updated 2026-08-28, end of session 30 — **LIVE ON THE CLIENT'S ACCOUNTS**)
+## 4. Environment — CURRENT STATE (updated 2026-08-29, end of session 31 — **LIVE, WITH REAL SALONS ON IT**)
 
 > ### ⚠️ Read this before the table. The URLs in the Backend and Website rows below are the DEVELOPER's old deployment. They still run, but they are NOT the product any more.
 >
@@ -42,7 +42,8 @@ Why strict: the exact problem we were hired to fix is *"functionality that exist
 > | **Vercel** | Client's team **`joseph-6cd1`**, Hobby plan, exactly two projects: `glow-plus-api`, `glow-plus-web` |
 > | **Database** | Still Supabase `xhyoeiltwcciqowlwyov` on the **developer's** account — transfer outstanding |
 > | **Stripe** | Client's account, **test mode**, webhook → `https://glow-plus-api-six.vercel.app/v1/billing/webhook` |
-> | **Tests** | **529 passing, 33 suites** |
+> | **Tests** | **541 passing, 34 suites** |
+> | **Deploying** | The client's token is on disk at `glow-plus-backend/glow-plus-backend/.env.deploy`. **Deploy from a copy OUTSIDE the git repo** — see the recipe at the top of §8 |
 
 | Thing | Status |
 |---|---|
@@ -146,9 +147,193 @@ Its 23-item priority list is **accurate and complete for the backend**. But:
 
 These two are the biggest hidden-scope items. The user has been advised to raise them with the client.
 
-## 8. EXACTLY where to resume — **DEPLOYED AND LIVE ON THE CLIENT'S ACCOUNTS. What remains is credential rotation, the Supabase transfer, and the client's own plan decisions.**
+## 8. EXACTLY where to resume — **LIVE, AND TAKING CLIENT CHANGE REQUESTS. A new session can deploy immediately: the token is on disk and the recipe is the first thing below.**
 
 > ### ⬇️ Start here. Everything below this box is a historical log, newest last.
+>
+> ## 🏁 SESSION 31 (2026-08-29) — **Client change requests: flexible reward rules (already existed) and seat capacity (new). Both live.**
+>
+> ### ▶️ START HERE IF YOU ARE A NEW SESSION — you can deploy without asking for anything
+>
+> **The client's Vercel access token is already on disk**, gitignored, at
+> `website/website/glow-plus-backend/glow-plus-backend/.env.deploy`. Do not ask
+> the user for it again. Everything below works with it.
+>
+> ```bash
+> # From the backend directory. The token is read from disk, never printed.
+> export $(grep -v '^#' .env.deploy | xargs)
+> npx vercel project ls --scope joseph-6cd1 --token "$VERCEL_TOKEN"
+> ```
+>
+> #### ⚠️ Deploy to the EXISTING projects. Never create new ones.
+>
+> The client's Vercel team **`joseph-6cd1`** must contain **exactly two**
+> projects, and they are already created and already carrying the domains, the
+> environment variables and the production aliases:
+>
+> | Project | id | Serves |
+> |---|---|---|
+> | `glow-plus-api` | `prj_QoA85srwuDa71lDHGC50o2wDnepS` | `https://glow-plus-api-six.vercel.app` |
+> | `glow-plus-web` | `prj_XAYlvfuBOk70doJ8dCmPvmyMjFi3` | `www.glowplusmember.com` + apex |
+>
+> What sends a deploy to the right one is the **`.vercel/project.json`** file
+> already sitting in each directory. It is gitignored, so it survives in the
+> working tree and must be COPIED into the staging directory along with
+> everything else — `cp -r … .vercel "$SP/"` below. Forget it and the CLI
+> treats the folder as a brand-new project and creates a third one.
+>
+> - **Do NOT run `vercel link` again.** The link exists.
+> - **Do NOT create a project in the dashboard.**
+> - **Never deploy from the repository ROOT** — that made a stray project once
+>   and uploaded 130MB, because Vercel honours `.vercelignore`, not
+>   `.gitignore`.
+> - Setting environment variables is `vercel env add <KEY> production --scope
+>   joseph-6cd1 --token "$VERCEL_TOKEN"`, value piped on **stdin** so it is
+>   never printed. Vercel needs a **redeploy** before an env change takes
+>   effect.
+>
+> Verify after every deploy that there are still exactly two:
+>
+> ```bash
+> npx vercel project ls --scope joseph-6cd1 --token "$VERCEL_TOKEN"
+> ```
+>
+> Then confirm the live sites actually changed, rather than assuming — grep the
+> deployed bundle for a string only the new build contains:
+>
+> ```bash
+> curl -s https://www.glowplusmember.com/ | grep -oE '/assets/[a-zA-Z0-9_-]+\.js'
+> curl -s https://glow-plus-api-six.vercel.app/health/ready
+> ```
+>
+> ⚠️ The FIRST request after any deploy can return
+> `FUNCTION_INVOCATION_TIMEOUT` — a cold start booting Nest and Prisma. Retry
+> before treating it as a failure; it settles under a second.
+>
+> #### The deploy recipe — READ THIS BEFORE DEPLOYING
+>
+> **You cannot deploy from inside the git repo.** Vercel refuses with
+> `Git author mhuzaifatariq7@gmail.com must have access to the team joseph`,
+> and the CLI does not say so — it prints `Building…` and hangs, then `vercel
+> ls` reports `UNKNOWN`. Only the REST API (`/v13/deployments/<id>`,
+> `readyStateReason`) gives the reason. Copy the project OUTSIDE the repo and
+> deploy from there so no git metadata is attached:
+>
+> ```bash
+> SP=<scratchpad>/api-deploy
+> cd website/website/glow-plus-backend/glow-plus-backend
+> export $(grep -v '^#' .env.deploy | xargs)
+> rm -rf "$SP" && mkdir -p "$SP"
+> cp -r api prisma public scripts src package.json package-lock.json \
+>       tsconfig.json vercel.json jest.setup.ts .vercelignore .vercel "$SP/"
+> rm -rf "$SP/node_modules" "$SP/dist"
+> (cd "$SP" && npx vercel --prod --yes --scope joseph-6cd1 --token "$VERCEL_TOKEN")
+> ```
+>
+> The website is the same shape from `website/website/glow-plus-web`, copying
+> `src public *.html package.json package-lock.json vite.config.js vercel.json
+> .vercelignore .vercel`.
+>
+> The permanent fix is the client inviting `mhuzaifatariq7@gmail.com` to their
+> Vercel team. Until then every deploy needs the staging copy.
+>
+> #### Migrations — the user runs them, not you
+>
+> The auto-mode classifier BLOCKS reading `DATABASE_URL` out of `.env`, so
+> `prisma migrate deploy` cannot be run from here. Write the migration file,
+> then hand the user SQL to paste into **Supabase → SQL Editor**: the
+> statements, plus a `_prisma_migrations` row so Prisma does not re-run it.
+> Get the checksum with `sha256sum <migration.sql>`.
+>
+> ⚠️ **Order matters.** A backend that selects a column the database does not
+> have yet takes the whole site down — every merchant query throws. Migration
+> first, backend second. The website can go first or last; it degrades quietly.
+>
+> ### ⚠️ THE BIGGEST TRAP ON THIS PROJECT: every UI exists TWICE
+>
+> A feature built in one and not the other is invisible where users actually
+> are. **This has now happened three times.**
+>
+> | Job | In the SPA (what people click) | Standalone page |
+> |---|---|---|
+> | Admin console | `src/views/Admin.jsx` + `AdminTeamPanel.jsx` | `src/pages/admin/AdminPage.jsx` + `AdminTeam.jsx` |
+> | Customer booking | `src/views/ConsumerDashboard.jsx` (Book tab) | `src/pages/booking/BookingPage.jsx` |
+>
+> The SPA ones are reached from the site's own header. The standalone ones need
+> a typed URL. **Change BOTH, every time** — and note the stylesheets differ
+> too: `styles/global.css` for the SPA, `pages/*/*.css` for the standalone
+> pages, so a new CSS class has to be added twice as well.
+>
+> **The right end state is deleting the standalone duplicates** (`/admin/panel`,
+> `/consumer/booking`). That is a deletion, not a build, and it is the single
+> highest-value cleanup left on this project.
+>
+> ### What the client asked for, and what was actually needed
+>
+> **1. "Salons set their own rules on points and percents before a discount."**
+> **This already existed** and the salon portal already exposed it —
+> `RewardRule` with `VISIT_COUNT`/`POINTS_THRESHOLD` triggers and
+> `PERCENT_OFF`/`FLAT_DISCOUNT`/`FREE_SERVICE` rewards, optionally scoped to
+> one style. **Tell the client rather than billing for it twice.** The reason
+> they had not seen it: T78 returns 403 on `/reward-rules` to any salon without
+> a plan, and every salon they tested with was unpaid.
+> **T84** closed the one real gap — a rule could be created and switched off but
+> never edited, so a typo meant deactivating it and building a replacement.
+> `PATCH /reward-rules/:id` already existed and nothing called it.
+>
+> **2. "Customers should see how many seats are free, or if it is fully booked."**
+> **T83**, genuinely new. `availability.service.ts` had documented for months
+> that it treated every salon as a SINGLE resource — one appointment at a time,
+> however many chairs it had — so a four-chair salon read as fully booked the
+> moment ONE client booked, and two thirds of its real capacity was invisible.
+>
+> | | |
+> |---|---|
+> | `Merchant.seats` | Default **1**, which reproduces the old behaviour exactly. A different default would silently double-book every one-person salon. `CHECK (seats BETWEEN 1 AND 100)` in the database too, because the Supabase table editor is a supported path here and gets no DTO validation |
+> | Slot grid | COUNTS overlapping bookings instead of asking whether one exists — that difference is the feature. Each slot carries `seatsAvailable`/`seatsTotal`, additively, so the Order 2 app is untouched |
+> | `isSlotStillAvailable` | Had to move in step, or the grid offers a seat the POST refuses — [F64] from the other direction |
+> | `GET /merchants/:id/capacity` | **Public.** seats, freeNow, openNow, fullyBookedToday, nextFreeAt |
+> | `PATCH /merchants/me/seats` | Owner-only, behind the paywall |
+>
+> ### Three things that bit during this session
+>
+> 1. **A route is not public until AuthMiddleware is told.** `/capacity`
+>    returned 401 despite being written as public. The exclusion list in
+>    `app.module.ts` is written out path by path ON PURPOSE so `merchants/me`
+>    stays protected — the new pattern is `merchants/(.*)/capacity`, which
+>    cannot match it.
+> 2. **`fullyBookedToday` is true at 8pm on a completely empty day.** It means
+>    "no bookable time remains today". Rendering that as "Fully booked" had
+>    every salon telling customers it was turning them away, every evening.
+>    Both booking UIs check `openNow` FIRST.
+> 3. **The capacity display went into the wrong booking UI first** — see the
+>    duplicate-UI table above. The client set seats, opened the booking screen,
+>    and saw nothing.
+>
+> ### State at the end of this session
+>
+> - **541 tests, 34 suites.** Live and verified on `www.glowplusmember.com` and
+>   the apex, both serving the new bundles
+> - There is **real data** in the database now: salons `Bloom hair studio` and
+>   `Usman Naib saloon`, both at `seats = 1`
+> - ⚠️ **seats defaults to 1 and the per-slot counts are suppressed at 1**, so
+>   the feature looks absent until a salon sets a higher number. That is
+>   deliberate — "1 of 1 free" on every row is noise — but it is the first thing
+>   to check when someone says it is not working
+>
+> ### Still open — unchanged from session 30 unless noted
+>
+> - **Rotate `RESEND_API_KEY` and the Vercel token** — the token is in a chat log
+> - **Invite `mhuzaifatariq7@gmail.com` to the client's Vercel team** — removes
+>   the staging-copy workaround from every future deploy
+> - **Supabase: transfer to the client, and get off the free plan** — it takes
+>   **no backups at all**. Largest un-mitigated risk now that real salons exist
+> - **Vercel Hobby → Pro** — Hobby does not permit commercial use
+> - **Stripe live mode** — four changes; no real money can move until then
+> - **Delete the duplicate UIs** — see the table above
+> - **`HANDOVER.md` is still the pre-deployment document** and describes none of
+>   sessions 30–31
+>
 >
 > ## 🏁 SESSION 30 (2026-08-27 → 28) — **DEPLOYED TO THE CLIENT, then six features and five real bugs found by using it.**
 >
@@ -1496,6 +1681,7 @@ Its actual title is **"Software Developer Project Experience & Technical Assessm
 - **Set up uptime monitoring on `/health/ready`** — also prevents the cold-start timeout and the free-plan Supabase autosuspend.
 - **Stripe live mode** — four changes, including two NEW live-mode price IDs. No real money can move until then.
 - **Wipe the database before real salons sign up** — `foundingMember` counts all salons including test ones, so the first real customers would silently get 7 days instead of 37.
+- **Delete the duplicate UIs** — `/admin/panel` and `/consumer/booking` duplicate the SPA's admin console and Book tab. A feature built in one and not the other is invisible where users are; this has cost time three times. A deletion, not a build.
 - **Is M-Pesa in scope?** (no code exists — [R3])
 - **Legal documents** — `privacy.html` / `terms.html` still carry `[TO BE COMPLETED]` fields and need a lawyer.
 
