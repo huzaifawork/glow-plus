@@ -3,6 +3,7 @@ import { AccountType } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AccountRole } from '../../middleware/auth.middleware';
+import { hasBusinessAccount } from '../../common/business-account';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_SECONDS,
@@ -194,9 +195,17 @@ export class RefreshTokenService {
       case 'CONSUMER': {
         const user = await this.prisma.user.findUnique({
           where: { id: accountId },
-          select: { id: true },
+          select: { id: true, email: true },
         });
-        return user ? { role: 'consumer' } : null;
+        if (!user) return null;
+        // Mirrors loginConsumer's consumer-only rule, and is the reason this
+        // one case is stricter than "does the account exist": a session
+        // issued before the address became a business account would otherwise
+        // renew itself every 15 minutes forever and never meet the login
+        // check that now refuses it. Returning null fails the refresh, which
+        // the clients already treat as "signed out, go to Login".
+        if (await hasBusinessAccount(this.prisma, user.email)) return null;
+        return { role: 'consumer' };
       }
       case 'MERCHANT': {
         const merchant = await this.prisma.merchant.findUnique({
