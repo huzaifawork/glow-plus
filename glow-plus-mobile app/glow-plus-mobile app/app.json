@@ -2,29 +2,61 @@
   "expo": {
     "name": "Glow+",
     "slug": "glow-plus",
+    "owner": "tanoliusman_140",
+    "scheme": "glowplus",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "bundleIdentifier": "com.glowplus.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Glow+ uses your location only on this device, to sort nearby salons by distance and show which ones still have appointments today. Your location is never sent to Glow+ or shared with any salon.",
+        "NSUserTrackingUsageDescription": "Glow+ does not track you across apps or websites."
+      }
     },
     "android": {
       "package": "com.glowplus.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
-      }
+        "backgroundColor": "#0B0B0F"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0B0F"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Glow+ uses your location only on this device, to sort nearby salons by distance. It is never sent to Glow+ or shared with any salon."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#E0116F"
+        }
+      ],
+      "expo-splash-screen"
+    ],
     "extra": {
-      "apiBaseUrl": "https://your-glow-plus-api.example.com"
+      "apiBaseUrl": "https://glow-plus-nwdcp1070-joseph-6cd1.vercel.app/v1",
+      "demoMode": false,
+      "salonTimezone": "America/Toronto"
     }
   }
 }

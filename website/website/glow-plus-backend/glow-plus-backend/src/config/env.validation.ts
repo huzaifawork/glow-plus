@@ -154,6 +154,16 @@ export function collectEnvProblems(env: NodeJS.ProcessEnv): string[] {
     if (env.APP_URL && isLocalUrl(env.APP_URL)) {
       problems.push(`APP_URL points at localhost (${env.APP_URL}) — emailed links would be dead for users`);
     }
+    // M1 (W5) — `logoUrl` in the public salon directory is built from this.
+    // Unset or pointing at localhost, every salon logo in the app and on the
+    // website is a URL that resolves to a developer's laptop: the directory
+    // still renders (each client falls back to its R3.12 placeholder), so the
+    // symptom is "no salon has a logo" rather than an error anyone can trace.
+    if (!env.PUBLIC_API_URL?.trim() || isLocalUrl(env.PUBLIC_API_URL)) {
+      problems.push(
+        'PUBLIC_API_URL must be this API\'s public origin (e.g. https://glow-plus-api-six.vercel.app) — salon logo URLs are built from it',
+      );
+    }
     if (env.ALLOWED_ORIGINS && isLocalUrl(env.ALLOWED_ORIGINS)) {
       problems.push(`ALLOWED_ORIGINS still contains localhost (${env.ALLOWED_ORIGINS})`);
     }

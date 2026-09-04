@@ -29,6 +29,66 @@ import T from '../components/T.jsx';
    matches the server's page size. */
 const SALON_PAGE = 12;
 
+/**
+ * A salon's logo in the public directory  (W4, and the app's R3.12)
+ *
+ * Mirrors the mobile app's `SalonLogo` component, including its fallback: when
+ * a salon has no logo — or the image fails to load — it shows a tinted
+ * monogram rather than a broken-image icon or a blank gap. The two surfaces
+ * behave the same way for the same reason the URL comes from the same field
+ * (W5): a customer who sees a salon on the website and then in the app should
+ * not be shown two different things.
+ *
+ * `loading="lazy"` and a fixed box mean the logo never delays or shifts the
+ * rest of the card — the website's equivalent of the app's R3.13.
+ */
+function SalonLogo({ name, logoUrl }) {
+  const [failed, setFailed] = useState(false);
+  const initials = (name || '?')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+
+  const box = {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    background: '#fde7f1',
+    color: '#b00c58',
+    fontWeight: 700,
+    fontSize: 13,
+  };
+
+  if (!logoUrl || failed) {
+    return (
+      <div style={box} aria-hidden="true">
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <div style={box}>
+      <img
+        src={logoUrl}
+        alt={name + ' logo'}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+    </div>
+  );
+}
+
 function SalonGrid() {
   const { t } = useI18n();
   const { dataVersion } = useApp();
@@ -92,9 +152,18 @@ function SalonGrid() {
     <div className="salon-grid" id="salonGrid">
       {cards.map((c) => (
         <div className="salon-card" key={c.id}>
-          <h4>{c.businessName}</h4>
-          <div className="meta">
+          {/* W4 — "The website's public salon directory ... must display each
+              salon's logo, where one has been provided, next to that salon's
+              name." Same `logoUrl` field the mobile app reads off the same
+              `GET /merchants` response (W5), so the two surfaces cannot show
+              different images for one salon. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <SalonLogo name={c.businessName} logoUrl={c.logoUrl} />
+            <h4 style={{ margin: 0 }}>{c.businessName}</h4>
+          </div>
+          <div className="meta" style={{ marginTop: 8 }}>
             {c.styleCount} style{c.styleCount === 1 ? '' : 's'} on the menu
+            {c.city ? ' \u00b7 ' + c.city : ''}
           </div>
           <div style={{ marginTop: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {c.styleTypes.length ? (

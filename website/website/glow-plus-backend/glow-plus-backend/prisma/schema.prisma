@@ -67,6 +67,7 @@ model User {
   visits      Visit[]
   redemptions Redemption[]
   bookings    Booking[]
+  devices     DeviceToken[]
 }
 
 /// T77 — the one control that grants or removes admin access.
@@ -101,8 +102,39 @@ model Merchant {
   /// Default 1 is the old behaviour exactly, so every existing salon keeps
   /// working unchanged until someone sets a real number.
   seats            Int       @default(1)
+
+  /// M1 (mobile spec W2/W5, R3.11) — the salon's logo, as served to EVERY
+  /// Glow+ surface from one place. The bytes live in `MerchantLogo` (a side
+  /// table, so a directory query never drags an image through Postgres); these
+  /// two columns are the metadata the directory needs to build a stable,
+  /// cache-bustable URL without joining to it.
+  ///
+  /// Both are NULL until the salon uploads one, which is what the app reads to
+  /// decide between the real logo and its neutral placeholder (R3.12).
+  logoMimeType     String?
+  logoUpdatedAt    DateTime?
+
+  /// M1 (mobile spec R3.6-R3.10) — where the salon actually is.
+  ///
+  /// Every field is optional and stays that way: the spec's own dependency
+  /// note says a salon without a registered location must be handled
+  /// gracefully rather than assumed to have one, so "no coordinates" has to be
+  /// a representable state and not a migration that invents them.
+  ///
+  /// ⚠️ These are the SALON's coordinates, published deliberately. The
+  /// CUSTOMER's location is never sent here and has no column anywhere in this
+  /// schema — NF6 forbids storing it, and distance is therefore computed
+  /// on-device from these numbers. Do not add a `lastKnownUserLocation`.
+  addressLine      String?
+  city             String?
+  region           String?
+  postalCode       String?
+  latitude         Float?
+  longitude        Float?
+
   createdAt        DateTime       @default(now())
 
+  logo          MerchantLogo?
   subscription  Subscription?
   styles        Style[]
   rewardRules   RewardRule[]
@@ -449,4 +481,54 @@ enum BookingStatus {
   CANCELLED
   COMPLETED
   NO_SHOW
+}
+
+// ---------------------------------------------------------------------------
+// Mobile-app support  (M1)
+// ---------------------------------------------------------------------------
+
+/// The bytes of a salon's logo.
+///
+/// A SIDE TABLE, not a column on Merchant, and that is the whole design. The
+/// public directory selects a handful of Merchant columns for up to 100 salons
+/// on every unauthenticated load; a `Bytes` column on that row would be read
+/// off disk with them whether or not it was selected in a given query, and one
+/// careless `include` would put 100 images into a JSON response. Here, the
+/// image can only be fetched by asking for it by id — which is exactly what
+/// `GET /merchants/:id/logo` does, one salon at a time, with cache headers.
+///
+/// Stored in Postgres rather than object storage because the platform has no
+/// object storage and adding a vendor to serve one small image per salon would
+/// be a new secret, a new failure mode and a new bill. The size ceiling
+/// (MAX_LOGO_BYTES) is what keeps that honest.
+model MerchantLogo {
+  merchantId String   @id
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  mimeType   String
+  bytes      Bytes
+  sizeBytes  Int
+  updatedAt  DateTime @updatedAt
+}
+
+/// An Expo push token for one installation of the mobile app  (R4.5).
+///
+/// Keyed on the token, not on (user, device): a reinstall issues a new token,
+/// and the same physical device can be handed between accounts. `userId` is
+/// therefore updated on conflict rather than duplicated, so a phone that signs
+/// into a second account stops receiving the first account's notifications —
+/// the alternative leaks one customer's appointment status to another.
+///
+/// `revokedAt` rather than a delete on logout, so a token Expo later reports
+/// as dead can be tombstoned by the sender without racing the client.
+model DeviceToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String    @unique
+  platform   String    @default("unknown")
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @updatedAt
+
+  @@index([userId])
 }

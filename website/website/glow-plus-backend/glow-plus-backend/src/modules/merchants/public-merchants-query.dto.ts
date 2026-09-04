@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { MAX_NAME } from '../../common/limits';
+import { MAX_CITY, MAX_NAME } from '../../common/limits';
 
 /** Page size when the caller doesn't ask for one. Comfortably above the
  *  number of salons a landing page renders, so the website and the RN app
@@ -29,6 +29,20 @@ export class PublicMerchantsQueryDto {
   @IsString()
   @MaxLength(MAX_NAME)
   q?: string;
+
+  /**
+   * M1 (R3.10) — exact city, for the app's city filter.
+   *
+   * Separate from `q` on purpose. `q` is a fuzzy box a user types into and it
+   * matches the name OR the city; this is a value the user PICKED from a list
+   * the server itself produced, so a substring match would make "York" also
+   * return "New York". The two combine by AND, which is what makes "search
+   * 'nails' within Toronto" expressible.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_CITY)
+  city?: string;
 
   @IsOptional()
   @Type(() => Number)

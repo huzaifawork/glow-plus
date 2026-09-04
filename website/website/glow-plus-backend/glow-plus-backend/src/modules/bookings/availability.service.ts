@@ -19,17 +19,72 @@ export interface AvailableSlot {
 }
 
 /** T83 — the at-a-glance answer for a salon's page and the directory. */
+/**
+ * The four states a salon card can be in  (M1 — mobile spec R3.5)
+ *
+ * R3.5 detail names them exactly: *"the indicator must show one of 'Fully
+ * booked today,' 'N spots left today,' 'Closed today,' or an appropriate
+ * not-yet-bookable state"*. They are an enum on the SERVER, and that is the
+ * requirement rather than a preference — the same paragraph says the answer
+ * *"must be computed centrally (by the same logic used everywhere else in the
+ * platform) rather than calculated independently inside the app, so the app
+ * and any other Glow+ surface never disagree about whether a salon is full."*
+ *
+ * A client that derived this from `openNow`/`fullyBookedToday`/`spotsLeft`
+ * would be re-implementing the precedence between them — is a closed salon
+ * with no services "closed" or "not bookable"? — and two clients would
+ * answer differently on the day the rules change. So the precedence lives
+ * here, once.
+ *
+ *   NOT_BOOKABLE — the salon has no active services. Nothing to book, so
+ *                  neither "full" nor "open" is a true thing to say. Checked
+ *                  FIRST: a salon that has not built its menu yet is not
+ *                  closed, it is not ready.
+ *   CLOSED       — the salon is not open on this date at all.
+ *   FULLY_BOOKED — open, has services, and not one slot is left.
+ *   AVAILABLE    — open, and `spotsLeft` openings remain.
+ */
+export type CapacityState = 'NOT_BOOKABLE' | 'CLOSED' | 'FULLY_BOOKED' | 'AVAILABLE';
+
 export interface CapacitySummary {
   seats: number;
-  /** Bookings overlapping this instant. */
+  /** Bookings overlapping this instant. Always 0 for a date other than today. */
   inUseNow: number;
   freeNow: number;
   /** False when the salon is closed right now, so `freeNow` is not mistaken for "walk in". */
   openNow: boolean;
-  /** No remaining slot today for the salon's shortest active service. */
+  /**
+   * No remaining slot on the requested date for the salon's shortest active
+   * service.
+   *
+   * Keeps its `Today` name even though the answer is now per-date: the website
+   * has read this field since T83, and renaming it would break that surface to
+   * make one word more accurate. `state === 'FULLY_BOOKED'` is the field to
+   * read in new code.
+   */
   fullyBookedToday: boolean;
-  /** ISO instant of the next free slot today, or null when there is none left. */
+  /** ISO instant of the next free slot on the requested date, or null. */
   nextFreeAt: string | null;
+
+  // ── M1 (R3.5) ──────────────────────────────────────────────────────
+  /** The salon-local date this answer describes, `YYYY-MM-DD`. */
+  date: string;
+  /** Whether that date is the salon's today — `openNow`/`inUseNow` mean nothing otherwise. */
+  isToday: boolean;
+  /** The salon's opening hours say it trades on this date. */
+  openOnDate: boolean;
+  /**
+   * How many bookable start times are left on this date, for the salon's
+   * shortest active service — the "N" in "N spots left today".
+   *
+   * Counted against the SHORTEST service for the same reason
+   * `fullyBookedToday` is: the card is answering "can I get in?", not "can I
+   * get a 90-minute balayage at 3pm?". Measuring against a long service would
+   * report a salon as full while three short appointments still fit.
+   */
+  spotsLeft: number;
+  /** The single value a client renders. See CapacityState. */
+  state: CapacityState;
 }
 
 @Injectable()
@@ -145,23 +200,46 @@ export class AvailabilityService {
    * A closed salon reports `openNow: false` with `freeNow` still filled in,
    * so a caller never renders "3 seats free" over a locked door.
    */
-  async getCapacity(merchantId: string): Promise<CapacitySummary> {
+  async getCapacity(merchantId: string, dateISO?: string): Promise<CapacitySummary> {
     await assertMerchantVisible(this.prisma, merchantId, 'This salon is not currently accepting bookings');
 
     const seats = await this.seatsFor(merchantId);
     const now = new Date();
-
-    const inUseNow = await this.countOverlapping(merchantId, now, now);
-
     const today = salonDateFor(now);
+
+    // M1 (R3.5) — "must update whenever the user changes the selected date".
+    //
+    // The date is optional and defaults to today, so every existing caller —
+    // the website's salon cards, and this method's own tests — keeps the
+    // exact behaviour it had. What is NOT optional is that the answer for a
+    // chosen date comes from HERE rather than from the app: the requirement
+    // says so in as many words, and it is the only way the two surfaces cannot
+    // end up disagreeing about whether a salon is full.
+    const date = dateISO ?? today;
+    if (!isValidDateISO(date)) {
+      throw new BadRequestException('date must be a real calendar date in YYYY-MM-DD format');
+    }
+    const isToday = date === today;
+
     const hours = await this.prisma.businessHours.findUnique({
-      where: { merchantId_dayOfWeek: { merchantId, dayOfWeek: dayOfWeekFor(today) } },
+      where: { merchantId_dayOfWeek: { merchantId, dayOfWeek: dayOfWeekFor(date) } },
     });
+    const openOnDate = !!hours && !hours.closed;
+
+    // "Open right now" is only a question about today. On any other date the
+    // honest answer is false — not "false because they are closed", which is
+    // what a client would infer if this quietly measured a future date's hours
+    // against the current clock.
     const openNow =
-      !!hours &&
-      !hours.closed &&
-      now >= salonWallTimeToInstant(today, hours.openTime) &&
-      now < salonWallTimeToInstant(today, hours.closeTime);
+      isToday &&
+      openOnDate &&
+      now >= salonWallTimeToInstant(date, hours!.openTime) &&
+      now < salonWallTimeToInstant(date, hours!.closeTime);
+
+    // Same reasoning: how many chairs are busy AT THIS INSTANT is meaningless
+    // for next Tuesday, and a number carried over from today would read as a
+    // forecast the platform is not making.
+    const inUseNow = isToday ? await this.countOverlapping(merchantId, now, now) : 0;
 
     // Shortest active service — see the note above.
     const shortest = await this.prisma.style.findFirst({
@@ -170,21 +248,39 @@ export class AvailabilityService {
       select: { id: true },
     });
 
-    let nextFreeAt: string | null = null;
+    let slots: AvailableSlot[] = [];
     if (shortest) {
-      const slots = await this.getAvailableSlots(merchantId, shortest.id, today);
-      nextFreeAt = slots.length ? slots[0].startTime : null;
+      slots = await this.getAvailableSlots(merchantId, shortest.id, date);
     }
+    const nextFreeAt = slots.length ? slots[0].startTime : null;
+
+    // Precedence, in one place. See CapacityState for why it is not the
+    // client's to decide.
+    const state: CapacityState = !shortest
+      ? 'NOT_BOOKABLE'
+      : !openOnDate
+        ? 'CLOSED'
+        : slots.length === 0
+          ? 'FULLY_BOOKED'
+          : 'AVAILABLE';
 
     return {
       seats,
       inUseNow,
       freeNow: Math.max(0, seats - inUseNow),
       openNow,
-      // A salon with no active services is not "fully booked" — it has nothing
-      // to book. Reporting it as booked out would be a different, wrong story.
-      fullyBookedToday: Boolean(shortest) && nextFreeAt === null,
+      // A salon with no active services is not "fully booked" — it has
+      // nothing to book, and reporting it as booked out would be a different,
+      // wrong story. Nor is a CLOSED one: "booked out" tells a customer to try
+      // elsewhere today, when the truth is that this salon does not trade on
+      // this date at all.
+      fullyBookedToday: state === 'FULLY_BOOKED',
       nextFreeAt,
+      date,
+      isToday,
+      openOnDate,
+      spotsLeft: slots.length,
+      state,
     };
   }
 

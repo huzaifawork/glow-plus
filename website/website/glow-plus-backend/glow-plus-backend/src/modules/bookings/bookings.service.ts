@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { DEFAULT_PAGE_SIZE, PaginationQueryDto } from '../../common/pagination.dto';
 import { assertMerchantVisible } from '../../common/merchant-visibility';
+import { formatSalonDateTime } from '../../common/salon-time';
 import { PrismaService } from '../../prisma/prisma.service';
 import { decryptPii } from '../../common/pii-crypto';
 import { AvailabilityService } from './availability.service';
 import { RewardRulesService } from '../reward-rules/reward-rules.service';
 import { sendEmail } from '../notifications/email.provider';
+import { DevicesService } from '../devices/devices.service';
 import { CreateBookingDto } from './dto';
 
 @Injectable()
@@ -14,6 +16,7 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
     private readonly rewardRules: RewardRulesService,
+    private readonly devices: DevicesService,
   ) {}
 
   async create(userId: string, dto: CreateBookingDto) {
@@ -157,7 +160,16 @@ export class BookingsService {
     if (booking.status !== 'PENDING') {
       throw new BadRequestException(`Cannot confirm a booking with status ${booking.status}`);
     }
-    return this.prisma.booking.update({ where: { id: bookingId }, data: { status: 'CONFIRMED' } });
+    const updated = await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CONFIRMED' },
+    });
+    // M1 (R4.5) — the example the requirement itself gives: "when a salon
+    // confirms a pending request". Awaited but never able to throw, so the
+    // confirmation cannot fail because a phone is unreachable — see
+    // DevicesService.notifyUser.
+    await this.announce(updated, 'CONFIRMED');
+    return updated;
   }
 
   async markNoShow(merchantId: string, bookingId: string) {
@@ -165,7 +177,12 @@ export class BookingsService {
     if (booking.status !== 'CONFIRMED' && booking.status !== 'PENDING') {
       throw new BadRequestException(`Cannot mark a booking with status ${booking.status} as no-show`);
     }
-    return this.prisma.booking.update({ where: { id: bookingId }, data: { status: 'NO_SHOW' } });
+    const updated = await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'NO_SHOW' },
+    });
+    await this.announce(updated, 'NO_SHOW');
+    return updated;
   }
 
   /** Consumer cancelling their own booking, or merchant cancelling one at their salon. */
@@ -183,7 +200,15 @@ export class BookingsService {
       throw new BadRequestException(`Cannot cancel a booking with status ${booking.status}`);
     }
 
-    return this.prisma.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED' } });
+    const updated = await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CANCELLED' },
+    });
+    // Only when the SALON cancelled. A customer who just tapped "Cancel" in
+    // the app does not need their own phone to buzz telling them what they did
+    // — R4.5 exists so a user learns about a change they did not make.
+    if (role === 'merchant') await this.announce(updated, 'CANCELLED');
+    return updated;
   }
 
   /**
@@ -233,7 +258,69 @@ export class BookingsService {
       }
     }
 
+    // M1 (R4.5). Sent AFTER the reward evaluation above, so a customer who
+    // unlocked something is told about that in the same breath rather than
+    // getting a bare "completed" and an email minutes later.
+    await this.announce(updatedBooking, 'COMPLETED', unlocked.map((r) => r.name));
+
     return { booking: updatedBooking, visit, unlocked };
+  }
+
+  /**
+   * Tell the customer their booking changed  (M1 {EM} mobile spec R4.5)
+   *
+   * One place, so the four transitions cannot drift into four different
+   * voices, and so the decision about what a push may CONTAIN is made once: the
+   * salon's name, the service and the time {EM} all of which are already on the
+   * customer's own My Bookings screen. A push payload passes through Apple's
+   * and Google's infrastructure, so nothing goes in it that is not already on
+   * a screen this person can open.
+   *
+   * `bookingId` in `data` is what lets the app open My Bookings on the right
+   * row when the notification is tapped, rather than dumping the user on a
+   * list to find it themselves.
+   *
+   * Never throws. See DevicesService.notifyUser {EM} every caller here is an
+   * action that has already succeeded, and a courtesy notification may not
+   * undo it.
+   */
+  private async announce(
+    booking: { id: string; userId: string; merchantId: string; startTime: Date },
+    status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW',
+    unlockedRewards: string[] = [],
+  ): Promise<void> {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: booking.merchantId },
+      select: { businessName: true },
+    });
+    const salon = merchant?.businessName ?? 'Your salon';
+    const when = formatSalonDateTime(booking.startTime);
+
+    const copy: Record<typeof status, { title: string; body: string }> = {
+      CONFIRMED: {
+        title: 'Appointment confirmed',
+        body: `${salon} confirmed your appointment on ${when}.`,
+      },
+      CANCELLED: {
+        title: 'Appointment cancelled',
+        body: `${salon} cancelled your appointment on ${when}.`,
+      },
+      COMPLETED: {
+        title: unlockedRewards.length ? 'Reward unlocked!' : 'Thanks for visiting',
+        body: unlockedRewards.length
+          ? `Your visit to ${salon} unlocked ${unlockedRewards.join(', ')}.`
+          : `Your points from ${salon} have been added.`,
+      },
+      NO_SHOW: {
+        title: 'Marked as missed',
+        body: `${salon} marked your ${when} appointment as a no-show.`,
+      },
+    };
+
+    await this.devices.notifyUser(booking.userId, {
+      ...copy[status],
+      data: { type: 'booking-status', bookingId: booking.id, status },
+    });
   }
 
   private async getOwnedByMerchant(merchantId: string, bookingId: string) {

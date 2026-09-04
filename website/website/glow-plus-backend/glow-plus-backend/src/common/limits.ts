@@ -60,3 +60,51 @@ export const MAX_ID = 64;
  */
 export const SEATS_MIN = 1;
 export const SEATS_MAX = 100;
+
+/**
+ * M1 — a salon's street address line, city and region  (mobile spec R3.10)
+ *
+ * Generous on purpose, like every other bound in this file: the point is a
+ * ceiling no real salon reaches, not a validation rule anyone has to think
+ * about. A Canadian postal code is 7 characters; the bound is not about that,
+ * it is about the field not being an unbounded text column on a row the public
+ * directory serves.
+ */
+export const MAX_ADDRESS = 300;
+export const MAX_CITY = 120;
+export const MAX_REGION = 120;
+export const MAX_POSTAL_CODE = 20;
+
+/**
+ * W3 — "a reasonable image file ... within a sensible file size limit".
+ *
+ * 2 MiB of DECODED image. The wire format is a base64 data URL, which is ~4/3
+ * the size, so the route's body limit has to be higher than this number — see
+ * `merchants.module.ts`, where that is set explicitly rather than left to the
+ * global 100 kB JSON limit that would otherwise reject every logo as a bare
+ * 413 with no message a salon owner could act on.
+ *
+ * Mirrored as a CHECK constraint on MerchantLogo.sizeBytes: the Supabase table
+ * editor writes to these tables too and gets no DTO validation.
+ */
+export const MAX_LOGO_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The base64 data URL carrying a logo, at its longest.
+ *
+ * base64 is 4 bytes per 3, plus the `data:image/jpeg;base64,` preamble. Sized
+ * off MAX_LOGO_BYTES rather than written as a round number so the two cannot
+ * drift: if the image limit moves, this moves with it, and a payload that
+ * would have been rejected for its decoded size is rejected for its encoded
+ * size first — cheaply, in the pipe, before anything is decoded.
+ */
+export const MAX_LOGO_DATA_URL = Math.ceil((MAX_LOGO_BYTES * 4) / 3) + 64;
+
+/**
+ * An Expo push token  (R4.5).
+ *
+ * They look like `ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]` — about 41
+ * characters. The bound leaves room for the FCM/APNs raw forms a future
+ * standalone build might send instead, without leaving the column open.
+ */
+export const MAX_PUSH_TOKEN = 256;
