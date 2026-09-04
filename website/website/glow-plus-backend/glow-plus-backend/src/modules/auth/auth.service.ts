@@ -11,6 +11,7 @@ import { EmailVerificationService } from './email-verification.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { SignupDto, LoginDto } from './dto';
 import { encodePhone } from '../../common/pii-crypto';
+import { hasBusinessAccount } from '../../common/business-account';
 
 const SALT_ROUNDS = 12;
 
@@ -53,6 +54,12 @@ export class AuthService {
    * worse, and a rollback would not un-send a mail that already went.
    */
   async signupConsumer(dto: SignupDto) {
+    if (await hasBusinessAccount(this.prisma, dto.email)) {
+      throw new ConflictException(
+        'This email is registered as a Glow+ business or admin account. Sign in at the Glow+ website, or use a different email to create a customer account.',
+      );
+    }
+
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
     let user;
@@ -87,6 +94,19 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    // This consumer row is genuine and the password is right, but the same
+    // email is ALSO a business account — added as staff/admin after this
+    // consumer account already existed, since `signupConsumer` refuses the
+    // reverse order. 409, not 403: this is a conflict between two accounts
+    // sharing an address, not "right password, account not ready yet" (that's
+    // the emailVerifiedAt case below), and it keeps this out of SignInScreen's
+    // "resend verification" branch, which triggers on 403 specifically.
+    if (await hasBusinessAccount(this.prisma, dto.email)) {
+      throw new ConflictException(
+        'This email is registered as a Glow+ business or admin account and cannot sign in to the customer app. Sign in at the Glow+ website instead.',
+      );
     }
 
     // T81 — an unverified address cannot sign in.

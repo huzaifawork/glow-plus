@@ -50,7 +50,10 @@ function makePrisma() {
   };
 
   const table = (name: keyof typeof accounts) => ({
-    findUnique: async ({ where }: any) => accounts[name].get(where.id) ?? null,
+    findUnique: async ({ where }: any) =>
+      where.email !== undefined
+        ? ([...accounts[name].values()].find((row: any) => row.email === where.email) ?? null)
+        : (accounts[name].get(where.id) ?? null),
   });
 
   return {
@@ -248,6 +251,22 @@ describe('RefreshTokenService (T47)', () => {
 
       await expect(service.rotate(session.refreshToken)).rejects.toThrow(UnauthorizedException);
       expect(prisma.rows.every((r) => r.revokedAt !== null)).toBe(true);
+    });
+
+    it('stops renewing a consumer session once that email becomes an admin', async () => {
+      prisma.accounts.user.set('user_1', { id: 'user_1', email: 'usman@example.com' });
+      const session = await service.issueSession('user_1', 'CONSUMER' as any, {
+        role: 'consumer',
+      });
+      await expect(service.rotate(session.refreshToken)).resolves.toBeDefined();
+
+      // The same address is added to the admin team. The consumer row and its
+      // refresh token are untouched and still perfectly valid on their own.
+      prisma.accounts.admin.set('a_2', { id: 'a_2', email: 'usman@example.com' });
+
+      // Without this, the session outlives the login rule that refuses it —
+      // renewing every 15 minutes for as long as the app is opened.
+      await expect(service.rotate(session.refreshToken)).rejects.toThrow(UnauthorizedException);
     });
 
     it.each([
