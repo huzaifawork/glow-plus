@@ -1,4 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { ThrottleCredentials } from '../../common/throttling';
 import { MerchantsService } from './merchants.service';
@@ -13,6 +27,10 @@ import { RequireMerchantOwnerGuard } from '../../common/guards/require-merchant-
 import { RequireActiveSubscriptionGuard } from '../../common/guards/require-active-subscription.guard';
 import { AvailabilityService } from '../bookings/availability.service';
 import { UpdateSeatsDto } from './settings.dto';
+import { UpdateLocationDto, UploadLogoDto } from './location.dto';
+import { CapacityQueryDto } from './capacity-query.dto';
+import { assertMerchantVisible } from '../../common/merchant-visibility';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller('merchants')
 export class MerchantsController {
@@ -21,6 +39,7 @@ export class MerchantsController {
     private readonly onboarding: OnboardingService,
     private readonly merchantAuth: MerchantAuthService,
     private readonly availability: AvailabilityService,
+    private readonly prisma: PrismaService,
   ) {}
 
   // T31 — this bound `MerchantSignupInput`, a TypeScript INTERFACE. Interfaces
@@ -101,8 +120,78 @@ export class MerchantsController {
    * time — just how many of the salon's own chairs are busy.
    */
   @Get(':merchantId/capacity')
-  capacity(@Param('merchantId') merchantId: string) {
-    return this.availability.getCapacity(merchantId);
+  capacity(@Param('merchantId') merchantId: string, @Query() query: CapacityQueryDto) {
+    return this.availability.getCapacity(merchantId, query.date);
+  }
+
+  /**
+   * M1 (W5, R3.11) — a salon's logo, for every Glow+ surface.
+   *
+   * PUBLIC, and behind `assertMerchantVisible` like the menu, the hours and
+   * the capacity above it: a suspended salon's logo has to 404 exactly as its
+   * menu does, or the directory and the image disagree about whether the salon
+   * exists [F47].
+   *
+   * **Immutable-cacheable, because the URL carries a version.**
+   * `logoUrlFor()` appends `?v=<logoUpdatedAt>`, so a replaced logo is a
+   * different URL and this one can be cached hard forever. Without the
+   * version this header would pin a salon's old logo into every app and CDN
+   * for a year; with it, `immutable` is simply true. The two are one design and
+   * must not be separated — if you remove `?v=`, remove this header.
+   *
+   * `@Res({ passthrough: false })` on purpose: this is the one route in the
+   * API that does not answer with JSON, so it writes the body itself. The
+   * global exception filter still owns anything thrown BEFORE that write.
+   */
+  @Get(':merchantId/logo')
+  @Header('Cache-Control', 'public, max-age=31536000, immutable')
+  async logo(@Param('merchantId') merchantId: string, @Res() res: Response) {
+    await assertMerchantVisible(this.prisma, merchantId, 'Merchant not found');
+    const logo = await this.merchants.getLogoBytes(merchantId);
+    res.setHeader('Content-Type', logo.mimeType);
+    res.setHeader('Content-Length', String(logo.sizeBytes));
+    res.end(logo.bytes);
+  }
+
+  /**
+   * W1/W2 — upload or replace the salon's logo.
+   *
+   * **`RequireActiveSubscriptionGuard` IS requirement W1**, not incidental
+   * hardening: *"A salon's subscription must be active before the website
+   * allows that salon to upload a logo."* Owner-only alongside it, matching
+   * every other write that changes what customers are shown.
+   *
+   * `PUT` rather than `POST`: there is exactly one logo per salon and
+   * uploading twice must replace, not accumulate. The verb is the contract.
+   */
+  @UseGuards(RequireMerchantOwnerGuard, RequireActiveSubscriptionGuard)
+  @Put('me/logo')
+  uploadLogo(@Req() req: MerchantRequest, @Body() dto: UploadLogoDto) {
+    return this.merchants.setLogo(req.merchantId!, dto.image);
+  }
+
+  /** W2 — "and replace it later if they choose" includes taking it down. */
+  @UseGuards(RequireMerchantOwnerGuard, RequireActiveSubscriptionGuard)
+  @Delete('me/logo')
+  removeLogo(@Req() req: MerchantRequest) {
+    return this.merchants.deleteLogo(req.merchantId!);
+  }
+
+  /**
+   * M1 — the salon registers where it is  (mobile spec R3.6-R3.10)
+   *
+   * Owner-only, and deliberately NOT behind the subscription paywall — unlike
+   * the logo, whose gate is a stated requirement (W1). A lapsed salon is
+   * hidden from the directory anyway [F74], so gating this would only stop it
+   * from correcting its own address before it comes back.
+   *
+   * ⚠️ This is the SALON's address. Nothing on this server ever accepts a
+   * CUSTOMER's coordinates (NF6) — the app computes distance on the device.
+   */
+  @UseGuards(RequireMerchantOwnerGuard)
+  @Patch('me/location')
+  updateLocation(@Req() req: MerchantRequest, @Body() dto: UpdateLocationDto) {
+    return this.merchants.updateLocation(req.merchantId!, dto);
   }
 
   /**

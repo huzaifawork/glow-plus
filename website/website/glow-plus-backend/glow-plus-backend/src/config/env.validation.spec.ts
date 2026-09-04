@@ -28,6 +28,11 @@ const goodProd = (): NodeJS.ProcessEnv =>
     RESEND_API_KEY: 're_abc123',
     TRUST_PROXY_HEADER: '1',
     CRON_SECRET: 'a-real-looking-cron-secret',
+    // M1 (W5) — every salon logo URL in the app and on the website is
+    // built from this. Unset in production, the symptom is 'no salon has a
+    // logo' rather than an error, because each client falls back to its
+    // R3.12 placeholder.
+    PUBLIC_API_URL: 'https://glow-plus-api-six.vercel.app',
   }) as NodeJS.ProcessEnv;
 
 describe('isProductionEnv', () => {

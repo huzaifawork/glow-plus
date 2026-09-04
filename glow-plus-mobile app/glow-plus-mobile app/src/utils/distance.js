@@ -1,0 +1,109 @@
+/**
+ * Distance from the user to a salon  (R3.6 – R3.9)
+ *
+ * ⚠️ **This runs on the device and only on the device.**
+ *
+ * NF6: *"The user's precise location must not be stored on the backend or
+ * shared with any salon — it is used only, on-device, to sort and filter the
+ * salon list the user already has permission to see."*
+ *
+ * That is why this file exists at all. The obvious implementation of "sort
+ * salons by distance" is a `?near=lat,lng` query parameter — and it is
+ * forbidden, because it puts the customer's coordinates in a server log, a
+ * proxy log and a database query plan. The server publishes the SALONS'
+ * coordinates (which are public information — they are shop addresses), the
+ * app fetches the same directory everyone else gets, and the arithmetic
+ * happens here.
+ *
+ * **There is deliberately no function in this file that sends a location
+ * anywhere.** If a future change needs server-side distance, it needs a
+ * decision about NF6 first, not a helper here.
+ */
+
+const EARTH_RADIUS_KM = 6371;
+
+const toRad = (deg) => (deg * Math.PI) / 180;
+
+/**
+ * Great-circle distance in kilometres.
+ *
+ * Haversine rather than an equirectangular approximation: the approximation is
+ * faster and wrong by several percent at the latitudes this platform operates
+ * in (Toronto is 43°N), which is enough to reorder two salons that are close
+ * together — the exact case where a user would notice.
+ *
+ * The cost is irrelevant: this runs over at most a page of salons, once per
+ * location update, not per frame.
+ */
+export function distanceKm(from, to) {
+  if (!hasCoordinates(from) || !hasCoordinates(to)) return null;
+
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * A salon with only one of the two coordinates is treated as having neither.
+ *
+ * The database refuses that state (`Merchant_coordinates_paired`), but a client
+ * that trusted a constraint it cannot see would place such a salon on the
+ * equator and sort it to the top of a list in Toronto.
+ */
+export function hasCoordinates(point) {
+  return (
+    point != null &&
+    typeof point.latitude === 'number' &&
+    typeof point.longitude === 'number' &&
+    Number.isFinite(point.latitude) &&
+    Number.isFinite(point.longitude)
+  );
+}
+
+/** "450 m" / "2.4 km" / "18 km" — precision that drops off with distance, as it should. */
+export function formatDistance(km) {
+  if (km == null || !Number.isFinite(km)) return null;
+  if (km < 1) return `${Math.round(km * 100) * 10} m`;
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
+}
+
+/**
+ * Annotate a salon list with distance, without reordering it.
+ *
+ * Separate from the sort so a caller can show distances on an
+ * alphabetically-ordered list — which is exactly what R3.9 requires when the
+ * user has declined location but the list is still fully usable.
+ */
+export function withDistance(salons, origin) {
+  if (!hasCoordinates(origin)) return salons.map((s) => ({ ...s, distanceKm: null }));
+  return salons.map((salon) => ({ ...salon, distanceKm: distanceKm(origin, salon) }));
+}
+
+/**
+ * R3.7 — sort by distance from the user.
+ *
+ * **Salons with no registered location sort to the END, not to the front and
+ * not out of the list.** The spec's dependency note is explicit: *"A salon
+ * that has not provided a location cannot be included in distance-sorted
+ * results, and the app must handle that gracefully rather than assuming every
+ * salon has one."* Dropping them would hide real, bookable salons from a user
+ * who turned on a convenience feature; treating a missing coordinate as 0
+ * would put them first. Last, still visible, still bookable, and labelled as
+ * having no distance, is the graceful reading.
+ */
+export function sortByDistance(salons) {
+  return [...salons].sort((a, b) => {
+    const da = a.distanceKm;
+    const db = b.distanceKm;
+    if (da == null && db == null) return a.businessName.localeCompare(b.businessName);
+    if (da == null) return 1;
+    if (db == null) return -1;
+    return da - db;
+  });
+}

@@ -85,7 +85,37 @@ describe('MerchantsService.listPublic', () => {
       // column has to be opted in deliberately, which is what editing this
       // line is. passwordHash and stripeCustomerId still cannot appear.
       seats: true,
+      // M1 — where the salon is (R3.6-R3.10) and whether it has a logo
+      // (R3.11). Published deliberately: a customer choosing a salon needs
+      // both, and the app renders them on the directory card.
+      //
+      // `logoUpdatedAt` is a TIMESTAMP, not the image. The bytes live in
+      // MerchantLogo and are never selected here — that separation is what
+      // keeps a 100-salon directory page from reading 100 images out of
+      // Postgres, and it is what makes R3.13 ("must not block or delay the
+      // rest of the salon information") structurally true rather than a thing
+      // the client has to be careful about.
+      logoUpdatedAt: true,
+      addressLine: true,
+      city: true,
+      region: true,
+      postalCode: true,
+      latitude: true,
+      longitude: true,
     });
+  });
+
+  it('publishes a logoUrl only for a salon that has uploaded one  (M1, R3.11/R3.12)', async () => {
+    // `null` rather than a default image URL: R3.12 makes the placeholder a
+    // CLIENT decision, and a URL here would send every logo-less salon on a
+    // network round trip for a picture of nothing.
+    const { items } = await service.listPublic();
+    expect(items[0].logoUrl).toBeNull();
+    // The cache-busting timestamp is an implementation detail of the URL and
+    // must not leak as its own field — a client that read it would be
+    // building the URL a second time, which is how two surfaces end up showing
+    // different logos for one salon (W5).
+    expect('logoUpdatedAt' in items[0]).toBe(false);
   });
 
   it('keeps the id/businessName fields the RN client maps over', async () => {
@@ -144,8 +174,34 @@ describe('MerchantsService.listPublic', () => {
     await service.listPublic({ q: 'glow' });
     expect(merchantFindMany.mock.calls[0][0].where).toMatchObject({
       status: 'ACTIVE',
-      businessName: { contains: 'glow', mode: 'insensitive' },
+      // M1 (R3.10) — `q` is now an OR over the name and the city, so one box
+      // finds both "Bloom Hair" and "Scarborough". The name half must keep
+      // behaving exactly as it did: the website has shipped this search since
+      // T43 and passes no `city`.
+      OR: [
+        { businessName: { contains: 'glow', mode: 'insensitive' } },
+        { city: { contains: 'glow', mode: 'insensitive' } },
+      ],
     });
+  });
+
+  it('filters by an exact city, and combines it with q', async () => {
+    // M1 (R3.10) — "search or filter by city or area as an alternative to
+    // device-detected location". The chip filter sends a city the SERVER
+    // supplied, so it matches exactly: a `contains` here would make picking
+    // "York" also return "New York".
+    await service.listPublic({ city: 'Toronto' });
+    expect(merchantFindMany.mock.calls[0][0].where).toMatchObject({
+      city: { equals: 'Toronto', mode: 'insensitive' },
+    });
+
+    merchantFindMany.mockClear();
+    await service.listPublic({ q: 'nails', city: 'Toronto' });
+    const where = merchantFindMany.mock.calls[0][0].where;
+    // AND, not OR: "nails, within Toronto" has to be expressible, or the two
+    // controls fight each other.
+    expect(where.city).toEqual({ equals: 'Toronto', mode: 'insensitive' });
+    expect(where.OR).toHaveLength(2);
   });
 
   it('treats a blank or whitespace-only q as no filter', async () => {
@@ -163,6 +219,10 @@ describe('MerchantsService.listPublic', () => {
       const where = merchantFindMany.mock.calls[0][0].where;
       expect(where).toEqual(LISTABLE_MERCHANT_WHERE);
       expect(where.businessName).toBeUndefined();
+      // M1 — the search term now becomes an `OR`, so THAT is the thing that
+      // must be absent for a blank box. Asserting only on `businessName`
+      // would pass while an empty-string OR was still being sent.
+      expect(where.OR).toBeUndefined();
     }
   });
 
@@ -172,7 +232,10 @@ describe('MerchantsService.listPublic', () => {
     expect(total).toBe(7);
     expect(merchantCount.mock.calls[0][0].where).toMatchObject({
       status: 'ACTIVE',
-      businessName: { contains: 'glow', mode: 'insensitive' },
+      OR: [
+        { businessName: { contains: 'glow', mode: 'insensitive' } },
+        { city: { contains: 'glow', mode: 'insensitive' } },
+      ],
     });
   });
 });

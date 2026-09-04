@@ -1,16 +1,52 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, StyleType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FOUNDING_MEMBER_CAP, FoundingSpots } from './founding';
 import { DEFAULT_MERCHANT_PAGE, PublicMerchantsQueryDto } from './public-merchants-query.dto';
 import { LISTABLE_MERCHANT_WHERE } from '../../common/salon-listable';
+import { decodeImageDataUrl } from '../../common/image';
+import { absoluteApiUrl } from '../../config/public-url';
+import { UpdateLocationDto } from './location.dto';
+
+/**
+ * Where a salon is  (M1 — mobile spec R3.6-R3.10)
+ *
+ * Every field is nullable and that is load-bearing, not defensive: R3.9 and
+ * the spec's own dependency note both require "no location" to be a state the
+ * clients handle, so it has to be a state the payload can express. A salon
+ * with `latitude: null` is simply absent from distance-sorted results and
+ * present everywhere else.
+ *
+ * ⚠️ These are the SALON's coordinates. The customer's are never sent to this
+ * server (NF6) — the app computes distance on the device from these numbers.
+ */
+export type MerchantLocation = {
+  addressLine: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+};
 
 /** One row of the public salon directory (T43). */
-export type PublicMerchant = {
+export type PublicMerchant = MerchantLocation & {
   id: string;
   businessName: string;
   foundingMember: boolean;
   seats: number;
+  /**
+   * M1 (W5, R3.11/R3.12) — an absolute URL to this salon's logo, or `null`
+   * when it has not uploaded one.
+   *
+   * `null` rather than a placeholder image URL, deliberately. The placeholder
+   * is a CLIENT decision — R3.12 asks each surface to render "a neutral
+   * placeholder", and the app's is a tinted monogram that no server-side
+   * default image could produce. Sending a URL here would also mean every
+   * salon without a logo triggers a real network fetch for a picture of
+   * nothing.
+   */
+  logoUrl: string | null;
   /** Active styles on this salon's menu. */
   styleCount: number;
   /** The distinct style types it offers, for the card's tag row. */
@@ -47,9 +83,37 @@ export const MERCHANT_PUBLIC_SELECT = {
   // shop floor, not about a person, and the whole point is that customers can
   // see it. The salon's own portal reads it back from here to fill the field.
   seats: true,
+  // M1 — opted in explicitly, as the allow-list above requires. All published
+  // on purpose: a customer choosing a salon needs to know where it is and what
+  // it looks like, and the salon's own portal reads these back from here to
+  // fill its settings form. `logoMimeType`/`logoUpdatedAt` are metadata, not
+  // the image — the bytes live in MerchantLogo and are never selected here.
+  logoMimeType: true,
+  logoUpdatedAt: true,
+  addressLine: true,
+  city: true,
+  region: true,
+  postalCode: true,
+  latitude: true,
+  longitude: true,
   createdAt: true,
   subscription: true,
 } satisfies Prisma.MerchantSelect;
+
+/**
+ * The URL a client should fetch this salon's logo from, or null.
+ *
+ * `?v=` is the whole reason this is a function rather than a template literal
+ * at each call site. The logo lives at a STABLE path (`/merchants/:id/logo`)
+ * so it can be cached hard, and a salon that replaces its logo would otherwise
+ * keep showing the old one in every app and browser that had already fetched
+ * it. The version is the update timestamp, so a new upload is a new URL and an
+ * unchanged logo is a cache hit.
+ */
+export function logoUrlFor(merchant: { id: string; logoUpdatedAt: Date | null }): string | null {
+  if (!merchant.logoUpdatedAt) return null;
+  return absoluteApiUrl(`merchants/${merchant.id}/logo?v=${merchant.logoUpdatedAt.getTime()}`);
+}
 
 @Injectable()
 export class MerchantsService {
@@ -61,7 +125,11 @@ export class MerchantsService {
       select: MERCHANT_PUBLIC_SELECT,
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return merchant;
+    // M1 — the salon's own portal renders its current logo from the same field
+    // name the public directory uses, so one `<img src={logoUrl}>` works in
+    // both places and there is no second "am I looking at the settings copy or
+    // the public copy" path to keep in step.
+    return { ...merchant, logoUrl: logoUrlFor(merchant) };
   }
 
   /**
@@ -101,13 +169,34 @@ export class MerchantsService {
     // string" — a search box that has been typed into and cleared must show
     // the directory again, not an accidental `contains: ''`.
     const q = query.q?.trim();
+    const city = query.city?.trim();
     const where: Prisma.MerchantWhereInput = {
       // [F74] — approval is only half of it. A salon that never subscribed used
       // to be listed forever for free; LISTABLE_MERCHANT_WHERE adds the
       // subscription half, and is shared with assertMerchantVisible so the
       // directory and the per-salon routes cannot disagree.
       ...LISTABLE_MERCHANT_WHERE,
-      ...(q ? { businessName: { contains: q, mode: 'insensitive' as const } } : {}),
+      // M1 (R3.10) — `q` now searches the CITY as well as the name.
+      //
+      // The requirement is "manually search or filter by city or area as an
+      // alternative to device-detected location", and a single box that finds
+      // both "Bloom" and "Scarborough" is what a user actually types into. It
+      // is an OR, not a second field: a name-only match must keep working
+      // exactly as it did for the website, which has had this search box since
+      // T43 and passes no `city`.
+      ...(q
+        ? {
+            OR: [
+              { businessName: { contains: q, mode: 'insensitive' as const } },
+              { city: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      // A separate, EXPLICIT city filter, for the app's city chips — where the
+      // user picked a city from a list rather than typing, and a fuzzy name
+      // match would be wrong. Combines with `q` by AND, so "nails in Toronto"
+      // is expressible.
+      ...(city ? { city: { equals: city, mode: 'insensitive' as const } } : {}),
     };
 
     // Counted with the same `where`, so `X-Total-Count` describes the filtered
@@ -124,7 +213,27 @@ export class MerchantsService {
         // GET /merchants/:id/capacity: that answer needs today's bookings and
         // the salon's hours, and doing it per row here would be one query per
         // card on every directory load.
-        select: { id: true, businessName: true, foundingMember: true, seats: true },
+        // M1 — location and logo METADATA join the row. Both are needed to
+        // render a directory card and neither costs a second request: the
+        // coordinates are two floats, and `logoUpdatedAt` is a timestamp that
+        // becomes a URL (`logoUrlFor`) without touching the image bytes, which
+        // live in their own table precisely so a 100-salon page never reads
+        // them. R3.13 — "must not block or delay the rest of the salon
+        // information" — is satisfied structurally here, not by the client
+        // being careful.
+        select: {
+          id: true,
+          businessName: true,
+          foundingMember: true,
+          seats: true,
+          logoUpdatedAt: true,
+          addressLine: true,
+          city: true,
+          region: true,
+          postalCode: true,
+          latitude: true,
+          longitude: true,
+        },
       }),
       this.prisma.merchant.count({ where }),
     ]);
@@ -154,8 +263,14 @@ export class MerchantsService {
     return {
       items: merchants.map((m) => {
         const entry = byMerchant.get(m.id);
+        const { logoUpdatedAt, ...rest } = m;
         return {
-          ...m,
+          ...rest,
+          // The timestamp itself is not published — it is an implementation
+          // detail of cache-busting, and a client that read it would be
+          // building the URL a second time, which is how two surfaces end up
+          // disagreeing about which logo is current (W5).
+          logoUrl: logoUrlFor(m),
           styleCount: entry?.count ?? 0,
           styleTypes: entry ? [...entry.types] : [],
         };
@@ -224,5 +339,125 @@ export class MerchantsService {
   async updateSeats(merchantId: string, seats: number) {
     await this.prisma.merchant.update({ where: { id: merchantId }, data: { seats } });
     return { ok: true, seats };
+  }
+
+  /**
+   * M1 — a salon registers where it is  (mobile spec R3.6-R3.10 dependency)
+   *
+   * `PATCH` semantics, honestly implemented: a field the caller did not send
+   * is left alone, and a field sent as `null` is cleared. The distinction
+   * matters because the portal's form submits only what changed, and because a
+   * salon that typed the wrong address must be able to remove it — with a
+   * `{ ...dto }` spread, `undefined` would clear it and there would be no way
+   * to edit one field without resending all six.
+   *
+   * Coordinates are validated as a PAIR here as well as by the database CHECK,
+   * so a salon sending only a latitude gets a sentence explaining why rather
+   * than a driver error. A half-coordinate is worse than none: it passes an
+   * `IS NOT NULL` test on one axis and puts the salon on the equator.
+   */
+  async updateLocation(merchantId: string, dto: UpdateLocationDto) {
+    const has = (key: keyof UpdateLocationDto) => Object.prototype.hasOwnProperty.call(dto, key);
+
+    // Both, or neither, in whatever the row ends up as after this patch.
+    if (has('latitude') !== has('longitude')) {
+      throw new BadRequestException(
+        'Latitude and longitude must be set together — send both, or neither.',
+      );
+    }
+    if (has('latitude') && (dto.latitude === null) !== (dto.longitude === null)) {
+      throw new BadRequestException(
+        'Latitude and longitude must be set together — send both, or clear both.',
+      );
+    }
+
+    const data: Prisma.MerchantUpdateInput = {};
+    // Trimmed, and an all-whitespace value is a clear rather than a blank
+    // string: a directory that groups by city must not grow a "  " city.
+    const text = (value: string | null | undefined) => {
+      if (value === null) return null;
+      const trimmed = value?.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    if (has('addressLine')) data.addressLine = text(dto.addressLine);
+    if (has('city')) data.city = text(dto.city);
+    if (has('region')) data.region = text(dto.region);
+    if (has('postalCode')) data.postalCode = text(dto.postalCode);
+    if (has('latitude')) data.latitude = dto.latitude ?? null;
+    if (has('longitude')) data.longitude = dto.longitude ?? null;
+
+    const merchant = await this.prisma.merchant.update({
+      where: { id: merchantId },
+      data,
+      select: MERCHANT_PUBLIC_SELECT,
+    });
+    return { ...merchant, logoUrl: logoUrlFor(merchant) };
+  }
+
+  /**
+   * W2/W3 — store a salon's logo.
+   *
+   * The subscription gate (W1) is NOT here: it is `RequireActiveSubscription`
+   * on the route, the same guard every other paywalled write uses. Putting it
+   * in the service would be a second implementation of a rule that already has
+   * one, and the route-level guard is what also hides the feature from the
+   * portal, which reads the same subscription state.
+   *
+   * The stored `mimeType` is the one `decodeImageDataUrl` DERIVED from the
+   * bytes, never the one the caller declared — these bytes are served back
+   * from our own origin, so the content type has to be a fact about them.
+   *
+   * Written as one transaction with the Merchant metadata update: `logoUrl`
+   * is built from `logoUpdatedAt`, so a row whose bytes changed without its
+   * timestamp changing would serve a stale image from every cache forever.
+   */
+  async setLogo(merchantId: string, dataUrl: string) {
+    const { buffer, format, sizeBytes } = decodeImageDataUrl(dataUrl);
+    const now = new Date();
+
+    const [, merchant] = await this.prisma.$transaction([
+      this.prisma.merchantLogo.upsert({
+        where: { merchantId },
+        create: { merchantId, mimeType: format.mimeType, bytes: buffer, sizeBytes },
+        update: { mimeType: format.mimeType, bytes: buffer, sizeBytes },
+      }),
+      this.prisma.merchant.update({
+        where: { id: merchantId },
+        data: { logoMimeType: format.mimeType, logoUpdatedAt: now },
+        select: MERCHANT_PUBLIC_SELECT,
+      }),
+    ]);
+
+    return { ok: true, logoUrl: logoUrlFor(merchant), mimeType: format.mimeType, sizeBytes };
+  }
+
+  /** W2 — "and replace it later if they choose" includes removing it. */
+  async deleteLogo(merchantId: string) {
+    await this.prisma.$transaction([
+      this.prisma.merchantLogo.deleteMany({ where: { merchantId } }),
+      this.prisma.merchant.update({
+        where: { id: merchantId },
+        data: { logoMimeType: null, logoUpdatedAt: null },
+      }),
+    ]);
+    // Clearing the timestamp is what makes `logoUrlFor` return null, so every
+    // surface falls back to its placeholder (R3.12) on the next read.
+    return { ok: true, logoUrl: null };
+  }
+
+  /**
+   * The bytes, for `GET /merchants/:id/logo`.
+   *
+   * Visibility is checked by the CALLER (the controller calls
+   * `assertMerchantVisible` first), for the same reason every other public
+   * per-salon route does: a suspended salon's logo must 404 exactly as its
+   * menu does, or the directory and the image disagree about whether the salon
+   * exists.
+   */
+  async getLogoBytes(merchantId: string) {
+    const logo = await this.prisma.merchantLogo.findUnique({ where: { merchantId } });
+    if (!logo) throw new NotFoundException('This salon has no logo');
+    return logo;
   }
 }

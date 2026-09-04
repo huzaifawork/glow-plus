@@ -13,6 +13,7 @@ import { RewardRulesModule } from './modules/reward-rules/reward-rules.module';
 import { RedemptionsModule } from './modules/redemptions/redemptions.module';
 import { PointsModule } from './modules/points/points.module';
 import { MeModule } from './modules/me/me.module';
+import { DevicesModule } from './modules/devices/devices.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -52,6 +53,9 @@ import { ApiThrottlerGuard } from './common/guards/api-throttler.guard';
     RedemptionsModule,
     PointsModule,
     MeModule,
+    // M1 (R4.5) — POST/DELETE /me/devices, so the platform can tell a customer
+    // their booking was confirmed without them opening the app to look.
+    DevicesModule,
     BillingModule,
     AdminModule,
     StaffModule,
@@ -134,6 +138,14 @@ export class AppModule implements NestModule {
         // match `merchants/me` — the reason the list above is written out
         // path by path in the first place.
         { path: withVersion('merchants/(.*)/capacity'), method: RequestMethod.GET },
+        // M1 (W5, R3.11) — a salon's logo, read by the app's directory, the
+        // website's directory and anything else that renders a salon. Public
+        // for the same reason the menu above it is: a consumer browsing has
+        // no account yet, and an <Image> tag cannot send a bearer token.
+        // Ends in '/logo' rather than being 'merchants/(.*)' so it still
+        // cannot match 'merchants/me' — the reason this list is written out
+        // path by path.
+        { path: withVersion('merchants/(.*)/logo'), method: RequestMethod.GET },
         { path: withVersion('styles/public/(.*)'), method: RequestMethod.GET },
         // Staff invite acceptance + staff login (T24). An invitee has no
         // account yet, so they cannot hold a token — these must be reachable

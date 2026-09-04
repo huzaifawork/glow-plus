@@ -135,3 +135,28 @@ export function salonDateFor(instant: Date, tz: string = SALON_TIMEZONE): string
     day: '2-digit',
   }).format(instant);
 }
+
+/**
+ * An instant, written the way a customer would read it, in the salon's zone.
+ *
+ * M1 (R4.5) — push notifications say "Tue, 8 Sep at 2:30 PM", and that string
+ * has to mean the same thing to the customer as the time printed on their My
+ * Bookings row. Formatting it in the SERVER's zone would reproduce [F63]
+ * exactly one layer further out: the app renders appointments in
+ * `SALON_TIMEZONE`, and a notification about the same appointment rendered in
+ * UTC would tell the same person two different times for one booking.
+ *
+ * Deliberately not localised. There is no user-language column on `User`, and
+ * inventing one for a notification would be a worse lie than English — the
+ * platform's emails are English too.
+ */
+export function formatSalonDateTime(instant: Date, tz: string = SALON_TIMEZONE): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(instant);
+}

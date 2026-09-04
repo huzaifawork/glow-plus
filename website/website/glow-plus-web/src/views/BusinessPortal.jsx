@@ -23,6 +23,11 @@ import {
   getMyBusinessHours,
   setBusinessHours,
 } from '../lib/api.js';
+// M1 — the portal half of the mobile app's Section 8 (logo, W1-W5) and of
+// its location dependency (R3.6-R3.10). Kept in their own file because both
+// are self-contained forms with their own validation, and BusinessPortal.jsx
+// is already long.
+import { LogoSetting, LocationSetting } from './SalonBrandingSettings.jsx';
 import { formatDateTime, formatDay } from '../lib/helpers.js';
 import T from '../components/T.jsx';
 
@@ -1213,6 +1218,11 @@ function SeatsSetting({ current }) {
 
 function ProfilePanel({ active }) {
   const profile = usePortalData(() => getMerchantProfile(), []);
+  // M1 — a logo upload or an address change has to be reflected in the
+  // preview above it, and the preview reads `profile.logoUrl`, which only the
+  // server can produce (it carries the cache-busting version). `bumpData`
+  // refetches every panel, which is what `usePortalData` already keys on.
+  const { bumpData } = useApp();
 
   if (!profile) {
     return <div className={'ptab-panel' + (active ? ' active' : '')} id="ptab-profile" />;
@@ -1243,6 +1253,16 @@ function ProfilePanel({ active }) {
           </div>
         ))}
         <SeatsSetting current={profile.seats ?? 1} />
+
+        {/* M1 — Section 8 (W1-W3). The control is hidden entirely until the
+            salon's subscription is live, which is W1 in as many words: "A
+            salon that has not completed subscription checkout must not see or
+            be able to use a logo-upload feature." */}
+        <LogoSetting profile={profile} onChanged={bumpData} />
+
+        {/* M1 — the app's distance sorting (R3.6-R3.10) depends on a salon
+            having registered coordinates. This is where they come from. */}
+        <LocationSetting profile={profile} onChanged={bumpData} />
 
         <div className="hint" style={{ marginTop: '12px' }}>
           To change your business details, contact Glow+ support. Your sign-in email and account

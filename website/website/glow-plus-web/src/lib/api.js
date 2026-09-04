@@ -853,6 +853,59 @@ export function updateSeats(seats) {
   return apiRequest('/merchants/me/seats', { method: 'PATCH', body: { seats } });
 }
 
+/* --------------------------------------------------------------------------
+   Salon logo  (M1 — Glow+ App Requirements Spec, Section 8: W1-W5)
+
+   Section 8 is a WEBSITE requirement that exists because the mobile app
+   depends on it: *"the app can only display a logo that the website has
+   allowed a salon to upload."*
+
+   W1 — the subscription gate is enforced by the API
+   (`RequireActiveSubscriptionGuard` on `PUT /merchants/me/logo`) AND the
+   control is hidden in the portal, which is what stops a salon that has not
+   checked out from seeing a feature it cannot use. Two places, because a
+   hidden control is a courtesy and the guard is the rule.
+
+   W2/W3 — upload, replace, remove. The API validates that the bytes really
+   are an image and within 2 MB, and answers with a sentence a salon owner can
+   act on.
+
+   W5 — the logo comes back as `logoUrl` on the SAME `GET /merchants` payload
+   the app reads, so both surfaces show the identical image with no
+   app-specific upload or storage path.
+
+   The image travels as a base64 data URL rather than multipart: this client
+   already holds one (`FileReader.readAsDataURL`), Expo's image picker returns
+   one, and it keeps the JSON error envelope that makes W3's clear error
+   possible. See `location.dto.ts` on the API for the full reasoning.
+   -------------------------------------------------------------------------- */
+export function uploadLogo(dataUrl) {
+  return apiRequest('/merchants/me/logo', { method: 'PUT', body: { image: dataUrl } });
+}
+
+export function deleteLogo() {
+  return apiRequest('/merchants/me/logo', { method: 'DELETE' });
+}
+
+/**
+ * Where the salon is  (M1 — app spec R3.6-R3.10 dependency)
+ *
+ * *"distance-based sorting requires every salon to have a registered location
+ * on the platform (for example, an address that can be converted to map
+ * coordinates)."* This is where a salon registers it.
+ *
+ * A field sent as `null` is CLEARED; a field left out is untouched. Latitude
+ * and longitude must move together — a half-set coordinate puts the salon on
+ * the equator.
+ *
+ * ⚠️ This is the SHOP's address, which is public. The CUSTOMER's location is
+ * never sent to the server by any Glow+ surface (NF6) — the app works out
+ * distance on the device.
+ */
+export function updateSalonLocation(patch) {
+  return apiRequest('/merchants/me/location', { method: 'PATCH', body: patch });
+}
+
 /**
  * Opening hours  [F52]
  *
