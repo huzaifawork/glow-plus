@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { buildCorsOptions, buildHelmetOptions, resolveAllowedOrigins } from './config/security';
+import { applyLogoBodyParser } from './config/body-limits';
 import { API_VERSION } from './config/version';
 
 /**
@@ -64,6 +65,17 @@ export function configureApp(app: INestApplication): void {
   // removes the header after the fact; disabling it at the adapter means it is
   // never set at all, which also covers responses helmet does not touch.
   app.getHttpAdapter().getInstance().disable('x-powered-by');
+
+  // The raised body limit for logo uploads, mounted on those two routes only.
+  //
+  // ⚠️ It has to be HERE and not in a module's `configure()`. `init()` calls
+  // `registerParserMiddleware()` BEFORE `registerModules()`, so Nest's own
+  // 100 kB `express.json()` is already first in the stack by the time module
+  // middleware is applied — which is why the module-level mounts this
+  // replaces never ran, and every logo upload answered 413. `configureApp`
+  // runs before `init()`, so this one does. See config/body-limits.ts, which
+  // also documents the `jsonParser` naming trap that makes this easy to break.
+  applyLogoBodyParser(app);
 
   // One error envelope for every failure: { statusCode, message, error }.
   // `message` is always a string — ValidationPipe's array moves to `details`,

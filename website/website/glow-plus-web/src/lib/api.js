@@ -192,8 +192,71 @@ export const clearAdminToken = () => endSession(ADMIN_TOKEN_KEY);
 /* --------------------------------------------------------------------------
    Request
    -------------------------------------------------------------------------- */
+/**
+ * When does this access token stop being accepted?  Milliseconds, or `null`.
+ *
+ * Reads the `exp` claim WITHOUT verifying anything. That is not a shortcut and
+ * it is not a security decision: the signature is the server's business, and
+ * this value is used for exactly one thing — deciding whether to spend the
+ * refresh token before sending a request rather than after being refused. A
+ * forged `exp` buys an attacker a pointless refresh call and nothing else.
+ *
+ * Returns `null` for anything it cannot read, which is the "do nothing"
+ * answer: the request goes out as it always did and the server decides.
+ */
+function accessTokenExpiry(token) {
+  try {
+    const payload = String(token).split('.')[1];
+    if (!payload) return null;
+    // base64url → base64, then restore the padding atob() insists on.
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
+    return typeof claims?.exp === 'number' ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ten seconds of leeway, for the gap between deciding to send and the server
+ * deciding to accept. Small on purpose: this is not a security boundary, it is
+ * a way to avoid one wasted round trip.
+ */
+const EXPIRY_LEEWAY_MS = 10_000;
+
+function isExpired(token) {
+  const expiresAt = accessTokenExpiry(token);
+  return expiresAt !== null && expiresAt - EXPIRY_LEEWAY_MS <= Date.now();
+}
+
 export async function apiRequest(path, { method = 'GET', body, auth = true, tokenKey = TOKEN_KEY, retried = false, withTotal = false } = {}) {
-  const token = auth ? readToken(tokenKey) : null;
+  let token = auth ? readToken(tokenKey) : null;
+
+  // T47's access token lasts 15 minutes, and the recovery from an expired one
+  // has always been reactive: send it, get a 401, refresh, replay. That works
+  // — it is why a logo still uploads after the token expires — but it has two
+  // costs worth removing.
+  //
+  //   1. **The whole request is sent twice.** A logo is a ~2.7 MB base64 data
+  //      URL, so an expired token means uploading 2.7 MB, being refused, and
+  //      uploading the same 2.7 MB again. On a salon's upstream connection
+  //      that is the difference between a slow upload and one that looks
+  //      broken.
+  //   2. **The browser console shows a 401** on a request that then succeeds,
+  //      which reads as a bug to anyone looking at it and buries real ones.
+  //
+  // So a token we can already see is expired is spent BEFORE the request
+  // rather than after. This is an optimisation and nothing more: the reactive
+  // path below stays exactly as it was and is still what handles a token the
+  // server rejects for any other reason.
+  //
+  // `!retried` because the replay below has already refreshed. If the refresh
+  // fails here we deliberately fall through with the old token and let the
+  // 401 branch do what it always did — one recovery path, not two.
+  if (token && !retried && isExpired(token)) {
+    const fresh = await refreshSession(tokenKey);
+    if (fresh) token = fresh;
+  }
 
   let res;
   try {
