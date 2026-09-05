@@ -213,6 +213,158 @@ function PortalStats() {
 }
 
 /* ============================================================
+   Setup checklist  (M2)
+
+   ── The problem this solves ────────────────────────────────────────────────
+   Every control below already existed, and on production almost none of them
+   had been used: no salon had a logo, none had coordinates, and the ones that
+   had never started a plan were invisible in "Find a salon" without ever
+   being told which step they had missed. The features were not missing — they
+   were unfindable, sitting behind a "Profile" tab that reads like a page of
+   read-only account details.
+
+   So this states the remaining steps in one place, at the top of the portal,
+   where a salon that has just signed up is actually looking.
+
+   ── Why it disappears ─────────────────────────────────────────────────────
+   A checklist that stays after it is finished becomes furniture: it is read
+   once, ignored afterwards, and takes the top of the page from the work.
+   `pending.length === 0` renders nothing at all.
+
+   ── Why it does not block anything ────────────────────────────────────────
+   Every item is a link to the place that does the job, never a gate. A salon
+   mid-trial has to be able to log a visit today and set its hours tomorrow;
+   the point of the list is that nothing is silently missing, not that the
+   portal refuses to work until it is complete.
+   ============================================================ */
+function SetupChecklist({ onGo }) {
+  const profile = usePortalData(() => getMerchantProfile(), []);
+  const styles = usePortalData(() => listStyles(), []);
+  const { currentMerchant } = useApp();
+  const [hours, setHours] = useState(null);
+
+  // Same session gate and same reasoning as HoursPanel [F69]: every view is
+  // mounted from first paint, so an ungated fetch here would call a protected
+  // route while an anonymous visitor is reading the landing page. Failures are
+  // swallowed rather than toasted — a checklist is advisory, and a salon does
+  // not need an error about a step it has not reached.
+  useEffect(() => {
+    if (!currentMerchant) return undefined;
+    let cancelled = false;
+    getMyBusinessHours()
+      .then((rows) => {
+        if (!cancelled) setHours(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setHours(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentMerchant]);
+
+  if (!profile) return null;
+
+  // The same pair the API and LogoSetting treat as "checked out" (W1).
+  const subscribed = ['TRIALING', 'ACTIVE'].includes(profile.subscription?.status);
+  const pending = [];
+
+  if (!subscribed) {
+    pending.push({
+      key: 'plan',
+      title: 'Start your plan',
+      body: 'Customers cannot find you in "Find a salon" until your subscription is live.',
+      cta: 'Go to billing',
+      tab: 'billing',
+    });
+  }
+
+  // Gated on `subscribed` for the same reason the control itself is (W1): a
+  // salon that has not checked out must not be shown a logo upload at all, and
+  // listing it as an outstanding step is showing it.
+  if (subscribed && !profile.logoUrl) {
+    pending.push({
+      key: 'logo',
+      title: 'Upload your logo',
+      body: 'Your logo appears beside your salon name in the website directory and in the Glow+ app.',
+      cta: 'Upload a logo',
+      tab: 'profile',
+    });
+  }
+
+  // Salons created before M2 have neither, because the signup form did not ask.
+  if (!profile.city || !profile.addressLine) {
+    pending.push({
+      key: 'address',
+      title: 'Add your address',
+      body: 'Customers filter salons by city. Without one, yours does not appear in any city search.',
+      cta: 'Add an address',
+      tab: 'profile',
+    });
+  } else if (profile.latitude === null || profile.longitude === null) {
+    // Only worth raising once an address exists — with one, this means the
+    // geocoder could not place it and the salon has to drop a pin itself.
+    pending.push({
+      key: 'pin',
+      title: 'Check your map location',
+      body: 'We could not place your address on the map, so the app cannot sort you by distance. Confirm the address, or enter your coordinates.',
+      cta: 'Fix my location',
+      tab: 'profile',
+    });
+  }
+
+  if (Array.isArray(styles) && styles.length === 0) {
+    pending.push({
+      key: 'styles',
+      title: 'Add your services',
+      body: 'Your menu is what customers book and what earns them points. Nothing can be booked until there is one.',
+      cta: 'Add a service',
+      tab: 'styles',
+    });
+  }
+
+  // `hours === null` means not loaded (or the request failed) — not "no hours".
+  // Treating those as an outstanding step would show the item to every salon
+  // for a moment on every load, and permanently to any salon whose request
+  // failed.
+  if (Array.isArray(hours) && hours.every((d) => d.closed)) {
+    pending.push({
+      key: 'hours',
+      title: 'Set your opening hours',
+      body: 'Every day is marked closed, so the booking calendar offers customers no times at all.',
+      cta: 'Set opening hours',
+      tab: 'hours',
+    });
+  }
+
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="setup-checklist">
+      <div className="setup-head">
+        <h3>Finish setting up your salon</h3>
+        <span className="setup-count">
+          {pending.length} {pending.length === 1 ? 'step left' : 'steps left'}
+        </span>
+      </div>
+      <ul className="setup-list">
+        {pending.map((item) => (
+          <li key={item.key}>
+            <div>
+              <div className="setup-title">{item.title}</div>
+              <div className="setup-body">{item.body}</div>
+            </div>
+            <button type="button" className="navbtn" onClick={() => onGo(item.tab)}>
+              {item.cta}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ============================================================
    Styles tab
    ============================================================ */
 function StylesPanel({ active }) {
@@ -1375,6 +1527,9 @@ export default function BusinessPortal({ active }) {
           ) : null}
         </div>
       ) : null}
+
+      {/* M2 — what is still missing, above the work rather than inside a tab. */}
+      <SetupChecklist onGo={setTab} />
 
       <PortalStats />
 

@@ -336,11 +336,33 @@ export function consumerSignup({ email, password, name, phone }) {
   });
 }
 
-export function merchantSignup({ businessName, email, password }) {
+/**
+ * Create a salon  (M2 — address captured at creation)
+ *
+ * `addressLine` and `city` are REQUIRED by the API. They used to be optional
+ * fields in a settings tab, and the observable result on production was that
+ * every live salon had `city: null` — so the app's city filter and its
+ * "Nearest" sort had no data at all. Asking here is what makes every salon
+ * created from now on findable.
+ *
+ * Coordinates are deliberately not sent: the API derives them from this
+ * address, and the portal's own form is where a salon overrides them.
+ * `region` and `postalCode` are optional and are omitted rather than sent
+ * blank, so the API stores null instead of an empty string.
+ */
+export function merchantSignup({ businessName, email, password, addressLine, city, region, postalCode }) {
   return apiRequest('/merchants/signup', {
     method: 'POST',
     auth: false,
-    body: { businessName, email, password },
+    body: {
+      businessName,
+      email,
+      password,
+      addressLine,
+      city,
+      ...(region ? { region } : {}),
+      ...(postalCode ? { postalCode } : {}),
+    },
   });
 }
 
@@ -567,6 +589,43 @@ export function approveMerchant(id) {
 export function suspendMerchant(id) {
   return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/suspend`, {
     method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+  });
+}
+
+/* --------------------------------------------------------------------------
+   M2 — operator overrides for a salon's address and logo
+
+   Why the console needs these at all: M2 makes the address required at
+   signup, which fixes every salon created from now on and nothing about the
+   salons already on the platform — all of which predate the field. It also
+   does nothing for a salon that mistypes an address and phones support rather
+   than opening the portal. Without these two routes the only remedy for
+   either is an UPDATE typed into the database console.
+
+   Same DTOs as the salon's own routes, so the rules (null clears, absent
+   leaves alone, coordinates move as a pair, and the address is re-geocoded
+   when no pin is set) are the same rules rather than a second copy.
+   -------------------------------------------------------------------------- */
+export function updateMerchantLocation(id, patch) {
+  return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/location`, {
+    method: 'PATCH',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: patch,
+  });
+}
+
+export function uploadMerchantLogo(id, dataUrl) {
+  return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/logo`, {
+    method: 'PUT',
+    tokenKey: ADMIN_TOKEN_KEY,
+    body: { image: dataUrl },
+  });
+}
+
+export function deleteMerchantLogo(id) {
+  return apiRequest(`/admin/merchants/${encodeURIComponent(id)}/logo`, {
+    method: 'DELETE',
     tokenKey: ADMIN_TOKEN_KEY,
   });
 }

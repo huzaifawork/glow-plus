@@ -274,11 +274,52 @@ must not see or be able to use a logo-upload feature."* The control is hidden
 when the subscription is not `TRIALING`/`ACTIVE`, **and** the API refuses the
 request. The hidden control is the courtesy; the guard is the rule.
 
-**Coordinates are typed in, not geocoded.** Every geocoding service is a paid
-API key, a new secret and a new failure mode, and this platform has none
-configured. The form links straight to Google Maps with the address prefilled.
-Adding a geocoder later replaces two input fields and nothing else — the
-columns, the API and the app all already work in coordinates.
+---
+
+### M2 (2026-09-05) — the data actually arrives
+
+M1 built the columns, the routes and the portal form. It did not produce any
+data: **every salon on production still had `city: null` and no logo**, so the
+app's city filter and its "Nearest" sort had nothing to work with. The features
+were not missing; they were unreachable, behind an optional field in a settings
+tab nobody revisits and a manual "copy two numbers out of Google Maps" step
+nobody performs.
+
+M2 closes that, in four places:
+
+- **`merchants/signup.dto.ts`** — `addressLine` and `city` are now **required**
+  at salon creation, with `region`/`postalCode` optional. No salon created from
+  now on can be missing a city. `BusinessAuth.jsx` grew the matching fields
+  (labels translated into all eight languages).
+- **`common/geocode.ts`** — **new**, and it reverses the M1 note below. The
+  address is geocoded on signup and on every address save, so the coordinate
+  fields are an override rather than a chore. Nominatim (OpenStreetMap): no API
+  key, no new secret, no bill. Best-effort by construction — it never throws,
+  and `null` is the state everything downstream already handles. Switch it off
+  with `GEOCODER_DISABLED=true` (jest.setup.ts sets it, which is what keeps the
+  suite offline).
+- **`BusinessPortal.jsx` → `SetupChecklist`** — the missing steps stated at the
+  top of the portal, not buried in a Profile tab: start your plan, upload a
+  logo, add an address, fix an unplaceable one, add services, set hours. It
+  renders nothing once complete, and gates nothing.
+- **`admin/…` + `AdminSalonSettings.jsx`** — an operator can now edit any
+  salon's address and upload or remove its logo (`PATCH
+  /v1/admin/merchants/:id/location`, `PUT`/`DELETE
+  /v1/admin/merchants/:id/logo`). Required work, not a nicety: the signup
+  change fixes the future and does nothing for the salons already on the
+  platform. The admin salon list also shows "⚠ no city" / "⚠ no map pin" so an
+  operator can see which ones need it. Deliberately **not** behind W1's
+  subscription gate — the actor is an operator, not the salon.
+
+⚠️ The admin logo route needs its own raised body limit in `admin.module.ts`,
+mounted on the **raw, `/v1`-prefixed** path, exactly like the merchant one. Miss
+it and every upload dies as a bare `PayloadTooLargeError` before any handler.
+
+**Superseded (M1):** *"Coordinates are typed in, not geocoded. Every geocoding
+service is a paid API key…"* — true of every service that was considered at the
+time, and Nominatim is the one that is not. The manual pair stays as the
+override for addresses it cannot place, and an explicitly-entered pair is never
+geocoded over.
 
 ---
 

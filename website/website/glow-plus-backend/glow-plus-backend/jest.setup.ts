@@ -20,3 +20,14 @@ process.env.JWT_SECRET ??= 'test-only-jwt-secret-not-used-anywhere-real-01234567
  * that models a rejected configuration teaches the wrong thing.
  */
 process.env.ENCRYPTION_KEY ??= '0'.repeat(63) + '1'; // 64 hex chars = 32 bytes
+
+/**
+ * M2 — no unit test may reach the network.
+ *
+ * `geocodeAddress` calls Nominatim over the real internet. A suite that does
+ * that is slow, flaky, offline-hostile, and rude to a free service run by a
+ * charity. Disabling the geocoder makes it return `null` — which is a state
+ * every caller already handles, because a salon whose address cannot be
+ * resolved is exactly that case in production too.
+ */
+process.env.GEOCODER_DISABLED ??= 'true';

@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ThrottleCredentials } from '../../common/throttling';
 import { AdminService } from './admin.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -13,6 +25,7 @@ import {
   PromoteUserDto,
   SetAdminRoleDto,
 } from './admin-management.dto';
+import { UpdateLocationDto, UploadLogoDto } from '../merchants/location.dto';
 
 // Every route except login sits behind RequireAdminGuard (T22) [F7]. Login
 // itself must stay reachable with no bearer token — it's also excluded from
@@ -73,6 +86,45 @@ export class AdminController {
   @Patch('merchants/:id/suspend')
   suspend(@Param('id') id: string) {
     return this.admin.suspendMerchant(id);
+  }
+
+  /**
+   * M2 — operator override for a salon's address and map pin.
+   *
+   * `RequireAdminGuard`, not the owner guard: correcting a salon's address is
+   * day-to-day console work of exactly the same kind as approving one, and the
+   * owner tier exists for admin-account management, not for salon data.
+   *
+   * Same DTO as the salon's own `PATCH /merchants/me/location`, so the
+   * paired-coordinate rule and the "null clears, absent leaves alone"
+   * semantics are the same rules and not a second copy of them.
+   */
+  @UseGuards(RequireAdminGuard)
+  @Patch('merchants/:id/location')
+  updateMerchantLocation(@Param('id') id: string, @Body() dto: UpdateLocationDto) {
+    return this.admin.updateMerchantLocation(id, dto);
+  }
+
+  /**
+   * M2 — operator override for a salon's logo. See `AdminService` for why
+   * this one is not behind W1's subscription gate.
+   *
+   * ⚠️ This route needs the raised JSON body limit mounted in
+   * `admin.module.ts`. Without it Express refuses a 2 MB logo as a bare
+   * `PayloadTooLargeError` before any handler runs — the same trap
+   * `merchants.module.ts` documents, and the mount matches the RAW url, so it
+   * carries the `/v1` prefix.
+   */
+  @UseGuards(RequireAdminGuard)
+  @Put('merchants/:id/logo')
+  setMerchantLogo(@Param('id') id: string, @Body() dto: UploadLogoDto) {
+    return this.admin.setMerchantLogo(id, dto.image);
+  }
+
+  @UseGuards(RequireAdminGuard)
+  @Delete('merchants/:id/logo')
+  removeMerchantLogo(@Param('id') id: string) {
+    return this.admin.removeMerchantLogo(id);
   }
 
   @UseGuards(RequireAdminGuard)

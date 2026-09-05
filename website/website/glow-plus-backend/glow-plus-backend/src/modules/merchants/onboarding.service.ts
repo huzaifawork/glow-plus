@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationService } from '../auth/email-verification.service';
 import { FOUNDING_MEMBER_CAP } from './founding';
+import { MerchantsService } from './merchants.service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
   apiVersion: '2025-03-31.basil' as Stripe.LatestApiVersion,
@@ -15,7 +16,20 @@ export interface MerchantSignupInput {
   businessName: string;
   email: string;
   password: string;
+  /** M2 — required at creation. See MerchantSignupDto for why. */
+  addressLine: string;
+  city: string;
+  region?: string;
+  postalCode?: string;
 }
+
+/** Trim, and treat an all-whitespace optional field as absent rather than as
+ *  a blank string — a directory that groups salons by city must not grow a
+ *  `"  "` region. Mirrors the same helper in `MerchantsService.updateLocation`. */
+const text = (value: string | undefined): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
 
 @Injectable()
 export class OnboardingService {
@@ -24,6 +38,7 @@ export class OnboardingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly merchants: MerchantsService,
   ) {}
 
   /**
@@ -89,6 +104,14 @@ export class OnboardingService {
           status: 'PENDING',
           stripeCustomerId: stripeCustomer.id,
           foundingMember,
+          // M2 — the salon is created WITH its address, so there is no window
+          // in which a salon exists on the platform without one. The DTO makes
+          // the first two required; the other two are genuinely optional and
+          // are stored as null rather than '' when left blank.
+          addressLine: input.addressLine.trim(),
+          city: input.city.trim(),
+          region: text(input.region),
+          postalCode: text(input.postalCode),
         },
       });
     } catch (err) {
@@ -107,6 +130,41 @@ export class OnboardingService {
       );
     }
 
-    return { id: merchant.id, businessName: merchant.businessName, status: merchant.status, foundingMember };
+    // M2 — place the salon on the map from the address it just gave us, so
+    // distance-based discovery works without the owner ever opening Google
+    // Maps. Best-effort by construction (`deriveCoordinates` swallows every
+    // failure), and deliberately AFTER the row and the email: a geocoder
+    // outage must not be able to fail a signup that has already taken a
+    // Stripe customer and a database row.
+    //
+    // Awaited rather than fired and forgotten. On Vercel the function is
+    // frozen the moment the response is sent, so an un-awaited promise here
+    // would resolve in roughly none of the cases it was written for.
+    //
+    // Wrapped even though `deriveCoordinates` swallows its own failures. The
+    // guarantee that matters is "a signup cannot fail after the row exists",
+    // and that guarantee should not depend on a promise another file makes
+    // about its internals — the verification email two blocks up is wrapped
+    // for exactly the same reason [F27].
+    let located: { latitude: number; longitude: number } | null = null;
+    try {
+      located = await this.merchants.deriveCoordinates(merchant);
+    } catch (err) {
+      this.logger.error(
+        `Merchant ${merchant.id} was created but could not be placed on the map`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+
+    return {
+      id: merchant.id,
+      businessName: merchant.businessName,
+      status: merchant.status,
+      foundingMember,
+      // The client shows nothing about coordinates, but a signup that quietly
+      // failed to place the salon is worth being able to see in a response
+      // body when someone is debugging why a salon is missing from Nearest.
+      located: located !== null,
+    };
   }
 }

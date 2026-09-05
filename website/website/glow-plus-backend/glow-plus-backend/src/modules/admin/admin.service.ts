@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MerchantsService } from '../merchants/merchants.service';
 import { EmailVerificationService } from '../auth/email-verification.service';
 import { ChangeAdminEmailDto, ChangeAdminPasswordDto, PromoteUserDto } from './admin-management.dto';
+import { UpdateLocationDto } from '../merchants/location.dto';
 
 /** T77 — the same cost the auth services and create-admin.ts use. An admin hash weaker than a customer's would be exactly backwards. */
 const SALT_ROUNDS = 12;
@@ -60,6 +61,52 @@ export class AdminService {
 
   approveMerchant(merchantId: string) {
     return this.merchants.approve(merchantId);
+  }
+
+  /**
+   * M2 — an operator fixes a salon's address on the salon's behalf.
+   *
+   * ── Why this route has to exist ──────────────────────────────────────────
+   * M2 makes the address required at signup, which fixes every salon created
+   * from now on. It does nothing for the salons already on the platform, all
+   * of which were created before the field existed and every one of which has
+   * `city: null` — and it does nothing for a salon that mistypes its address
+   * and phones support instead of opening the portal. Without an operator
+   * override the only remedy for either is an UPDATE typed into the Supabase
+   * console, which is not a remedy, it is a habit.
+   *
+   * ── Why it delegates rather than writing its own UPDATE ──────────────────
+   * `MerchantsService.updateLocation` holds the paired-coordinate rule, the
+   * blank-is-null trimming and the geocoding fallback. A second implementation
+   * here would be a second set of those rules, and the two would drift the
+   * first time one of them changed. A salon whose address an admin corrects
+   * gets re-geocoded exactly as if the owner had corrected it themselves.
+   *
+   * A missing salon surfaces as Prisma's P2025, which the global filter
+   * already maps to 404 — the same answer this route would hand-write.
+   */
+  updateMerchantLocation(merchantId: string, dto: UpdateLocationDto) {
+    return this.merchants.updateLocation(merchantId, dto);
+  }
+
+  /**
+   * M2 — an operator uploads or removes a salon's logo.
+   *
+   * ⚠️ **This deliberately does NOT carry W1's subscription gate**, and that
+   * is not an oversight. W1 says *a salon* must not see or use a logo upload
+   * before it has checked out; the actor here is a Glow+ operator, not the
+   * salon, and the case it exists for is precisely the one W1 cannot help
+   * with — a paying salon that cannot work the upload, or a logo that has to
+   * come down immediately because it is not what the salon meant to publish.
+   * Making an operator wait on a customer's billing state to take an image
+   * down would be exactly backwards.
+   */
+  setMerchantLogo(merchantId: string, image: string) {
+    return this.merchants.setLogo(merchantId, image);
+  }
+
+  removeMerchantLogo(merchantId: string) {
+    return this.merchants.deleteLogo(merchantId);
   }
 
   suspendMerchant(merchantId: string) {

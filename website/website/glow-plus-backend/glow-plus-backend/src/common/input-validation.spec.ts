@@ -47,7 +47,16 @@ const expectRejected = async (dto: new (...args: never[]) => unknown, value: unk
 };
 
 describe('MerchantSignupDto (T31)', () => {
-  const valid = { businessName: 'Glow Salon', email: 'salon@example.com', password: 'Password123!' };
+  // M2 — `addressLine` and `city` joined the required set: the salon's
+  // location is now captured at creation instead of being an optional field
+  // in a settings tab that, on production, no salon had ever filled in.
+  const valid = {
+    businessName: 'Glow Salon',
+    email: 'salon@example.com',
+    password: 'Password123!',
+    addressLine: '12 King Street West',
+    city: 'Toronto',
+  };
 
   it('accepts a well-formed signup', async () => {
     await expect(run(MerchantSignupDto, valid)).resolves.toMatchObject(valid);
@@ -77,6 +86,40 @@ describe('MerchantSignupDto (T31)', () => {
 
   it('refuses non-string credentials (bcrypt threw "Illegal arguments")', async () => {
     await expectRejected(MerchantSignupDto, { businessName: 12345, email: valid.email, password: 99999 });
+  });
+
+  it('refuses a signup with no street address  (M2)', async () => {
+    await expectRejected(MerchantSignupDto, { ...valid, addressLine: undefined }, /address/i);
+  });
+
+  it('refuses a signup with no city  (M2)', async () => {
+    await expectRejected(MerchantSignupDto, { ...valid, city: undefined }, /city/i);
+  });
+
+  it('refuses a blank city, which would be a salon nobody can filter to  (M2)', async () => {
+    await expectRejected(MerchantSignupDto, { ...valid, city: '' }, /city/i);
+  });
+
+  it('accepts the optional region and postal code  (M2)', async () => {
+    await expect(
+      run(MerchantSignupDto, { ...valid, region: 'Ontario', postalCode: 'M5H 1A1' }),
+    ).resolves.toMatchObject({ region: 'Ontario', postalCode: 'M5H 1A1' });
+  });
+
+  /**
+   * M2 — coordinates are DERIVED from the address, never accepted here. This
+   * route is unauthenticated, and a route that writes a map pin for an
+   * unauthenticated caller writes a map pin for anyone.
+   */
+  it('strips latitude/longitude rather than letting an anonymous caller set a pin  (M2)', async () => {
+    const out = (await run(MerchantSignupDto, {
+      ...valid,
+      latitude: 43.65,
+      longitude: -79.38,
+    })) as Record<string, unknown>;
+
+    expect(out.latitude).toBeUndefined();
+    expect(out.longitude).toBeUndefined();
   });
 
   it('strips unknown fields instead of passing them through', async () => {

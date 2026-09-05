@@ -7,6 +7,7 @@ import { LISTABLE_MERCHANT_WHERE } from '../../common/salon-listable';
 import { decodeImageDataUrl } from '../../common/image';
 import { absoluteApiUrl } from '../../config/public-url';
 import { UpdateLocationDto } from './location.dto';
+import { Coordinates, geocodeAddress } from '../../common/geocode';
 
 /**
  * Where a salon is  (M1 — mobile spec R3.6-R3.10)
@@ -301,13 +302,21 @@ export class MerchantsService {
     return { cap: FOUNDING_MEMBER_CAP, taken, left: FOUNDING_MEMBER_CAP - taken };
   }
 
-  /** Used by the admin merchant-approval queue. */
+  /**
+   * Used by the admin merchant-approval queue and the console's salon list.
+   *
+   * M2 — `logoUrl` is mapped on here for the same reason `getProfile` does it:
+   * the console shows each salon's logo beside its name and can replace one,
+   * and it must read the field by the name every other surface uses rather
+   * than rebuilding the versioned URL itself.
+   */
   async listByStatus(status?: string) {
-    return this.prisma.merchant.findMany({
+    const merchants = await this.prisma.merchant.findMany({
       where: status ? { status: status as any } : undefined,
       orderBy: { createdAt: 'desc' },
       select: MERCHANT_PUBLIC_SELECT,
     });
+    return merchants.map((m) => ({ ...m, logoUrl: logoUrlFor(m) }));
   }
 
   async approve(merchantId: string) {
@@ -392,7 +401,61 @@ export class MerchantsService {
       data,
       select: MERCHANT_PUBLIC_SELECT,
     });
-    return { ...merchant, logoUrl: logoUrlFor(merchant) };
+
+    // M2 — if the salon is left without coordinates, try to derive them from
+    // the address it just saved. Runs AFTER the update, on the row as it now
+    // stands, so it sees the merged result rather than guessing at the patch.
+    const located = await this.deriveCoordinates(merchant);
+    return { ...merchant, ...(located ?? {}), logoUrl: logoUrlFor(merchant) };
+  }
+
+  /**
+   * M2 — fill in a salon's map coordinates from its own address. Best-effort.
+   *
+   * ── Why this is not the same thing as the manual latitude/longitude pair ──
+   * The pair stays, and an explicitly-entered pair always wins: this only ever
+   * runs when the row has NO coordinates. A salon that typed its own numbers
+   * has said something more precise than an address, and re-geocoding over the
+   * top of that would quietly move a pin the owner placed on purpose.
+   *
+   * ── Why re-deriving after a clear is correct, not surprising ─────────────
+   * Clearing the coordinate fields in the portal means "I do not want to type
+   * these numbers", not "hide my salon from people searching nearby". The
+   * salon that genuinely wants no pin clears its ADDRESS too, and with no city
+   * or postal code `buildGeocodeQuery` returns null and nothing is derived.
+   *
+   * ── Why it never throws ──────────────────────────────────────────────────
+   * Every caller is a request a human is waiting on — a signup, or a save. A
+   * geocoder outage must degrade to "no coordinates yet", which is a state the
+   * schema, the API and both clients already handle. It is retried on the next
+   * save, and the manual fields are always available.
+   */
+  async deriveCoordinates(merchant: {
+    id: string;
+    addressLine: string | null;
+    city: string | null;
+    region: string | null;
+    postalCode: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  }): Promise<Coordinates | null> {
+    if (merchant.latitude !== null && merchant.longitude !== null) return null;
+
+    const coords = await geocodeAddress(merchant);
+    if (!coords) return null;
+
+    try {
+      await this.prisma.merchant.update({
+        where: { id: merchant.id },
+        data: { latitude: coords.latitude, longitude: coords.longitude },
+      });
+    } catch {
+      // The salon row was deleted between the two statements, or the write
+      // lost a race. Neither is worth failing the caller's request for — the
+      // address is saved, and the next save tries again.
+      return null;
+    }
+    return coords;
   }
 
   /**
