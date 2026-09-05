@@ -27,8 +27,10 @@ import { ApiError, messageFor } from '../../api/errors';
  * password" — sends them to reset a password that is perfectly correct. The
  * branch turns it into the actual problem plus the one action that fixes it.
  *
- * This screen is the app's entry point for a signed-out user — `RootNavigator`
- * renders nothing else until `isAuthenticated` is true, by product decision.
+ * ── Why "Browse without an account" is here ────────────────────────────────
+ * R3.1 — the salon directory must be usable *"without requiring the user to be
+ * logged in"*. If the app opened on a login wall, that requirement could not
+ * be met, so the wall has a documented way past it.
  */
 export default function SignInScreen({ navigation }) {
   const { signIn, error: sessionError, clearError } = useAuth();
@@ -54,9 +56,22 @@ export default function SignInScreen({ navigation }) {
     try {
       await signIn(email, password);
 
-      // No navigation call needed: `isAuthenticated` flipping to true makes
-      // `RootNavigator` swap this whole Auth tree for the authenticated app
-      // on the next render.
+      // Close the auth modal.
+      //
+      // This screen is presented MODALLY over the tabs, not as a separate
+      // navigation tree — R3.1 requires the directory to be usable signed out,
+      // so sign-in is something you reach FROM the app rather than a wall in
+      // front of it. The consequence is that **nothing dismisses it on
+      // success**: `isAuthenticated` flips, the tabs behind it gain Rewards
+      // and Bookings, and the modal stays on top still showing the form that
+      // was just submitted. The button stops spinning and, to the user,
+      // nothing happened.
+      //
+      // `getParent()` is the ROOT stack (this screen sits inside the Auth
+      // stack, which is one of its screens), so this pops the modal and
+      // reveals whatever the user was doing — the salon they were about to
+      // book, or Settings.
+      navigation.getParent()?.goBack();
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) setNeedsVerification(true);
       setError(err);
@@ -172,6 +187,15 @@ export default function SignInScreen({ navigation }) {
               variant="secondary"
               fullWidth
               onPress={() => navigation.navigate('SignUp')}
+            />
+            {/* R3.1 — the directory is public, so the app must have a way in
+                without an account. */}
+            <Button
+              title="Browse salons without an account"
+              variant="ghost"
+              size="sm"
+              onPress={() => navigation.navigate('BrowseAsGuest')}
+              style={styles.centered}
             />
           </View>
         </ScrollView>

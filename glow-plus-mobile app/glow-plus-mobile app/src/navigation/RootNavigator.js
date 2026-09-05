@@ -14,18 +14,17 @@ const Stack = createNativeStackNavigator();
 /**
  * The whole app's routing.
  *
- * ── Hard auth gate ──────────────────────────────────────────────────────────
- * `isAuthenticated ? <AppStack/> : <AuthStack/>`. Nothing behind the gate —
- * not Discover, not Settings — mounts until there is a signed-in user. This is
- * a deliberate product decision to require an account before any part of the
- * app is usable, and it intentionally supersedes the guest-browsing shape
- * R3.1 originally described.
+ * ── Why the auth screens are a MODAL over the tabs, not a separate tree ─────
+ * The usual shape is `isAuthenticated ? <AppStack/> : <AuthStack/>`, and it is
+ * wrong for this app. R3.1 requires the salon directory to be browsable
+ * *"without requiring the user to be logged in"*, so a signed-out person needs
+ * the real app, not a login wall. Sign-in is therefore something you reach
+ * FROM the app — from the Sign in prompt on a salon, or from Settings — and
+ * dismissing it returns you to what you were doing.
  *
- * Because the swap is driven by `isAuthenticated` rather than an explicit
- * navigation call, signing out is enough on its own to land the user back on
- * Sign in: `AuthContext` flips its state, this component re-renders, and the
- * whole authenticated tree (tabs, any pushed Salon screen) is torn down in
- * favour of `AuthStack` on the very next frame.
+ * The tabs themselves still change with the session (`TabNavigator` hides
+ * Rewards and Bookings for a guest), which is where the "signed out" state is
+ * actually expressed.
  *
  * ── `createNativeStackNavigator` and not the JS stack ──────────────────────
  * The native stack uses the platform's own navigation container, so the push
@@ -35,14 +34,12 @@ const Stack = createNativeStackNavigator();
  * notice.
  */
 export default function RootNavigator() {
-  const { isBootstrapping, isAuthenticated } = useAuth();
+  const { isBootstrapping } = useAuth();
 
-  // R1.5/R1.6 — the session is being restored and validated. Rendering
-  // either tree first would flash the wrong one at a returning user before
-  // swapping to the right one.
+  // R1.5/R1.6 — the session is being restored and validated. Rendering the
+  // tabs first would flash a signed-out shell at a returning user before
+  // swapping it for a signed-in one.
   if (isBootstrapping) return <SplashScreen />;
-
-  if (!isAuthenticated) return <AuthStack />;
 
   return (
     <Stack.Navigator
@@ -68,17 +65,19 @@ export default function RootNavigator() {
           headerBackButtonDisplayMode: 'minimal',
         })}
       />
+
+      {/* Auth, presented modally. `SignIn` is the entry; the other two push on
+          top of it so Back means "back to sign in" rather than "back to the
+          app", which is what a user in the middle of a password reset expects. */}
+      <Stack.Group screenOptions={{ presentation: 'modal' }}>
+        <Stack.Screen name="Auth" component={AuthStack} />
+      </Stack.Group>
     </Stack.Navigator>
   );
 }
 
 const AuthStackNavigator = createNativeStackNavigator();
 
-/**
- * `SignIn` is the entry; the other two push on top of it so Back means "back
- * to sign in" rather than "back to the app" — there is no app behind it for a
- * signed-out user to go back to.
- */
 function AuthStack() {
   return (
     <AuthStackNavigator.Navigator
@@ -102,6 +101,24 @@ function AuthStack() {
         component={ForgotPasswordScreen}
         options={{ headerShown: true, title: '', headerBackButtonDisplayMode: 'minimal' }}
       />
+      {/* R3.1's escape hatch from the sign-in screen. It is a route rather than
+          a `goBack()` so it works whether Auth was opened from the app or was
+          the first thing shown. */}
+      <AuthStackNavigator.Screen name="BrowseAsGuest" component={DismissAuth} />
     </AuthStackNavigator.Navigator>
   );
+}
+
+/**
+ * "Browse without an account" — closes the auth modal and returns to the app.
+ *
+ * A screen rather than an inline handler because React Navigation resolves a
+ * `navigate` to a route name, and this keeps the sign-in screen unaware of
+ * whether it was opened modally or landed on directly.
+ */
+function DismissAuth({ navigation }) {
+  React.useEffect(() => {
+    navigation.getParent()?.goBack();
+  }, [navigation]);
+  return <SplashScreen quiet />;
 }

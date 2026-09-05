@@ -27,7 +27,9 @@
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -54,9 +56,12 @@
       "expo-splash-screen"
     ],
     "extra": {
-      "apiBaseUrl": "https://glow-plus-nwdcp1070-joseph-6cd1.vercel.app/v1",
+      "apiBaseUrl": "https://glow-plus-api-six.vercel.app/v1",
       "demoMode": false,
-      "salonTimezone": "America/Toronto"
+      "salonTimezone": "America/Toronto",
+      "eas": {
+        "projectId": "7d3209aa-2788-474a-9848-3475ab0ccbfd"
+      }
     }
   }
 }
