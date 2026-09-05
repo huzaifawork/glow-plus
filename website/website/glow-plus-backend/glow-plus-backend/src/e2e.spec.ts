@@ -164,6 +164,21 @@ run('integration: the whole stack over real HTTP and real Postgres (T65)', () =>
       });
       expect(dupe.status).toBe(409);
 
+      // ⚠️ T81 — an unverified address cannot sign in, and this suite cannot
+      // click a link in an email. Marked verified directly, which is the only
+      // honest option: the alternative is reading the token out of
+      // EmailVerification and calling the confirm route, which would make
+      // every test below depend on the email flow rather than on the thing it
+      // is actually testing. Verification has its own coverage.
+      //
+      // This is what broke CI on 2026-08-28 and kept it red: T81 landed after
+      // T65 wrote this test, login started answering 403, and every test after
+      // it cascaded because `state.consumerToken` was never set.
+      await prisma!.user.update({
+        where: { email: CONSUMER },
+        data: { emailVerifiedAt: new Date() },
+      });
+
       const login = await req('POST', '/v1/auth/login', { email: CONSUMER, password: 'E2ePassword123!' });
       expect(login.status).toBe(201);
       state.consumerToken = login.json.token;
@@ -233,10 +248,34 @@ run('integration: the whole stack over real HTTP and real Postgres (T65)', () =>
           status: 'PENDING',
           stripeCustomerId: `cus_e2e_${TAG}`,
           foundingMember: true,
+          // T81, same reason as the consumer above: merchant login refuses an
+          // unverified address too.
+          emailVerifiedAt: new Date(),
         },
       });
       state.merchantId = created.id;
       expect(created.status).toBe('PENDING');
+
+      // [F74] — approval alone is no longer enough to be shown to customers;
+      // `LISTABLE_MERCHANT_WHERE` also requires a paying subscription. That
+      // rule landed after this test was written, so the salon could never
+      // appear in the directory however ACTIVE it became, and
+      // `assertMerchantVisible` 404'd its booking routes for the same reason.
+      //
+      // TRIALING rather than ACTIVE deliberately: it is the state a real salon
+      // is in for its first week, so the suite exercises the case that
+      // actually occurs rather than the tidiest one.
+      await prisma!.subscription.create({
+        data: {
+          merchantId: created.id,
+          stripeSubscriptionId: `sub_e2e_${TAG}`,
+          plan: 'MONTHLY',
+          priceCents: 4999,
+          status: 'TRIALING',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
 
       // Login DOES go through the real endpoint — it touches no third party.
       const login = await req('POST', '/v1/merchants/login', { email: MERCHANT, password: 'E2eSalon123!' });
