@@ -65,12 +65,18 @@ export default function App() {
     });
   }, []);
 
+  /** Sending a signed-out user somewhere they can still use (R3.1). */
+  const handleSignedOut = useCallback(() => {
+    if (!navigationRef.current?.isReady()) return;
+    navigationRef.current.navigate('Tabs', { screen: 'DiscoverTab' });
+  }, []);
+
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
         <ConfigProvider>
           <NetworkProvider>
-            <AuthProvider>
+            <AuthProvider onSignedOut={handleSignedOut}>
               <LocationProvider>
                 <NotificationProvider onOpenBooking={openBooking}>
                   <ToastProvider>

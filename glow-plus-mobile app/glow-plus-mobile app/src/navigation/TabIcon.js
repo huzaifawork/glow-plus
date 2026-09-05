@@ -33,6 +33,8 @@ export default function TabIcon({ glyph, focused }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', justifyContent: 'center', height: 24 },
-  glyph: { fontSize: 19, lineHeight: 22 },
+  // Height tracks the glyph's line height, so a taller glyph is not clipped
+  // by the wrapper it sits in.
+  wrap: { alignItems: 'center', justifyContent: 'center', height: 28 },
+  glyph: { fontSize: 24, lineHeight: 28 },
 });
