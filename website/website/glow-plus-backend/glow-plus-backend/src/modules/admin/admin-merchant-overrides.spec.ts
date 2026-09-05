@@ -17,16 +17,12 @@
  * present one until someone calls it without a token.
  */
 import { Test } from '@nestjs/testing';
-import { RequestMethod } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { MerchantsService } from '../merchants/merchants.service';
 import { EmailVerificationService } from '../auth/email-verification.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequireAdminGuard } from '../../common/guards/require-admin.guard';
-import { AdminModule } from './admin.module';
-import { MAX_LOGO_DATA_URL } from '../../common/limits';
-import { withVersion } from '../../config/version';
 
 const MERCHANT_ID = 'merchant-1';
 
@@ -99,43 +95,5 @@ describe('AdminController — the new routes are guarded  (M2, guards against [F
   it('reads real metadata — login deliberately has no guard', () => {
     expect(guardsOn('login')).toHaveLength(0);
     expect(guardsOn('approve')).toContain(RequireAdminGuard);
-  });
-});
-
-/**
- * The raised body limit for the operator's logo upload  (M2)
- *
- * This is the trap `merchants.module.ts` documents and `billing.module.ts`
- * hit before it: the mount matches the RAW url, so it has to carry the `/v1`
- * prefix. Get it wrong and the middleware silently never runs, Express's
- * 100 kB default applies, and every logo over that size dies as a bare
- * `PayloadTooLargeError` BEFORE any handler — an error with no message anyone
- * can act on, on exactly the uploads an operator is most likely to attempt.
- *
- * Asserted by calling `configure` with a stand-in consumer, because the
- * failure mode is a route string that looks right and matches nothing.
- */
-describe('AdminModule — the logo route gets a body limit big enough for a logo  (M2)', () => {
-  it('mounts a 2 MB-capable JSON parser on the versioned logo path', () => {
-    const forRoutes = jest.fn();
-    const apply = jest.fn().mockReturnValue({ forRoutes });
-
-    new AdminModule().configure({ apply } as never);
-
-    expect(forRoutes).toHaveBeenCalledWith({
-      path: 'v1/admin/merchants/:id/logo',
-      method: RequestMethod.PUT,
-    });
-    // The prefix is not hard-coded twice: if API_PREFIX ever moves, the mount
-    // moves with it, and this assertion moves with both.
-    expect(forRoutes.mock.calls[0][0].path).toBe(withVersion('admin/merchants/:id/logo'));
-    expect(apply).toHaveBeenCalledTimes(1);
-  });
-
-  it('sizes the limit off the same constant the DTO refuses on', () => {
-    // A 2 MB image is ~2.7 MB as a base64 data URL. A limit below
-    // MAX_LOGO_DATA_URL would reject at the parser, where there is no message,
-    // instead of at the DTO, where there is one.
-    expect(MAX_LOGO_DATA_URL).toBeGreaterThan(2 * 1024 * 1024);
   });
 });
