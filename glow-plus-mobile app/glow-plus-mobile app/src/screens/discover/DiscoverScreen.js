@@ -19,7 +19,7 @@ import useSalonCapacities from '../../hooks/useSalonCapacities';
 import { useLocation } from '../../context/LocationContext';
 import { useConfig } from '../../context/ConfigContext';
 import { useNetwork } from '../../context/NetworkContext';
-import { sortByDistance, withDistance } from '../../utils/distance';
+import { excludeUnlocated, sortByDistance, withDistance } from '../../utils/distance';
 import { hasAvailability, plural } from '../../utils/format';
 import { describeDateKey, todayKey } from '../../utils/datetime';
 
@@ -110,8 +110,28 @@ export default function DiscoverScreen({ navigation }) {
   );
 
   /** R3.7 / R3.8 — distance, then availability, then order. All on-device. */
-  const visible = useMemo(() => {
+  const { rows: visible, hiddenNoLocation } = useMemo(() => {
+    const byDistance = sort === 'distance' && location.available;
     let list = withDistance(salons, location.coords);
+
+    // The spec's dependency note, in plain words: *"A salon that has not
+    // provided a location cannot be included in distance-sorted results, and
+    // the app must handle that gracefully rather than assuming every salon has
+    // one."*
+    //
+    // So when — and only when — the list is sorted by distance, a salon
+    // without coordinates is not in it. The "gracefully" half is the count
+    // returned beside the rows: the header says how many are not shown and
+    // why, and Nearest is one tap from off, so nothing vanishes silently.
+    //
+    // Counted BEFORE the availability filter, so the number answers "how many
+    // are missing because of location" and not a blend of two reasons.
+    let hidden = 0;
+    if (byDistance) {
+      const located = excludeUnlocated(list);
+      hidden = list.length - located.length;
+      list = located;
+    }
 
     if (availableOnly) {
       // A salon whose capacity has not arrived yet is KEPT, not hidden.
@@ -121,9 +141,12 @@ export default function DiscoverScreen({ navigation }) {
       list = list.filter((s) => capacities[s.id] === undefined || hasAvailability(capacities[s.id]));
     }
 
-    return sort === 'distance' && location.available
-      ? sortByDistance(list)
-      : [...list].sort((a, b) => a.businessName.localeCompare(b.businessName));
+    return {
+      rows: byDistance
+        ? sortByDistance(list)
+        : [...list].sort((a, b) => a.businessName.localeCompare(b.businessName)),
+      hiddenNoLocation: hidden,
+    };
   }, [salons, location.coords, location.available, availableOnly, capacities, sort]);
 
   /** City chips, built from the salons the platform actually returned. */
@@ -234,6 +257,19 @@ export default function DiscoverScreen({ navigation }) {
           {availableOnly ? ' · with availability' : ''}
         </Text>
       ) : null}
+
+      {/* The "gracefully" half of the dependency note. Excluding rows silently
+          would leave a user who knows a salon is on Glow+ unable to explain
+          where it went, so the count says how many and why — and names the one
+          tap that brings them back. */}
+      {hiddenNoLocation ? (
+        <Text variant="small" color={colors.inkFaint} style={styles.count}>
+          {hiddenNoLocation} {plural(hiddenNoLocation, 'salon', 'salons')}{' '}
+          {plural(hiddenNoLocation, 'is', 'are')} not shown here —{' '}
+          {plural(hiddenNoLocation, 'it has', 'they have')} no location yet. Turn off Nearest to
+          see {plural(hiddenNoLocation, 'it', 'them')}.
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -271,23 +307,40 @@ export default function DiscoverScreen({ navigation }) {
             />
           }
           ListEmptyComponent={
-            <EmptyState
-              icon="⌕"
-              title={availableOnly ? 'Nothing free on this date' : 'No salons found'}
-              message={
-                availableOnly
-                  ? 'No salon matching your search has an opening on the date you picked. Try another day, or turn off the availability filter.'
-                  : query || city
-                    ? 'Try a different name or city.'
-                    : 'No salons are listed yet. Check back soon.'
-              }
-              action={query || city || availableOnly ? 'Clear filters' : undefined}
-              onAction={() => {
-                setQuery('');
-                setCity(null);
-                setAvailableOnly(false);
-              }}
-            />
+            // Nearest emptying the list completely is its own case and needs
+            // its own way out: "Clear filters" would not help, because the
+            // sort — not a filter — is what removed every row.
+            hiddenNoLocation && !visible.length ? (
+              <EmptyState
+                icon="◎"
+                title="No salons to sort by distance"
+                message={
+                  hiddenNoLocation === 1
+                    ? "1 salon matches your search, but it hasn't added a location yet, so it can't be sorted by distance."
+                    : `${hiddenNoLocation} salons match your search, but none of them have added a location yet, so they can't be sorted by distance.`
+                }
+                action="Turn off Nearest"
+                onAction={() => setSort('name')}
+              />
+            ) : (
+              <EmptyState
+                icon="⌕"
+                title={availableOnly ? 'Nothing free on this date' : 'No salons found'}
+                message={
+                  availableOnly
+                    ? 'No salon matching your search has an opening on the date you picked. Try another day, or turn off the availability filter.'
+                    : query || city
+                      ? 'Try a different name or city.'
+                      : 'No salons are listed yet. Check back soon.'
+                }
+                action={query || city || availableOnly ? 'Clear filters' : undefined}
+                onAction={() => {
+                  setQuery('');
+                  setCity(null);
+                  setAvailableOnly(false);
+                }}
+              />
+            )
           }
           initialNumToRender={6}
           maxToRenderPerBatch={8}

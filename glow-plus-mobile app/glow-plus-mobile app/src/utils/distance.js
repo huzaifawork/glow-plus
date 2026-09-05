@@ -86,16 +86,40 @@ export function withDistance(salons, origin) {
 }
 
 /**
+ * The dependency note, enforced  (spec §4.3.2)
+ *
+ * > *"A salon that has not provided a location **cannot be included in
+ * > distance-sorted results**, and the app must handle that gracefully rather
+ * > than assuming every salon has one."*
+ *
+ * Two halves, and they are separated on purpose:
+ *
+ *   · **"cannot be included"** is this function. When the list is sorted by
+ *     distance, a salon with no coordinates is not in it.
+ *   · **"gracefully"** is the caller's job, and it is not satisfied by simply
+ *     dropping rows. `DiscoverScreen` says how many salons are not shown and
+ *     why, and Nearest is one tap from off — so nothing disappears silently
+ *     and every salon is always reachable.
+ *
+ * ⚠️ An earlier reading kept these salons and sorted them to the END. That was
+ * defensible as "graceful" but it contradicted the sentence above in plain
+ * words — they WERE included in distance-sorted results. Do not restore it.
+ *
+ * Expects rows that have already been through `withDistance`.
+ */
+export function excludeUnlocated(salons) {
+  return salons.filter((salon) => salon.distanceKm != null);
+}
+
+/**
  * R3.7 — sort by distance from the user.
  *
- * **Salons with no registered location sort to the END, not to the front and
- * not out of the list.** The spec's dependency note is explicit: *"A salon
- * that has not provided a location cannot be included in distance-sorted
- * results, and the app must handle that gracefully rather than assuming every
- * salon has one."* Dropping them would hide real, bookable salons from a user
- * who turned on a convenience feature; treating a missing coordinate as 0
- * would put them first. Last, still visible, still bookable, and labelled as
- * having no distance, is the graceful reading.
+ * Callers pass a list that `excludeUnlocated` has already been through, so in
+ * practice nothing here has a null distance. The null handling below stays
+ * anyway, and stays defensive rather than meaningful: a comparator that
+ * returns NaN produces an arbitrary order that still *looks* sorted, which is
+ * the hardest kind of ordering bug to see. Sorting an unlocated salon last is
+ * the safest thing to do with a row that should not have reached this point.
  */
 export function sortByDistance(salons) {
   return [...salons].sort((a, b) => {

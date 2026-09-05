@@ -10,6 +10,7 @@
  */
 import {
   distanceKm,
+  excludeUnlocated,
   formatDistance,
   hasCoordinates,
   sortByDistance,
@@ -89,21 +90,18 @@ describe('sortByDistance — R3.7, and the dependency note', () => {
     expect(sortByDistance(list).map((s) => s.businessName)).toEqual(['Near', 'Middle', 'Far']);
   });
 
-  it('keeps salons with NO location, at the END', () => {
-    // *"A salon that has not provided a location cannot be included in
-    // distance-sorted results, and the app must handle that gracefully rather
-    // than assuming every salon has one."*
-    //
-    // Dropping it hides a real, bookable salon. Treating a missing coordinate
-    // as 0 puts it first, off the coast of Africa. Last, still present, is the
-    // graceful reading.
+  /**
+   * Callers exclude unlocated salons before sorting, so nothing here should
+   * have a null distance. The ordering below is a safety net for a row that
+   * should not have arrived, not a behaviour anyone should rely on — see
+   * `excludeUnlocated` for the rule itself.
+   */
+  it('sorts a salon with no location last rather than producing an arbitrary order', () => {
     const list = withDistance(
       [salon('Nowhere', null, null), salon('Near', 43.66, -79.39)],
       TORONTO,
     );
-    const sorted = sortByDistance(list);
-    expect(sorted).toHaveLength(2);
-    expect(sorted.map((s) => s.businessName)).toEqual(['Near', 'Nowhere']);
+    expect(sortByDistance(list).map((s) => s.businessName)).toEqual(['Near', 'Nowhere']);
   });
 
   it('falls back to alphabetical among salons that all lack a location', () => {
@@ -118,6 +116,67 @@ describe('sortByDistance — R3.7, and the dependency note', () => {
     const before = list.map((s) => s.businessName);
     sortByDistance(list);
     expect(list.map((s) => s.businessName)).toEqual(before);
+  });
+});
+
+describe('excludeUnlocated — the spec dependency note, §4.3.2', () => {
+  /**
+   * > *"A salon that has not provided a location cannot be included in
+   * > distance-sorted results, and the app must handle that gracefully rather
+   * > than assuming every salon has one."*
+   *
+   * The first half is this function and it is not negotiable: the sentence
+   * says "cannot be included", so an unlocated salon is not in a
+   * distance-sorted list. An earlier reading kept them and sorted them to the
+   * end — which read as graceful and plainly contradicted the words. These
+   * tests exist so that reading cannot come back by accident.
+   *
+   * The second half lives in DiscoverScreen: it states how many salons are not
+   * shown and why, and Nearest is one tap from off.
+   */
+  it('drops a salon with no coordinates', () => {
+    const list = withDistance(
+      [salon('Nowhere', null, null), salon('Near', 43.66, -79.39)],
+      TORONTO,
+    );
+    expect(excludeUnlocated(list).map((s) => s.businessName)).toEqual(['Near']);
+  });
+
+  it('drops a salon with only one half of a coordinate pair', () => {
+    // The database refuses this state, but a client that trusted a constraint
+    // it cannot see would place the salon on the equator.
+    const list = withDistance([salon('Half', 43.66, null), salon('Whole', 43.7, -79.4)], TORONTO);
+    expect(excludeUnlocated(list).map((s) => s.businessName)).toEqual(['Whole']);
+  });
+
+  it('keeps every salon when they all have coordinates', () => {
+    const list = withDistance([salon('A', 43.66, -79.39), salon('B', 44, -79)], TORONTO);
+    expect(excludeUnlocated(list)).toHaveLength(2);
+  });
+
+  it('returns nothing when no salon has a location', () => {
+    // The screen turns this into its own empty state with a way out, rather
+    // than the generic "No salons found".
+    const list = withDistance([salon('X', null, null), salon('Y', null, null)], TORONTO);
+    expect(excludeUnlocated(list)).toEqual([]);
+  });
+
+  /**
+   * R3.9 — the user declining location must not remove salons from anything.
+   * `withDistance` gives every row a null distance when there is no origin, so
+   * this function would empty the whole directory; the screen only calls it
+   * when a distance sort is actually active.
+   */
+  it("is not applied when there is no user location — that is the caller's job", () => {
+    const list = withDistance([salon('A', 43.66, -79.39), salon('B', 44, -79)], null);
+    expect(list.every((s) => s.distanceKm === null)).toBe(true);
+    expect(excludeUnlocated(list)).toEqual([]);
+  });
+
+  it('does not mutate the array it was given', () => {
+    const list = withDistance([salon('Nowhere', null, null), salon('Near', 43.66, -79.39)], TORONTO);
+    excludeUnlocated(list);
+    expect(list).toHaveLength(2);
   });
 });
 
