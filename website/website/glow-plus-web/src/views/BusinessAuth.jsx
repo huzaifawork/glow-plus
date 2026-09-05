@@ -13,6 +13,14 @@ export default function BusinessAuth({ active }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
+  // M2 — the salon's address, captured at creation rather than left to a
+  // settings tab. Street and city are required by the API; the other two are
+  // optional because they vary by country and neither is needed to place a
+  // salon in a city list.
+  const [addressLine, setAddressLine] = useState('');
+  const [city, setCity] = useState('');
+  const [region, setRegion] = useState('');
+  const [postalCode, setPostalCode] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [signupNotice, setSignupNotice] = useState(null);
@@ -35,7 +43,15 @@ export default function BusinessAuth({ active }) {
     setBusy(true);
     try {
       if (mode === 'signup') {
-        await merchantSignup({ businessName: businessName.trim(), email: email.trim(), password });
+        await merchantSignup({
+          businessName: businessName.trim(),
+          email: email.trim(),
+          password,
+          addressLine: addressLine.trim(),
+          city: city.trim(),
+          region: region.trim(),
+          postalCode: postalCode.trim(),
+        });
         setSignupNotice(email.trim());
         setResendDone(false);
         setMode('login');
@@ -122,6 +138,64 @@ export default function BusinessAuth({ active }) {
                 placeholder="Bloom Hair Studio"
                 required
               />
+
+              {/* M2 — where the salon is. This is the dependency the mobile
+                  app's city search and distance sort rest on, and asking for
+                  it here is the only point at which every salon is guaranteed
+                  to be paying attention. The coordinates are worked out from
+                  these lines by the API; nobody is asked to type a latitude. */}
+              <T as="label" htmlFor="bAddress" k="label_street_address" />
+              <input
+                type="text"
+                id="bAddress"
+                value={addressLine}
+                onChange={(e) => setAddressLine(e.target.value)}
+                placeholder="12 King Street West"
+                autoComplete="street-address"
+                maxLength={300}
+                required
+              />
+
+              <T as="label" htmlFor="bCity" k="label_city" />
+              <input
+                type="text"
+                id="bCity"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Toronto"
+                autoComplete="address-level2"
+                maxLength={120}
+                required
+              />
+
+              <div className="auth-field-row">
+                <div>
+                  <T as="label" htmlFor="bRegion" k="label_region" />
+                  <input
+                    type="text"
+                    id="bRegion"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="Ontario"
+                    autoComplete="address-level1"
+                    maxLength={120}
+                  />
+                </div>
+                <div>
+                  <T as="label" htmlFor="bPostal" k="label_postal_code" />
+                  <input
+                    type="text"
+                    id="bPostal"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                    placeholder="M5H 1A1"
+                    autoComplete="postal-code"
+                    maxLength={20}
+                  />
+                </div>
+              </div>
+
+              <p className="hint">{t('signup_address_hint')}</p>
             </>
           ) : null}
           <T as="label" htmlFor="bEmail" k="label_email" />

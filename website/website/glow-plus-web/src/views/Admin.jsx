@@ -16,6 +16,10 @@ import {
 import { formatDay } from '../lib/helpers.js';
 import T from '../components/T.jsx';
 import AdminTeamPanel from './AdminTeamPanel.jsx';
+// M2 — the operator's override for a salon's address and logo. Its own file
+// for the same reason SalonBrandingSettings.jsx is: two self-contained forms
+// with their own validation, and this file is already long.
+import AdminSalonSettings from './AdminSalonSettings.jsx';
 
 /**
  * The platform admin console, against the real API  (T38)
@@ -394,9 +398,13 @@ function PendingQueue() {
    ============================================================ */
 function AllSalons() {
   const { t } = useI18n();
-  const { toast } = useApp();
+  const { toast, bumpData } = useApp();
   const run = useAdminAction();
   const [busyId, setBusyId] = useState(null);
+  // M2 — which salon's location/logo editor is open. One at a time: these are
+  // forms with unsaved state, and a list of ten open ones is a list of ten
+  // ways to save the wrong salon's address.
+  const [editingId, setEditingId] = useState(null);
 
   const merchants = useAdminData(() => listAllMerchants(), []);
 
@@ -423,8 +431,20 @@ function AllSalons() {
             const promoteLabel =
               status === 'PENDING' ? t('btn_approve') : t('btn_reactivate');
 
+            // M2 — an operator has to be able to SEE which salons are missing
+            // the data the mobile app depends on, not only to fix it. Stated
+            // as a warning rather than left blank: an absent line reads as
+            // "nothing to say here", and the whole problem being solved is
+            // that nobody noticed these were empty.
+            const place = [m.city, m.region].filter(Boolean).join(', ');
+            const locationNote = !m.city
+              ? '⚠ no city — hidden from city search'
+              : m.latitude === null || m.longitude === null
+              ? place + ' · ⚠ no map pin'
+              : place;
+
             return (
-              <div className="list-card" key={m.id}>
+              <div className={'list-card' + (editingId === m.id ? ' editing' : '')} key={m.id}>
                 <div>
                   <div className="lc-name">
                     {m.businessName}{' '}
@@ -440,8 +460,28 @@ function AllSalons() {
                         : t('badge_standard')) +
                       (m.emailVerifiedAt ? '' : ' · email unverified')}
                   </div>
+                  <div className="lc-meta">
+                    {locationNote}
+                    {m.logoUrl ? '' : ' · no logo'}
+                  </div>
+
+                  {editingId === m.id ? (
+                    <AdminSalonSettings
+                      merchant={m}
+                      // Refetches every admin panel, which is what re-reads
+                      // this row and re-renders the note above with the values
+                      // that were just saved.
+                      onChanged={bumpData}
+                    />
+                  ) : null}
                 </div>
                 <div className="lc-actions">
+                  <button
+                    className={'toggle' + (editingId === m.id ? ' active' : '')}
+                    onClick={() => setEditingId(editingId === m.id ? null : m.id)}
+                  >
+                    {editingId === m.id ? 'Done' : 'Location & logo'}
+                  </button>
                   {active || status === 'PAST_DUE' ? (
                     <button
                       className="toggle inactive"

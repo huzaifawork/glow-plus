@@ -1,5 +1,14 @@
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
-import { MAX_EMAIL, MAX_NAME, MAX_PASSWORD, MIN_PASSWORD } from '../../common/limits';
+import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  MAX_ADDRESS,
+  MAX_CITY,
+  MAX_EMAIL,
+  MAX_NAME,
+  MAX_PASSWORD,
+  MAX_POSTAL_CODE,
+  MAX_REGION,
+  MIN_PASSWORD,
+} from '../../common/limits';
 
 /**
  * Validation for `POST /merchants/signup`  (T31)
@@ -48,4 +57,44 @@ export class MerchantSignupDto {
   @MinLength(MIN_PASSWORD)
   @MaxLength(MAX_PASSWORD)
   password!: string;
+
+  /**
+   * M2 — where the salon is, captured at the moment the salon is created.
+   *
+   * **Required, and that is the whole point of M2.** The columns have existed
+   * since M1 and the portal has had an editor for them since M1, but the only
+   * way to fill them in was for an owner to find a settings tab after signing
+   * up — so on production every live salon had `city: null`, and the app's
+   * city filter and distance sort had nothing to work with. An optional field
+   * on a form nobody revisits is not a data source.
+   *
+   * Asking here costs a signup two text inputs and guarantees that every
+   * salon created from now on is findable. `region` and `postalCode` stay
+   * optional because they vary by country and neither is needed to place a
+   * salon in a city list.
+   *
+   * ⚠️ Coordinates are deliberately NOT accepted here. They are derived from
+   * this address by `geocodeAddress`, and a salon that wants to correct them
+   * does so from the portal, authenticated — an unauthenticated route that
+   * writes a map pin is a route that writes a map pin for anyone.
+   */
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_ADDRESS)
+  addressLine!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_CITY)
+  city!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_REGION)
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_POSTAL_CODE)
+  postalCode?: string;
 }

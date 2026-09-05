@@ -197,6 +197,16 @@
   }
   input:focus, select:focus, textarea:focus{border-color:var(--accent);outline:none;}
   .auth-submit{width:100%;margin-top:24px;justify-content:center;}
+  /* M2 — province/state and postal code sit side by side on the signup form.
+     They are the two shortest fields of the four, and stacking every address
+     line would make creating a salon account feel twice as long as it is.
+     `minmax(0,1fr)` rather than `1fr`: a grid track's default minimum is
+     auto, so a long placeholder would otherwise push the row wider than the
+     card instead of the input shrinking. */
+  .auth-field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  /* `.hint` is styled inside `.panel-form` and `.salon-more` but was never
+     defined for the auth card, so it rendered as unstyled body text. */
+  .auth-shell .hint{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--ink-soft);}
   .switch-role{margin-top:18px;text-align:center;font-size:13.5px;color:var(--ink-soft);}
   .switch-role a{color:var(--accent);font-weight:600;}
   .link-btn{background:none;border:none;padding:0;margin:0;color:var(--accent);font-weight:600;font-size:inherit;text-decoration:none;}
@@ -448,3 +458,67 @@
 .slot-seats{
   display:block;font-size:11px;font-weight:500;opacity:.7;margin-top:2px;
 }
+
+/* ---- Setup checklist  (M2) ----
+   Sits above the portal's stats and disappears once every step is done, so it
+   is styled as a card that reads as guidance rather than as an error banner —
+   `--gold` on the left edge, not `--rose`. Nothing here is a failure; it is
+   work the salon has not got to yet.
+
+   Each row is a grid rather than flex so the button column keeps its width
+   while the text wraps, and collapses to a stacked block at phone widths where
+   a 2-column row would leave both halves too narrow to read. */
+.setup-checklist{
+  background:var(--white);border:1px solid var(--line);border-left:4px solid var(--gold);
+  border-radius:18px;padding:20px 22px;margin:18px 0 4px;
+}
+.setup-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.setup-head h3{margin:0;font-size:17px;font-weight:700;letter-spacing:-0.01em;}
+.setup-count{font-size:12.5px;font-weight:600;color:var(--ink-soft);}
+.setup-list{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:12px;}
+.setup-list li{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;
+  padding-top:12px;border-top:1px solid var(--line);
+}
+.setup-list li:first-child{padding-top:0;border-top:none;}
+.setup-title{font-size:14.5px;font-weight:600;}
+.setup-body{font-size:12.5px;line-height:1.5;color:var(--ink-soft);margin-top:2px;}
+.setup-list .navbtn{white-space:nowrap;}
+
+@media (max-width:700px){
+  .setup-list li{grid-template-columns:minmax(0,1fr);}
+  .setup-list .navbtn{justify-self:start;}
+}
+
+/* ---- Admin: a salon's address and logo  (M2) ----
+   Rendered INSIDE the first column of a `.list-card`, which is a centred flex
+   row. `.editing` re-anchors that row to the top, because a two-line action
+   column vertically centred against a tall form leaves the buttons floating in
+   the middle of the card with nothing beside them. */
+.list-card.editing{align-items:flex-start;}
+/* The editor renders inside the card's first column, which is a flex item
+   sized to its content. Without this it stays as narrow as the salon name and
+   the form wraps into a single cramped column. */
+.list-card.editing > div:first-child{flex:1 1 auto;min-width:0;}
+.admin-salon-settings{
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;
+}
+.admin-settings-form{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px;}
+/* `minmax(0,1fr)`, not `1fr`: a grid track's default minimum is auto, so a
+   long placeholder would push the row wider than the card instead of the
+   input shrinking. */
+.admin-settings-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;}
+.admin-salon-settings .hint{font-size:12px;line-height:1.5;color:var(--ink-soft);}
+.admin-settings-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.admin-settings-logo{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+.admin-settings-logo img{
+  width:96px;height:96px;object-fit:contain;border-radius:14px;
+  border:1px solid var(--line);background:var(--surface-2);padding:6px;
+}
+.admin-logo-empty{
+  width:96px;height:96px;border-radius:14px;border:1px dashed var(--ink-faint);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:var(--ink-soft);background:var(--surface-2);
+}
+.admin-salon-settings .err,.admin-salon-settings .lc-meta{flex:1 1 100%;margin:0;}

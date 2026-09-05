@@ -50,7 +50,18 @@ async function main() {
   // --- Merchant: ACTIVE + verified, so it passes RequireActiveSubscription ---
   const merchant = await prisma.merchant.upsert({
     where: { email: SEED.merchant.email },
-    update: { status: 'ACTIVE', emailVerifiedAt: new Date() },
+    update: {
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      // Re-seeding an existing database must also backfill these, or a
+      // developer who seeded before M2 never gets them.
+      addressLine: '12 King Street West',
+      city: 'Toronto',
+      region: 'Ontario',
+      postalCode: 'M5H 1A1',
+      latitude: 43.6491229,
+      longitude: -79.3784417,
+    },
     create: {
       businessName: 'Glow Salon',
       email: SEED.merchant.email,
@@ -58,6 +69,17 @@ async function main() {
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       foundingMember: true,
+      // M2 — a seeded salon with no address is a seeded salon the mobile
+      // app's city filter and "Nearest" sort cannot see, which makes both
+      // features untestable locally for exactly the reason they were
+      // untestable on production. Coordinates are hard-coded rather than
+      // geocoded: the seed must work offline.
+      addressLine: '12 King Street West',
+      city: 'Toronto',
+      region: 'Ontario',
+      postalCode: 'M5H 1A1',
+      latitude: 43.6491229,
+      longitude: -79.3784417,
     },
   });
 
