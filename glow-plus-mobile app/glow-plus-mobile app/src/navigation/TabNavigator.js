@@ -99,7 +99,12 @@ const styles = StyleSheet.create({
     // Taller than the default so the label is not crowded against the home
     // indicator on gesture-navigation devices. The navigator adds the safe
     // area inset on top of this.
-    height: 62,
+    //
+    // The budget is exact and worth stating, because the label clips silently
+    // if it is exceeded: 66 − 6 − 8 = 52 of content, and the icon box (34) plus
+    // the label's margin (2) and line height (15) is 51. Raising TabIcon's BOX
+    // without raising this is what would eat the labels.
+    height: 66,
     paddingTop: 6,
     paddingBottom: 8,
   },
