@@ -47,6 +47,21 @@ export const MAX_NOTES = 2_000;
 /** Opaque single-use tokens (email verification, password reset, invites). */
 export const MAX_TOKEN = 512;
 
+/**
+ * A third-party OAuth token presented to `POST /auth/google`.
+ *
+ * Deliberately NOT `MAX_TOKEN`. The tokens above are 64 hex characters we
+ * issued ourselves; this one is a **Supabase-issued JWT** whose length is set
+ * by Supabase — header, claims, the Google identity's `user_metadata` and a
+ * signature. Real ones land between 700 and 1,500 characters, so 512 would
+ * reject every genuine sign-in while looking like a validation rule.
+ *
+ * Still bounded, and well under the 100 kB global body limit: the route is
+ * unauthenticated, so an unbounded string here would reach an outbound HTTP
+ * call with no ceiling on it.
+ */
+export const MAX_OAUTH_TOKEN = 4_096;
+
 /** Database ids — cuid is 25 chars; the ceiling just stops a novel-as-an-id. */
 export const MAX_ID = 64;
 

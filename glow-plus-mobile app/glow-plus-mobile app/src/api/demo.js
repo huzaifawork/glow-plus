@@ -387,6 +387,20 @@ export const demoApi = {
     });
   },
 
+  /**
+   * R5.1 — Google sign-in has to work in demo mode too, and cannot involve
+   * Google: an evaluator running the app with no backend and no Supabase
+   * project must still be able to tap the button and land in the app.
+   */
+  async loginWithGoogle() {
+    return latency({
+      token: 'demo-access-token',
+      refreshToken: 'demo-refresh-token',
+      expiresIn: 900,
+      user: USER,
+    });
+  },
+
   async signup({ name, email }) {
     return latency({ id: USER.id, name: name || USER.name, email: email || USER.email });
   },

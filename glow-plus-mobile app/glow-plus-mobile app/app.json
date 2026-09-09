@@ -54,11 +54,14 @@
           "color": "#E0116F"
         }
       ],
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-web-browser"
     ],
     "extra": {
       "apiBaseUrl": "https://glow-plus-api-six.vercel.app/v1",
       "demoMode": false,
+      "supabaseUrl": "https://xhyoeiltwcciqowlwyov.supabase.co",
+      "supabaseAnonKey": "sb_publishable_B8HpEIgPMihsQ_6Ges0tew_eMqEp55o",
       "salonTimezone": "America/Toronto",
       "eas": {
         "projectId": "7d3209aa-2788-474a-9848-3475ab0ccbfd"

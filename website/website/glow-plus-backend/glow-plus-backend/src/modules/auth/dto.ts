@@ -4,6 +4,7 @@ import {
   MAX_NAME,
   MAX_PASSWORD,
   MAX_PHONE,
+  MAX_OAUTH_TOKEN,
   MAX_TOKEN,
   MIN_PASSWORD,
 } from '../../common/limits';
@@ -84,4 +85,23 @@ export class RefreshTokenDto {
   @IsString()
   @MaxLength(MAX_TOKEN)
   refreshToken!: string;
+}
+
+/**
+ * The body of POST /auth/google.
+ *
+ * One field, and it is a **Supabase** access token, not a Google one. The app
+ * never handles a Google credential itself: it sends the user to Supabase,
+ * Supabase runs the OAuth exchange with Google, and what comes back is a
+ * Supabase session. That token is what this route verifies.
+ *
+ * `MAX_OAUTH_TOKEN` rather than `MAX_TOKEN` — see the note on the constant.
+ * 512 is the right ceiling for the 64-hex tokens this API issues and rejects
+ * every real Supabase JWT.
+ */
+export class GoogleSignInDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(MAX_OAUTH_TOKEN)
+  accessToken!: string;
 }

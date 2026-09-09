@@ -47,6 +47,71 @@ It must include the API version, e.g.
 button that probes `/health` (which is version-neutral on the platform, so the
 prefix is stripped for that one call).
 
+### Sign in with Google
+
+Google sign-in runs through **Supabase Auth**, and it is **off until it is
+configured** — an unconfigured build simply does not show the button, and email
+and password sign-in is unaffected. Three things have to line up.
+
+**1. Supabase — enable the provider.** In the Supabase dashboard:
+
+- **Authentication → Providers → Google**: turn it on, and paste in the OAuth
+  **client ID** and **client secret** from a Google Cloud project (APIs &
+  Services → Credentials → OAuth client ID → *Web application*).
+- Copy the **Callback URL** Supabase shows on that page
+  (`https://<project-ref>.supabase.co/auth/v1/callback`) into the Google
+  client's **Authorised redirect URIs**. Google refuses the sign-in with
+  `redirect_uri_mismatch` if this is missing, and that error appears inside
+  Google's page, not in the app.
+- **Authentication → URL Configuration → Redirect URLs**: add
+  `glowplus://auth-callback`. Supabase silently redirects to the project's Site
+  URL instead of anything it does not recognise, which presents as "the browser
+  opened, I signed in, and nothing happened".
+
+**2. The app — point it at the project.** Same shape as the API address above.
+Supabase → **Project Settings → API Keys** offers two: take the **anon** key,
+labelled **publishable** (`sb_publishable_…`) on newer projects. Either format
+works and both are designed to ship inside a client. The **`service_role` /
+secret key must never go in this app** — it bypasses every row-level-security
+policy in the database, and here it would be on every phone that installs the
+app:
+
+| Source | Set it in |
+|---|---|
+| `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` | the environment / an EAS build profile |
+| `expo.extra.supabaseUrl` / `expo.extra.supabaseAnonKey` | `app.json` |
+
+Both come from Supabase → **Project Settings → API Keys**.
+
+**3. The API — let it verify the token.** Set `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` on the backend (Vercel → Settings → Environment Variables)
+and redeploy. Without them `POST /auth/google` answers **503** with a message
+naming the two variables; every other route is unaffected, which is why they
+are deliberately *not* in the API's required-env list.
+
+#### How it fits together
+
+```
+app  ──▶ Supabase /auth/v1/authorize?provider=google   (system browser, PKCE)
+                    └──▶ Google consent ──▶ back to glowplus://auth-callback?code=…
+app  ──▶ Supabase /auth/v1/token?grant_type=pkce       → a Supabase access token
+app  ──▶ Glow+  POST /auth/google { accessToken }      → the SAME session
+                                                          POST /auth/login issues
+```
+
+The last step is the important one. The app's session is always a **Glow+**
+session — the token pair in the keychain, the 15-minute refresh, `GET /me`,
+sign-out. Supabase is used to answer one question ("which Google-verified email
+address is this?") and nothing of it is kept. The account is matched on that
+address, so someone who signed up on the website with a password and taps
+*Continue with Google* lands in **their** account, with their points and
+bookings, rather than a duplicate.
+
+**In Expo Go** the redirect is an `exp://…` URL that changes with your LAN
+address, and it has to be on the Supabase allow-list too. Testing Google
+sign-in is easier on a development build, where the redirect is always
+`glowplus://auth-callback`.
+
 ---
 
 ## Architecture
@@ -59,6 +124,9 @@ src/
                session.js   the token pair, in the OS keychain (R1.4/NF2)
                demo.js      the offline backend (R5.1)
                errors.js    ApiError vs NetworkError (NF4)
+               supabase.js  Google sign-in via Supabase Auth (PKCE) — the ONE
+                            exception to rule 1 below, and it never touches
+                            the Glow+ API
   components/  ui/          primitives: Button, Card, Sheet, Pill, …
                salon/       SalonCard, SalonLogo, AvailabilityPill, …
                rewards/     PointsSummary, RewardProgress, PunchDots, …
@@ -76,7 +144,10 @@ src/
 
 **1. All network access goes through `src/api/client.js`.** No other file may
 call `fetch`. That is the spec's Technical Constraints, in as many words: *"the
-API contract is defined and changed in exactly one place."*
+API contract is defined and changed in exactly one place."* `api/supabase.js`
+calls a different service entirely — it never touches the Glow+ API, and hands
+what it gets to `client.loginWithGoogle` — so the contract still lives in one
+file. Nothing outside `src/api/` calls `fetch`.
 
 **2. Availability is computed by the SERVER, never here.** R3.5 requires the
 fully-booked indicator to be *"computed centrally … rather than calculated
@@ -98,7 +169,7 @@ about NF6 first.
 npm test
 ```
 
-73 tests over the pure logic — distance and the no-location fallbacks, the
+94 tests over the pure logic — distance and the no-location fallbacks, the
 salon-timezone date handling, the R3.5 wording and R2.3 reward maths, and the
 demo backend's shape and mutation. UI is verified by running the app; see
 "Before release" below.

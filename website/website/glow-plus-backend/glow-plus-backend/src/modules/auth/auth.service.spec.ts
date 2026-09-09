@@ -35,6 +35,18 @@ function makePrisma() {
       tables[name].set(data.email, row);
       return row;
     },
+    // Keyed by id, as the real `where: { id }` is — the Google path stamps
+    // `emailVerifiedAt` on a row it has already found.
+    update: async ({ where, data }: any) => {
+      for (const [email, row] of tables[name]) {
+        if (row.id === where.id) {
+          const next = { ...row, ...data };
+          tables[name].set(email, next);
+          return next;
+        }
+      }
+      throw Object.assign(new Error('not found'), { code: 'P2025' });
+    },
   });
 
   return {
@@ -54,6 +66,7 @@ describe('AuthService — only consumers may use the consumer app', () => {
   let service: AuthService;
   let emailVerification: { sendVerificationEmail: jest.Mock };
   let refreshTokens: { issueSession: jest.Mock };
+  let supabaseIdentity: { verify: jest.Mock };
 
   beforeEach(() => {
     prisma = makePrisma();
@@ -61,7 +74,13 @@ describe('AuthService — only consumers may use the consumer app', () => {
     refreshTokens = {
       issueSession: jest.fn().mockResolvedValue({ token: 't', refreshToken: 'r', expiresIn: 900 }),
     };
-    service = new AuthService(prisma as any, emailVerification as any, refreshTokens as any);
+    supabaseIdentity = { verify: jest.fn() };
+    service = new AuthService(
+      prisma as any,
+      emailVerification as any,
+      refreshTokens as any,
+      supabaseIdentity as any,
+    );
   });
 
   /** A verified consumer row with a known password, as signup would leave it. */
@@ -159,6 +178,100 @@ describe('AuthService — only consumers may use the consumer app', () => {
         }),
       ).rejects.toBeInstanceOf(ConflictException);
 
+      expect(prisma.tables.user.size).toBe(0);
+    });
+  });
+  /**
+   * Sign in with Google.
+   *
+   * The Supabase round trip is stubbed — `SupabaseIdentityService` is what
+   * decides whether a token means anything, and it has its own tests. What is
+   * pinned here is everything AuthService does with an identity it has been
+   * given, which is where the account-linking rules live.
+   */
+  describe('signInWithGoogle', () => {
+    const GOOGLE_IDENTITY = {
+      subject: 'sb-uuid-1',
+      email: CONSUMER_EMAIL,
+      name: 'Muhammad Usman',
+    };
+
+    it('signs into the EXISTING account for that address rather than making a second one', async () => {
+      seedConsumer();
+      supabaseIdentity.verify.mockResolvedValue(GOOGLE_IDENTITY);
+
+      const session = await service.signInWithGoogle('supabase-token');
+
+      expect(session.user.id).toBe('user_1');
+      expect(refreshTokens.issueSession).toHaveBeenCalledWith('user_1', 'CONSUMER', {
+        role: 'consumer',
+      });
+      // The whole point of matching on email: one customer, one points balance.
+      expect(prisma.tables.user.size).toBe(1);
+    });
+
+    it('creates an account on first sign-in, already verified and with no usable password', async () => {
+      supabaseIdentity.verify.mockResolvedValue(GOOGLE_IDENTITY);
+
+      const session = await service.signInWithGoogle('supabase-token');
+
+      const row = prisma.tables.user.get(CONSUMER_EMAIL);
+      expect(row.name).toBe('Muhammad Usman');
+      expect(row.emailVerifiedAt).toBeInstanceOf(Date);
+      expect(session.user.emailVerified).toBe(true);
+      // No verification email: Google already proved the address.
+      expect(emailVerification.sendVerificationEmail).not.toHaveBeenCalled();
+      // The hash is real bcrypt, and nothing a user could type matches it.
+      expect(row.passwordHash).toMatch(/^\$2[aby]\$/);
+      expect(bcrypt.compareSync('', row.passwordHash)).toBe(false);
+    });
+
+    it('falls back to the local part when Google shares no name', async () => {
+      supabaseIdentity.verify.mockResolvedValue({ ...GOOGLE_IDENTITY, name: null });
+
+      await service.signInWithGoogle('supabase-token');
+
+      expect(prisma.tables.user.get(CONSUMER_EMAIL).name).toBe('customer');
+    });
+
+    it('verifies an account that signed up with a password and never opened the email', async () => {
+      prisma.tables.user.set(CONSUMER_EMAIL, {
+        id: 'user_1',
+        email: CONSUMER_EMAIL,
+        name: 'Muhammad Usman',
+        passwordHash: bcrypt.hashSync(PASSWORD, 4),
+        emailVerifiedAt: null,
+      });
+      supabaseIdentity.verify.mockResolvedValue(GOOGLE_IDENTITY);
+
+      await service.signInWithGoogle('supabase-token');
+
+      // Left unstamped, Google sign-in would work while the user's own
+      // password login kept answering "please verify your email".
+      expect(prisma.tables.user.get(CONSUMER_EMAIL).emailVerifiedAt).toBeInstanceOf(Date);
+    });
+
+    it.each([
+      ['admin', 'admin'],
+      ['merchant', 'merchant'],
+      ['merchant staff', 'merchantStaff'],
+    ] as const)('refuses a %s address, exactly as password login does', async (_label, table) => {
+      prisma.tables[table].set(CONSUMER_EMAIL, { id: 'biz_1', email: CONSUMER_EMAIL });
+      supabaseIdentity.verify.mockResolvedValue(GOOGLE_IDENTITY);
+
+      await expect(service.signInWithGoogle('supabase-token')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.tables.user.size).toBe(0);
+      expect(refreshTokens.issueSession).not.toHaveBeenCalled();
+    });
+
+    it('never reaches the database when the token is refused', async () => {
+      supabaseIdentity.verify.mockRejectedValue(new UnauthorizedException('nope'));
+
+      await expect(service.signInWithGoogle('forged')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
       expect(prisma.tables.user.size).toBe(0);
     });
   });

@@ -31,6 +31,8 @@ misbehaving later — see [Why boot validation](#why-boot-validation).
 | `EMAIL_FROM` | no | `Glow+ <noreply@mail.glowplusmember.com>` | same | Resend rejects a From on an unverified domain |
 | `POINTS_EXPIRE_AFTER_DAYS` | no | unset → `365` | set explicitly | Points expire on a different schedule than the client expects (T25) |
 | `CRON_SECRET` | 🔴 yes | n/a | **add with T54** | Cron routes are unauthenticated, or the jobs never fire |
+| `SUPABASE_URL` | no | your project URL, or empty | `https://<project-ref>.supabase.co` | `POST /auth/google` answers 503 and "Continue with Google" in the mobile app stops working. **Optional** — absent, nothing else changes |
+| `SUPABASE_ANON_KEY` | no | the anon key, or empty | the anon key (**not** service-role) | as above. Publishable by design; the service-role key must never be set here |
 
 ### The two database URLs (T52)
 

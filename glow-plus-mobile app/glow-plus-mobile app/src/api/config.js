@@ -42,6 +42,31 @@ export const BUILD_TIME_API_BASE_URL =
 export const BUILD_TIME_DEMO_MODE = extra.demoMode === true;
 
 /**
+ * The Supabase project that runs "Continue with Google".
+ *
+ * Same three-source shape as the API URL above, minus the runtime override:
+ * an env var for CI, `app.json` for the shipped default, and no hardcoded
+ * literal. Unlike `apiBaseUrl` there is nothing to point at staging — a build
+ * signs in against one Supabase project — so Settings does not expose it.
+ *
+ * Both values are PUBLISHABLE. The anon key is designed to ship inside a
+ * client (it is what every Supabase web app puts in its bundle) and grants
+ * nothing on its own: it is the project's row-level-security policies, and
+ * here the Glow+ API's own verification of the returned token, that decide
+ * what a holder can do. The service-role key is the one that must never be in
+ * this file, or in `app.json`, or anywhere else in this repository.
+ *
+ * Empty is a supported state: the app hides the Google button and every other
+ * way in still works. See `isGoogleSignInAvailable` in `api/supabase.js`.
+ */
+export const SUPABASE_URL = normaliseBaseUrl(
+  process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || extra.supabaseUrl || '',
+);
+
+export const SUPABASE_ANON_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || extra.supabaseAnonKey || '';
+
+/**
  * The live configuration.
  *
  * Held in a module-level object rather than React state because
@@ -63,7 +88,16 @@ function emit() {
 }
 
 export function getConfig() {
-  return { apiBaseUrl: current.apiBaseUrl, demoMode: current.demoMode, loaded: current.loaded };
+  return {
+    apiBaseUrl: current.apiBaseUrl,
+    demoMode: current.demoMode,
+    loaded: current.loaded,
+    // Build-time and therefore constant, but exposed through the same accessor
+    // so no caller has to know which parts of the configuration can change and
+    // which cannot.
+    supabaseUrl: SUPABASE_URL,
+    supabaseAnonKey: SUPABASE_ANON_KEY,
+  };
 }
 
 export function subscribeToConfig(listener) {

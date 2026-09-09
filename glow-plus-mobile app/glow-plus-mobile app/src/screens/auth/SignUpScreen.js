@@ -5,6 +5,8 @@ import Text from '../../components/ui/Text';
 import Button from '../../components/ui/Button';
 import TextField from '../../components/ui/TextField';
 import Banner from '../../components/ui/Banner';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
+import OrDivider from '../../components/ui/OrDivider';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -27,6 +29,12 @@ import { messageFor } from '../../api/errors';
  *
  * The 8-character minimum matches the platform's `MIN_PASSWORD`. If that
  * constant ever moves, this is the other place to change.
+ *
+ * ── Google is the exception to the paragraph below ─────────────────────────
+ * "Continue with Google" DOES sign you straight in, and correctly so: the
+ * verification step exists to prove the person controls the address, and
+ * Google has just done that. There is no email to wait for and none is sent,
+ * so the user goes into the app rather than to Sign in.
  *
  * ── Why signup does not sign you in ────────────────────────────────────────
  * The platform requires a verified email address before a consumer may log in.
@@ -184,6 +192,22 @@ export default function SignUpScreen({ navigation }) {
             <Text variant="small" color={colors.inkFaint} align="center">
               We'll email you a link to verify your address. You'll need it to sign in.
             </Text>
+
+            <OrDivider />
+
+            {/* Straight into the app — see the note at the top of this file on
+                why this one path skips the verification step. `getParent()` is
+                the root stack, so this closes the whole auth modal rather than
+                popping back to Sign in, which is where the form's success path
+                goes. */}
+            <GoogleSignInButton
+              label="Sign up with Google"
+              disabled={submitting}
+              onSuccess={() => {
+                toast.success('Signed in with Google.');
+                navigation.getParent()?.goBack();
+              }}
+            />
           </View>
 
           <Button
