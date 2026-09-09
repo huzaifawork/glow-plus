@@ -11,6 +11,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   RefreshTokenDto,
+  GoogleSignInDto,
 } from './dto';
 
 @Controller('auth')
@@ -31,6 +32,26 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.loginConsumer(dto);
+  }
+
+  /**
+   * Sign in with Google  —  the mobile app's "Continue with Google".
+   *
+   * The body carries a **Supabase** access token, obtained by the client
+   * sending the user through Supabase Auth's Google provider. Everything
+   * Google-specific happens there; this endpoint verifies the token with
+   * Supabase and answers with exactly what `POST /auth/login` answers, so a
+   * client needs no separate code path for a Google session.
+   *
+   * `@ThrottleCredentials()` for the same reason login has it — this mints a
+   * session. Only that decorator's IP tier will actually bite: the identity
+   * tier keys off `body.email` and this body has none, which is correct, since
+   * the address is not known until Supabase has been asked.
+   */
+  @ThrottleCredentials()
+  @Post('google')
+  google(@Body() dto: GoogleSignInDto) {
+    return this.auth.signInWithGoogle(dto.accessToken);
   }
 
   @ThrottleCredentials()

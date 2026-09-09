@@ -6,10 +6,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EmailVerificationService } from './email-verification.service';
 import { RefreshTokenService } from './refresh-token.service';
 import { SignupDto, LoginDto } from './dto';
+import { SupabaseIdentityService } from './supabase-identity.service';
 import { encodePhone } from '../../common/pii-crypto';
 import { hasBusinessAccount } from '../../common/business-account';
 
@@ -23,6 +25,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly emailVerification: EmailVerificationService,
     private readonly refreshTokens: RefreshTokenService,
+    private readonly supabaseIdentity: SupabaseIdentityService,
   ) {}
 
   /**
@@ -140,6 +143,116 @@ export class AuthService {
     };
   }
 
+  /**
+   * Sign in with Google, by way of Supabase Auth.
+   *
+   * The app has already sent the user through Google's consent screen (via
+   * Supabase's `/auth/v1/authorize`) and holds a Supabase access token. This
+   * turns that into a normal Glow+ consumer session — the SAME session
+   * `loginConsumer` issues, with the same shape, the same 15-minute access
+   * token and the same refresh lineage. Nothing downstream of here can tell
+   * how the user signed in, which is the point: every existing screen, guard
+   * and endpoint keeps working untouched.
+   *
+   * ── Accounts are matched on the EMAIL ADDRESS ──────────────────────────
+   * Not on a stored Google id, and there is no new column for one. Google has
+   * verified that this person controls this mailbox, and a Glow+ account IS
+   * its email address — `User.email` is the unique key the whole platform
+   * identifies a consumer by. So someone who created their account with a
+   * password last year and taps "Continue with Google" today lands in *their*
+   * account with their points and bookings intact, rather than a stranded
+   * duplicate that the salon they visit sees as a different customer.
+   *
+   * The safety of that rests entirely on the address being Google-verified,
+   * which is `SupabaseIdentityService.verify`'s job and is checked twice
+   * there — the provider must be Google, and the address must be confirmed.
+   *
+   * ── The password hash on a Google-created account ──────────────────────
+   * `User.passwordHash` is NOT NULL, and this user has no password. Rather
+   * than a migration that makes the column nullable — which would weaken a
+   * constraint every other login path depends on — the row gets a bcrypt hash
+   * of 32 random bytes that is never stored anywhere else and never shown to
+   * anyone. `bcrypt.compare` against it cannot succeed, so `loginConsumer`
+   * answers its usual "Invalid email or password". The route back is the one
+   * that already exists for anyone who has forgotten a password:
+   * POST /auth/forgot-password sets one.
+   */
+  async signInWithGoogle(accessToken: string) {
+    const identity = await this.supabaseIdentity.verify(accessToken);
+
+    // The same rule, and the same wording, as `loginConsumer`. A salon owner
+    // whose Google address is also their business login must not be able to
+    // get a consumer session by coming through a different door.
+    if (await hasBusinessAccount(this.prisma, identity.email)) {
+      throw new ConflictException(
+        'This email is registered as a Glow+ business or admin account and cannot sign in to the customer app. Sign in at the Glow+ website instead.',
+      );
+    }
+
+    const user = await this.findOrCreateGoogleUser(identity.email, identity.name);
+
+    // T81's verification gate does not apply, and must not: the whole reason
+    // it exists is to prove the person controls the address, and Google has
+    // just done exactly that. An account that signed up with a password and
+    // never opened the email is verified HERE, which is why this is an update
+    // and not merely a read — otherwise Google sign-in would succeed while
+    // leaving the row in a state that blocks the user's own password login.
+    if (!user.emailVerifiedAt) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerifiedAt: new Date() },
+      });
+    }
+
+    const session = await this.refreshTokens.issueSession(user.id, 'CONSUMER', {
+      role: 'consumer',
+    });
+    return {
+      ...session,
+      user: { id: user.id, name: user.name, emailVerified: true },
+    };
+  }
+
+  /**
+   * Find the consumer this address belongs to, creating one on first sign-in.
+   *
+   * Written the way `signupConsumer` was rewritten for [F28]: the unique index
+   * is the only claim of truth, and `P2002` is handled rather than pre-empted.
+   * Two taps on "Continue with Google" a few milliseconds apart — which the
+   * app's own retry makes plausible — otherwise both pass a `findUnique` that
+   * saw nothing and one of them 500s.
+   */
+  private async findOrCreateGoogleUser(email: string, name: string | null) {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) return existing;
+
+    // A hash of 32 random bytes, discarded immediately. See the note above.
+    const unusablePassword = await bcrypt.hash(randomBytes(32).toString('hex'), SALT_ROUNDS);
+
+    try {
+      const created = await this.prisma.user.create({
+        data: {
+          email,
+          name: name ?? fallbackName(email),
+          passwordHash: unusablePassword,
+          // Google verified it. Stamped at creation so this account is never
+          // momentarily in the "cannot log in yet" state — there is no
+          // verification email to wait for, and none is sent.
+          emailVerifiedAt: new Date(),
+        },
+      });
+      this.logger.log(`Created a consumer account from a Google sign-in: ${created.id}`);
+      return created;
+    } catch (err) {
+      if ((err as { code?: string })?.code === 'P2002') {
+        // Lost the race. The winner's row is the answer.
+        const raced = await this.prisma.user.findUnique({ where: { email } });
+        if (raced) return raced;
+      }
+      throw err;
+    }
+  }
+
   async verifyEmail(token: string) {
     return this.emailVerification.verifyEmail(token);
   }
@@ -182,4 +295,16 @@ export class AuthService {
     }
     return { ok: true };
   }
+}
+
+/**
+ * A display name for a Google account that shared none.
+ *
+ * `User.name` is NOT NULL and is rendered on the Rewards screen and in emails,
+ * so it cannot be an empty string. The local part of the address is what the
+ * user would recognise; it is only ever a placeholder until they edit it.
+ */
+function fallbackName(email: string): string {
+  const local = email.split('@')[0]?.trim();
+  return local && local.length > 0 ? local : 'Glow+ member';
 }
