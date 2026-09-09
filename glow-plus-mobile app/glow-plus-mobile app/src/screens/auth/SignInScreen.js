@@ -6,6 +6,8 @@ import Button from '../../components/ui/Button';
 import TextField from '../../components/ui/TextField';
 import Banner from '../../components/ui/Banner';
 import Brandmark from '../../components/ui/Brandmark';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton';
+import OrDivider from '../../components/ui/OrDivider';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { useConfig } from '../../context/ConfigContext';
@@ -27,6 +29,17 @@ import { ApiError, messageFor } from '../../api/errors';
  * password" — sends them to reset a password that is perfectly correct. The
  * branch turns it into the actual problem plus the one action that fixes it.
  *
+ * ── Two doors, one session ─────────────────────────────────────────────────
+ * "Continue with Google" (R1.2/R1.3 again) ends in exactly the same place as
+ * the form above it: a Glow+ session issued by the platform's own API, for an
+ * account matched on the Google-verified email address. A customer who signed
+ * up on the website with a password and taps Google here lands in *their*
+ * account, not a duplicate — which is the whole reason the matching happens
+ * server-side on the address rather than client-side on a provider id.
+ *
+ * The button removes itself when the build has no Supabase project configured,
+ * so nothing on this screen depends on it being there.
+ *
  * ── Why "Browse without an account" is here ────────────────────────────────
  * R3.1 — the salon directory must be usable *"without requiring the user to be
  * logged in"*. If the app opened on a login wall, that requirement could not
@@ -45,6 +58,9 @@ export default function SignInScreen({ navigation }) {
   const passwordRef = useRef(null);
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !submitting;
+
+  /** Close the auth modal — see the long note in `handleSubmit`. */
+  const dismiss = () => navigation.getParent()?.goBack();
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -71,7 +87,7 @@ export default function SignInScreen({ navigation }) {
       // stack, which is one of its screens), so this pops the modal and
       // reveals whatever the user was doing — the salon they were about to
       // book, or Settings.
-      navigation.getParent()?.goBack();
+      dismiss();
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) setNeedsVerification(true);
       setError(err);
@@ -175,6 +191,24 @@ export default function SignInScreen({ navigation }) {
               size="sm"
               onPress={() => navigation.navigate('ForgotPassword', { email })}
               style={styles.centered}
+            />
+
+            <OrDivider />
+
+            {/* Dismisses the same way a password sign-in does: by the time
+                `onSuccess` fires the session is already in place, so there is
+                nothing for this screen to do but get out of the way.
+                `disabled` while the form is submitting — two sign-ins racing
+                each other would leave whichever finished second overwriting
+                the session of the first. */}
+            <GoogleSignInButton
+              onSuccess={dismiss}
+              disabled={submitting}
+              onError={() => {
+                // The stale "Signed out" banner from a previous expiry is
+                // confusing next to a fresh Google error. One message at a time.
+                clearError();
+              }}
             />
           </View>
 

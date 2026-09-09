@@ -299,6 +299,40 @@ export async function login(email, password) {
 }
 
 /**
+ * "Continue with Google" — the second way to reach the SAME session.
+ *
+ * `supabaseAccessToken` comes from `api/supabase.js`, which has already taken
+ * the user through Google's consent screen via Supabase Auth. This posts it to
+ * `POST /auth/google`, where the server verifies it with Supabase, matches or
+ * creates the consumer by the Google-verified email address, and answers with
+ * the identical `{ token, refreshToken, expiresIn, user }` that `POST
+ * /auth/login` answers.
+ *
+ * That identical shape is the whole design. The session is saved by the same
+ * `saveSession` call, restored by the same `restoreSession`, refreshed by the
+ * same T47 dance and revoked by the same `logout` — so nothing downstream of
+ * this function, in this file or anywhere else in the app, needs to know or
+ * care that a user signed in with Google.
+ *
+ * NF1 still holds: `/auth/google` is a platform route, not a mobile-only one.
+ */
+export async function loginWithGoogle(supabaseAccessToken) {
+  const data = demo()
+    ? await demoApi.loginWithGoogle()
+    : await request('/auth/google', {
+        method: 'POST',
+        auth: false,
+        body: { accessToken: supabaseAccessToken },
+        // Same reasoning as login: a cold serverless start plus an outbound
+        // call from the API to Supabase, and a timeout here reads to the user
+        // as "Google sign-in is broken".
+        timeoutMs: SLOW_TIMEOUT_MS,
+      });
+  await saveSession(data);
+  return data.user ?? null;
+}
+
+/**
  * R1.1 — name, email, password and an OPTIONAL phone number.
  *
  * Does not sign the user in: the platform requires a verified email address

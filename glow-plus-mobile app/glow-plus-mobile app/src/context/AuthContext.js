@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import * as api from '../api/client';
 import { restoreSession } from '../api/session';
+import { signInWithGoogle as runGoogleSignIn } from '../api/supabase';
 import { ApiError } from '../api/errors';
 import { useConfig } from './ConfigContext';
 
@@ -111,6 +112,35 @@ export function AuthProvider({ children, onSignedOut }) {
     return profile;
   }, []);
 
+  /**
+   * "Continue with Google" — R1.2/R1.3 through a second door.
+   *
+   * Two steps, and the split matters. The first (`runGoogleSignIn`) opens the
+   * system browser, walks the user through Google via Supabase and comes back
+   * with a Supabase token — or with `null`, which is the user having tapped
+   * Cancel. The second trades that token for a Glow+ session.
+   *
+   * **A cancel is not an error.** It resolves to `null` and leaves the state
+   * exactly as it was, so the screen can tell "the user changed their mind"
+   * apart from "something failed" without inspecting an error message. A red
+   * banner for someone who deliberately backed out is the most common way this
+   * kind of button is got wrong.
+   *
+   * Everything after the token is identical to `signIn`, deliberately —
+   * including the always-asked `GET /me`, so that a Google session and a
+   * password session put the same user shape in state. Anything less would
+   * mean Settings showing a blank email for exactly one of the two ways in.
+   */
+  const signInWithGoogle = useCallback(async () => {
+    const supabaseToken = await runGoogleSignIn();
+    if (!supabaseToken) return null;
+
+    await api.loginWithGoogle(supabaseToken);
+    const profile = await api.getProfile();
+    setState({ status: 'authenticated', user: profile, error: null });
+    return profile;
+  }, []);
+
   const signUp = useCallback(async (payload) => {
     // Deliberately does NOT sign in. The platform requires a verified email
     // before a consumer may log in, so treating signup as a session would drop
@@ -135,12 +165,13 @@ export function AuthProvider({ children, onSignedOut }) {
       isAuthenticated: state.status === 'authenticated',
       isBootstrapping: state.status === 'bootstrapping',
       signIn,
+      signInWithGoogle,
       signUp,
       signOut,
       clearError,
       refresh: bootstrap,
     }),
-    [state, signIn, signUp, signOut, clearError, bootstrap],
+    [state, signIn, signInWithGoogle, signUp, signOut, clearError, bootstrap],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
