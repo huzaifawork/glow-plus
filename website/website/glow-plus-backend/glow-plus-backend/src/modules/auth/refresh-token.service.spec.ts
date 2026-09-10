@@ -32,6 +32,17 @@ type Row = {
 };
 
 /** Enough of PrismaService for this service, with real cross-call state. */
+/** Mirrors Prisma's `email` filter: a bare string, or `{ equals, mode }`. */
+function matchEmail(filter: any): (value: string) => boolean {
+  if (filter && typeof filter === 'object') {
+    const wanted = String(filter.equals ?? '');
+    return filter.mode === 'insensitive'
+      ? (value) => (value ?? '').toLowerCase() === wanted.toLowerCase()
+      : (value) => value === wanted;
+  }
+  return (value) => value === filter;
+}
+
 function makePrisma() {
   const rows: Row[] = [];
   let seq = 0;
@@ -54,6 +65,13 @@ function makePrisma() {
       where.email !== undefined
         ? ([...accounts[name].values()].find((row: any) => row.email === where.email) ?? null)
         : (accounts[name].get(where.id) ?? null),
+    // findBusinessAccount uses findFirst, because its optional case-insensitive
+    // form is not an equality on the unique key and so is not a findUnique
+    // argument at all. `where.email` is either a string or `{ equals, mode }`.
+    findFirst: async ({ where }: any) => {
+      const match = matchEmail(where?.email);
+      return [...accounts[name].values()].find((row: any) => match(row.email)) ?? null;
+    },
   });
 
   return {
@@ -253,20 +271,35 @@ describe('RefreshTokenService (T47)', () => {
       expect(prisma.rows.every((r) => r.revokedAt !== null)).toBe(true);
     });
 
+    /**
+     * ⚠️ This test used to pass for the wrong reason, and would have passed
+     * with the rule it names deleted.
+     *
+     * It rotated `session.refreshToken` TWICE and expected the second call to
+     * be refused. Rotation marks a token spent, so the second call was refused
+     * as a **replay** — by the check two tests above, not by the consumer-only
+     * rule at all. The rule could have been removed entirely and this would
+     * still have been green.
+     *
+     * Fixed by rotating the token the FIRST rotation returned, which is what a
+     * real client holds at that point: unspent, unrevoked, unexpired, and
+     * refused only because the address is now an admin.
+     */
     it('stops renewing a consumer session once that email becomes an admin', async () => {
       prisma.accounts.user.set('user_1', { id: 'user_1', email: 'usman@example.com' });
       const session = await service.issueSession('user_1', 'CONSUMER' as any, {
         role: 'consumer',
       });
-      await expect(service.rotate(session.refreshToken)).resolves.toBeDefined();
+      const rotated = await service.rotate(session.refreshToken);
+      expect(rotated).toBeDefined();
 
-      // The same address is added to the admin team. The consumer row and its
-      // refresh token are untouched and still perfectly valid on their own.
+      // The same address is added to the admin team. The consumer row and the
+      // token the client is holding are untouched and valid on their own.
       prisma.accounts.admin.set('a_2', { id: 'a_2', email: 'usman@example.com' });
 
-      // Without this, the session outlives the login rule that refuses it —
-      // renewing every 15 minutes for as long as the app is opened.
-      await expect(service.rotate(session.refreshToken)).rejects.toThrow(UnauthorizedException);
+      // Without the rule, the session outlives the login check that refuses it
+      // — renewing every 15 minutes for as long as the app is opened.
+      await expect(service.rotate(rotated.refreshToken)).rejects.toThrow(UnauthorizedException);
     });
 
     it.each([
