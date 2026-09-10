@@ -32,6 +32,17 @@ type Row = {
 };
 
 /** Enough of PrismaService for this service, with real cross-call state. */
+/** Mirrors Prisma's `email` filter: a bare string, or `{ equals, mode }`. */
+function matchEmail(filter: any): (value: string) => boolean {
+  if (filter && typeof filter === 'object') {
+    const wanted = String(filter.equals ?? '');
+    return filter.mode === 'insensitive'
+      ? (value) => (value ?? '').toLowerCase() === wanted.toLowerCase()
+      : (value) => value === wanted;
+  }
+  return (value) => value === filter;
+}
+
 function makePrisma() {
   const rows: Row[] = [];
   let seq = 0;
@@ -54,6 +65,13 @@ function makePrisma() {
       where.email !== undefined
         ? ([...accounts[name].values()].find((row: any) => row.email === where.email) ?? null)
         : (accounts[name].get(where.id) ?? null),
+    // findBusinessAccount uses findFirst, because its optional case-insensitive
+    // form is not an equality on the unique key and so is not a findUnique
+    // argument at all. `where.email` is either a string or `{ equals, mode }`.
+    findFirst: async ({ where }: any) => {
+      const match = matchEmail(where?.email);
+      return [...accounts[name].values()].find((row: any) => match(row.email)) ?? null;
+    },
   });
 
   return {

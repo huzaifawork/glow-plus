@@ -13,7 +13,7 @@ import { RefreshTokenService } from './refresh-token.service';
 import { SignupDto, LoginDto } from './dto';
 import { SupabaseIdentityService } from './supabase-identity.service';
 import { encodePhone } from '../../common/pii-crypto';
-import { hasBusinessAccount } from '../../common/business-account';
+import { findBusinessAccount, hasBusinessAccount } from '../../common/business-account';
 
 const SALT_ROUNDS = 12;
 
@@ -180,16 +180,42 @@ export class AuthService {
   async signInWithGoogle(accessToken: string) {
     const identity = await this.supabaseIdentity.verify(accessToken);
 
+    // Find the consumer FIRST, so everything below is keyed off the address
+    // as this platform already spells it rather than as Google spells it.
+    //
+    // `identity.email` is lower-cased by SupabaseIdentityService, and nothing
+    // else here does that: `signupConsumer` stores whatever the user typed,
+    // and `email` is case-sensitively unique in Postgres. So a customer whose
+    // row reads `Sajal@Gmail.com` would not be found by a lookup for
+    // `sajal@gmail.com`, and the create below would succeed — leaving one
+    // person with two accounts, two points balances, and bookings split
+    // across both. That is the failure this ordering exists to prevent.
+    const existing = await this.findConsumerByEmail(identity.email);
+    const email = existing?.email ?? identity.email;
+
     // The same rule, and the same wording, as `loginConsumer`. A salon owner
     // whose Google address is also their business login must not be able to
     // get a consumer session by coming through a different door.
-    if (await hasBusinessAccount(this.prisma, identity.email)) {
+    //
+    // `insensitive` because of the normalisation above — see the note on
+    // `findBusinessAccount`. A merchant stored in mixed case must not become
+    // reachable just because this path lower-cases what Google sent.
+    const business = await findBusinessAccount(this.prisma, email, { insensitive: true });
+    if (business) {
+      // The customer is told only "a business or admin account", never which,
+      // so the refusal cannot be used to enumerate salon owners. The operator
+      // needs the other half, and it goes HERE rather than in the response:
+      // without it, the only way to explain a refusal is to open three tables
+      // by hand and guess which one matched.
+      this.logger.warn(
+        `Google sign-in refused for ${email}: already a ${business.kind} account`,
+      );
       throw new ConflictException(
         'This email is registered as a Glow+ business or admin account and cannot sign in to the customer app. Sign in at the Glow+ website instead.',
       );
     }
 
-    const user = await this.findOrCreateGoogleUser(identity.email, identity.name);
+    const user = existing ?? (await this.createGoogleUser(identity.email, identity.name));
 
     // T81's verification gate does not apply, and must not: the whole reason
     // it exists is to prove the person controls the address, and Google has
@@ -214,18 +240,32 @@ export class AuthService {
   }
 
   /**
-   * Find the consumer this address belongs to, creating one on first sign-in.
+   * The consumer who owns this address, whatever case it is stored in.
+   *
+   * Two queries rather than one, and deliberately in this order: the exact
+   * match uses the unique index on `User.email` and answers every ordinary
+   * sign-in, so the scan-shaped insensitive query only runs for an address
+   * that genuinely has no exact row — which, after this ships, is almost
+   * always a first-time Google user.
+   */
+  private async findConsumerByEmail(email: string) {
+    const exact = await this.prisma.user.findUnique({ where: { email } });
+    if (exact) return exact;
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
+  }
+
+  /**
+   * Create the consumer for a Google address signing in for the first time.
    *
    * Written the way `signupConsumer` was rewritten for [F28]: the unique index
    * is the only claim of truth, and `P2002` is handled rather than pre-empted.
    * Two taps on "Continue with Google" a few milliseconds apart — which the
-   * app's own retry makes plausible — otherwise both pass a `findUnique` that
-   * saw nothing and one of them 500s.
+   * app's own retry makes plausible — otherwise both pass a lookup that saw
+   * nothing and one of them 500s.
    */
-  private async findOrCreateGoogleUser(email: string, name: string | null) {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) return existing;
-
+  private async createGoogleUser(email: string, name: string | null) {
     // A hash of 32 random bytes, discarded immediately. See the note above.
     const unusablePassword = await bcrypt.hash(randomBytes(32).toString('hex'), SALT_ROUNDS);
 
@@ -246,7 +286,7 @@ export class AuthService {
     } catch (err) {
       if ((err as { code?: string })?.code === 'P2002') {
         // Lost the race. The winner's row is the answer.
-        const raced = await this.prisma.user.findUnique({ where: { email } });
+        const raced = await this.findConsumerByEmail(email);
         if (raced) return raced;
       }
       throw err;

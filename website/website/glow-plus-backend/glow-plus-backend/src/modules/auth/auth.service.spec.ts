@@ -19,6 +19,17 @@ import { ConflictException, ForbiddenException, UnauthorizedException } from '@n
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
 
+/** Mirrors Prisma's `email` filter: a bare string, or `{ equals, mode }`. */
+function matchEmail(filter: any): (value: string) => boolean {
+  if (filter && typeof filter === 'object') {
+    const wanted = String(filter.equals ?? '');
+    return filter.mode === 'insensitive'
+      ? (value) => (value ?? '').toLowerCase() === wanted.toLowerCase()
+      : (value) => value === wanted;
+  }
+  return (value) => value === filter;
+}
+
 /** Enough of PrismaService for these paths, with real cross-call state. */
 function makePrisma() {
   const tables = {
@@ -30,6 +41,13 @@ function makePrisma() {
 
   const byEmail = (name: keyof typeof tables) => ({
     findUnique: async ({ where }: any) => tables[name].get(where.email) ?? null,
+    // findBusinessAccount and findConsumerByEmail both use findFirst — the
+    // case-insensitive form is not an equality on the unique key. `where.email`
+    // is either a string or `{ equals, mode }`.
+    findFirst: async ({ where }: any) => {
+      const match = matchEmail(where?.email);
+      return [...tables[name].values()].find((row: any) => match(row.email)) ?? null;
+    },
     create: async ({ data }: any) => {
       const row = { id: `${name}_${tables[name].size + 1}`, ...data };
       tables[name].set(data.email, row);
@@ -264,6 +282,51 @@ describe('AuthService — only consumers may use the consumer app', () => {
       );
       expect(prisma.tables.user.size).toBe(0);
       expect(refreshTokens.issueSession).not.toHaveBeenCalled();
+    });
+
+    it('signs into an account stored in a DIFFERENT CASE rather than duplicating it', async () => {
+      // The address as this platform spells it. `signupConsumer` stores what
+      // the user typed and `email` is case-sensitively unique in Postgres, so
+      // mixed case is a real state a row can be in.
+      prisma.tables.user.set('Sajal@Example.com', {
+        id: 'user_1',
+        email: 'Sajal@Example.com',
+        name: 'Sajal Aly',
+        passwordHash: bcrypt.hashSync(PASSWORD, 4),
+        emailVerifiedAt: new Date(),
+      });
+      // What Google sends, after SupabaseIdentityService lower-cases it.
+      supabaseIdentity.verify.mockResolvedValue({
+        subject: 'sb-uuid-1',
+        email: 'sajal@example.com',
+        name: 'Sajal Aly',
+      });
+
+      const session = await service.signInWithGoogle('supabase-token');
+
+      expect(session.user.id).toBe('user_1');
+      // The bug this pins: one person, two accounts, two points balances and
+      // bookings split across both.
+      expect(prisma.tables.user.size).toBe(1);
+    });
+
+    it('still refuses a business account stored in a different case', async () => {
+      // The other half of the same normalisation. Lower-casing what Google
+      // sends must not become a way past a check password login would fail.
+      prisma.tables.merchant.set('Sajal@Example.com', {
+        id: 'm_1',
+        email: 'Sajal@Example.com',
+      });
+      supabaseIdentity.verify.mockResolvedValue({
+        subject: 'sb-uuid-1',
+        email: 'sajal@example.com',
+        name: 'Sajal Aly',
+      });
+
+      await expect(service.signInWithGoogle('supabase-token')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.tables.user.size).toBe(0);
     });
 
     it('never reaches the database when the token is refused', async () => {
