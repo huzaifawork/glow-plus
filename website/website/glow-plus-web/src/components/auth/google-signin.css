@@ -1,0 +1,78 @@
+/* "Continue with Google", styled to sit in TWO different stylesheets.
+ *
+ * The button renders as `class="btn google-btn"`, and that composition is the
+ * point: `.btn` is defined by whichever stylesheet the page loaded — pill-
+ * shaped and 17px in `styles/global.css`, 10px-radius and 14.5px in
+ * `pages/booking/booking.css` — so the shape, padding and type size come from
+ * the page and only the colours are set here. One component, and it looks
+ * native on the SPA and on the standalone pages without a variant prop.
+ *
+ * The colours below are literal rather than `var(--…)` on purpose. This is
+ * Google's button, and its white face, #dadce0 border and #3c4043 label are
+ * fixed by their branding terms — a themeable version of it would be wrong in
+ * exactly the way that gets a sign-in client rejected.
+ */
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  background: #ffffff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  font-weight: 500;
+}
+
+.google-btn:hover:not(:disabled) {
+  background: #f7f8f8;
+  border-color: #d2d3d5;
+}
+
+.google-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Fixed at Google's own 18px so it does not scale with the two different
+   `.btn` font sizes, and `flex:none` so a long translated label ("Continuar
+   con Google") cannot squeeze the logo into an oval. */
+.google-btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* "or" with a rule either side. `::before`/`::after` rather than three
+   elements so it needs no markup of its own, and `text-transform:none` because
+   the SPA's global stylesheet upper-cases some small labels. */
+.google-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  color: #86868b;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.google-or::before,
+.google-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* The standalone pages centre their card's text; the divider and the button
+   are laid out with flexbox, so they are unaffected — but the error under
+   them inherits `.err`, which booking.css left-aligns and global.css does not
+   style for width. Neither needs overriding; this rule only guarantees the
+   error sits under the button rather than beside it in both. */
+.google-error {
+  display: block;
+  width: 100%;
+  text-align: left;
+}

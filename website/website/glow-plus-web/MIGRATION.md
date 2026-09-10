@@ -132,6 +132,27 @@ Configure the API base with `VITE_API_BASE_URL` (see `.env.example`); it
 defaults to `http://localhost:4000` and is still exposed as
 `window.GLOW_API_BASE_URL`, the same global the old `/config.js` route set.
 
+### "Continue with Google"
+
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (both documented at length in
+`.env.example`) turn on the Google button on the three **consumer** sign-in
+surfaces: the SPA's `view-consumer-auth`, `/consumer/booking` and
+`/consumer/rewards`. Unset, the button does not render at all and email/password
+is unaffected — which is the correct state for any deployment that has not been
+through the Supabase dashboard setup listed in `.env.example`.
+
+There is no Google button on the salon or admin sign-in, and that is not an
+omission: `POST /auth/google` answers 409 for an address that belongs to a
+merchant, staff or admin account, so it can only ever mint a *customer*
+session. A salon owner signs in with their password, exactly as before.
+
+The redirect back from Google lands on whichever of those three pages started
+it, and `GoogleSignInButton` finishes the flow on that page load — so there is
+no `/auth/callback` route to add here, and none in `vercel.json`. What the
+Supabase dashboard needs is a redirect allow-list wide enough to cover all
+three paths (`https://<domain>/**`), or the sign-in ends on the project's Site
+URL and looks like nothing happened.
+
 ### One environment gotcha
 
 There is a stray `C:\Users\GCA\Documents\postcss.config.js` **outside this

@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext.jsx';
 import { useI18n } from '../i18n/I18nContext.jsx';
-import { ApiError, consumerLogin, consumerSignup, resendVerification } from '../lib/api.js';
+import {
+  ApiError,
+  consumerLogin,
+  consumerSignup,
+  getConsumerProfile,
+  resendVerification,
+} from '../lib/api.js';
+import { isGoogleCallback } from '../lib/supabase.js';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx';
 import T from '../components/T.jsx';
 
 /**
@@ -30,6 +38,66 @@ export default function ConsumerAuth({ active }) {
   // where the signup happened. Someone who closed that tab had no route back.
   const [unverified, setUnverified] = useState(null);
   const [resetHint, setResetHint] = useState(false);
+
+  /**
+   * Did this page load as the tail end of a "Continue with Google" round trip?
+   *
+   * Read HERE, in a state initializer, and not inside the effect below: the
+   * button clears the pending record as soon as its own effect runs, and React
+   * renders this component before its children. A `useState` initializer is
+   * therefore the last moment the honest answer is still available.
+   */
+  const [returningFromGoogle] = useState(isGoogleCallback);
+
+  /**
+   * Google sends the browser back to `/`, which this SPA opens on the
+   * marketing page. Without this the visitor would watch the hero section
+   * while a sign-in finished invisibly behind it, then be thrown to the
+   * dashboard — or, on a failure, see nothing at all and conclude the button
+   * is broken. Switching to this view first means the outcome lands where they
+   * were looking.
+   */
+  useEffect(() => {
+    if (returningFromGoogle) showView('view-consumer-auth');
+  }, [returningFromGoogle, showView]);
+
+  /**
+   * A Google sign-in has produced a real Glow+ session. Finish exactly where
+   * the password path finishes.
+   *
+   * `GET /me` rather than the response's `user`, because `POST /auth/google`
+   * answers with `{ id, name, emailVerified }` and no email — the address is
+   * Google's, not something typed into the form above — and the dashboard's
+   * identity line shows it. Same call the session-restore path in
+   * `AppContext` already makes, so a Google session and a password session put
+   * the same shape in state.
+   *
+   * A failure here is deliberately not fatal: the session is already valid and
+   * stored, so signing the user in without their email on screen beats
+   * refusing a sign-in that actually succeeded.
+   */
+  const finishGoogleSignIn = useCallback(
+    async (data) => {
+      let profile = null;
+      try {
+        profile = await getConsumerProfile();
+      } catch {
+        /* cosmetic — see above */
+      }
+      setCurrentConsumer({
+        id: profile?.id ?? data.user.id,
+        name: profile?.name ?? data.user.name,
+        email: profile?.email ?? '',
+        // Always true on this path, and true in the database by the time the
+        // response arrives: Google has just proved the address, so
+        // `signInWithGoogle` marks it verified rather than making the user
+        // open an email to confirm what it already knows.
+        emailVerified: true,
+      });
+      showView('view-consumer-dashboard');
+    },
+    [setCurrentConsumer, showView],
+  );
 
   // Carries whatever they have already typed, so the reset form opens prefilled.
   const forgotHref =
@@ -184,6 +252,17 @@ export default function ConsumerAuth({ active }) {
               : t('consumer_login_submit')}
           </button>
         </form>
+
+        {/* Under the form, not above it. Email and password remain the primary
+            way in — every account created before this existed has one, and the
+            walk-in accounts `POST /visits` creates have nothing else. The
+            button also sits OUTSIDE the <form>: it is `type="button"`, but a
+            control inside a form that navigates the whole page away is one
+            stray Enter key from looking like a lost signup. */}
+        <GoogleSignInButton
+          onSuccess={finishGoogleSignIn}
+          disabled={busy}
+        />
 
         <div className="switch-role">
           <button

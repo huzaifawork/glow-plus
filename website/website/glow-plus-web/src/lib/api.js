@@ -448,6 +448,32 @@ export async function consumerLogin(email, password) {
 }
 
 /**
+ * "Continue with Google" — the second door into the same consumer session.
+ *
+ * `accessToken` is a **Supabase** token, obtained by `lib/supabase.js` sending
+ * the visitor through Supabase Auth's Google provider. The backend verifies it
+ * against the same project and answers with exactly what `POST /auth/login`
+ * answers, which is the whole reason this function is four lines: the session
+ * it writes is indistinguishable from a password one, so refresh, logout and
+ * every authenticated request downstream are untouched.
+ *
+ * `CONSUMER_TOKEN_KEY`, deliberately and only. `POST /auth/google` refuses an
+ * address that belongs to a merchant, staff or admin account (409) — a salon
+ * owner cannot get a customer session by coming through this door — so there
+ * is no Google equivalent of `merchantLogin` to write, and none should be
+ * invented here.
+ *
+ * The response's `user` carries `{ id, name, emailVerified }` and no email:
+ * the address is Google's, not something the visitor typed, and callers that
+ * need it ask `GET /me` exactly as the session-restore path already does.
+ */
+export async function consumerGoogleLogin(accessToken) {
+  const data = await apiRequest('/auth/google', { method: 'POST', auth: false, body: { accessToken } });
+  writeSession(CONSUMER_TOKEN_KEY, data);
+  return data;
+}
+
+/**
  * The public salon directory (T43).
  *
  * **The path is `/merchants`, not T18's `/merchants/public`** — that stopgap
