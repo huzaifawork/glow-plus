@@ -29,6 +29,7 @@ import {
 // Shared with the SPA's consumer dashboard (T36) so the two never disagree
 // about how a time is written.
 import { formatDateTime, formatSlot, todayISO } from '../../lib/helpers.js';
+import GoogleSignInButton from '../../components/auth/GoogleSignInButton.jsx';
 
 const Brand = () => (
   <div className="brand">Glow<span className="plus">+</span></div>
@@ -125,6 +126,13 @@ function LoginCard({ onSuccess }) {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+
+      {/* Outside the <form>, for the same reason as on the SPA's auth view:
+          this control navigates the whole page away, and nothing that does
+          that belongs inside a form a stray Enter can submit. `onSuccess`
+          takes no argument here — the page only asks "is there a session?",
+          exactly as it does after a password sign-in. */}
+      <GoogleSignInButton onSuccess={() => onSuccess()} disabled={busy} />
     </>
   );
 }

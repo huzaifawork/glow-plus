@@ -51,3 +51,47 @@ if (typeof window !== 'undefined') {
  */
 export const SALON_TIMEZONE =
   import.meta.env.VITE_SALON_TIMEZONE || 'America/Toronto';
+
+/**
+ * ============================================================================
+ * "Continue with Google", by way of Supabase Auth.
+ * ============================================================================
+ *
+ * The same project the React Native app signs in against (`app.json`'s
+ * `extra.supabaseUrl`), and deliberately so: one Supabase project means one
+ * Google OAuth client, one consent screen, and one place a redirect URL can be
+ * wrong. `POST /auth/google` on the backend verifies whatever token it is
+ * handed against that project — it does not care which client obtained it — so
+ * a customer who signed in on their phone and a customer who signed in here
+ * arrive at the same Glow+ account.
+ *
+ * The anon key is PUBLIC. It is what every Supabase web app ships in its
+ * bundle; it identifies the project and grants only what Row Level Security
+ * allows, which for this project is nothing at all — the site never reads a
+ * Supabase table. It is not a secret and must not be treated as one, or the
+ * button becomes impossible to configure on a static host.
+ *
+ * Both are OPTIONAL. A deployment that leaves them unset simply does not offer
+ * the button (see `isGoogleSignInAvailable` in `lib/supabase.js`); email and
+ * password are untouched. That is what keeps this change safe to ship ahead of
+ * the dashboard configuration rather than after it.
+ *
+ * ⚠️ The redirect URLs below must be listed under **Authentication → URL
+ * Configuration → Redirect URLs** in the Supabase dashboard, or Supabase
+ * silently sends the user to the project's Site URL instead — which presents
+ * as "I signed in with Google and nothing happened":
+ *
+ *     http://localhost:3000/**          (dev)
+ *     https://<the production domain>/**
+ *
+ * The `**` matters. Sign-in starts from four different paths on this site
+ * (`/`, `/consumer/booking`, `/consumer/rewards`, and whatever `/` is rewritten
+ * to) and each one is sent back to itself.
+ */
+export const SUPABASE_URL = String(import.meta.env.VITE_SUPABASE_URL || '')
+  .trim()
+  .replace(/\/+$/, '');
+
+export const SUPABASE_ANON_KEY = String(
+  import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+).trim();
